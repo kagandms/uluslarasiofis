@@ -2472,6 +2472,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         ikametTabId = sender.tab ? sender.tab.id : null;
 
         if (request.action === 'CHECK_GOCNET_TRANSFER') {
+            const keepAlive = setInterval(() => {
+                chrome.runtime?.getPlatformInfo?.(() => {});
+            }, 20_000);
             void (async () => {
                 try {
                     if (!Number.isInteger(sender.tab?.id)) throw new Error('Portal tab is not verified.');
@@ -2487,6 +2490,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     // Only our own short, fixed messages are surfaced so staff can tell setup problems from YÖKSİS answers.
                     const reason = typeof error?.message === 'string' ? error.message.slice(0, 160) : 'unknown_error';
                     sendResponse({ success: false, requestId: request.requestId, state: 'unknown', reason });
+                } finally {
+                    clearInterval(keepAlive);
                 }
             })();
             return true;

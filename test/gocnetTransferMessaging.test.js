@@ -176,7 +176,7 @@ test('YÖKSİS query handler never leaks a stale history reason into a subsequen
     dom.window.close();
 });
 
-test('YÖKSİS form query uses 55 s waiter timeout, settles recognized dialog after form_click_no_response, and reports form_value_no_response', async () => {
+test('YÖKSİS form query uses 120 s waiter timeout, settles recognized dialog after form_click_no_response, and reports form_value_no_response', async () => {
     const waitTimeouts = [];
     const timers = [];
     let acknowledged = 0;
@@ -210,7 +210,7 @@ test('YÖKSİS form query uses 55 s waiter timeout, settles recognized dialog af
             action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-click-late-ok', portalTabId: 4,
             attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
         });
-        assert.equal(waitTimeouts.includes(55_000), true);
+        assert.equal(waitTimeouts.includes(120_000), true);
         assert.deepEqual(lateDialogResult.response, { requestId: 'form-click-late-ok', state: 'student_data_filled' });
         assert.equal(acknowledged, 1);
 

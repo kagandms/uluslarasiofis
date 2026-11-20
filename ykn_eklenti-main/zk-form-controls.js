@@ -717,7 +717,7 @@
             inputWidget.setValue(options.applicationNumber);
             inputWidget.fire('onChange', { value: options.applicationNumber }, { toServer: true });
             flushDeferredSelections(targetWindow);
-            await waitForResponse(valueObserver, 8_000, 'form_value_no_response');
+            await waitForResponse(valueObserver, 30_000, 'form_value_no_response');
             await waitForIdle();
         } finally { valueObserver.dispose(); }
         if (target.input.value !== options.applicationNumber || inputWidget.getValue?.() !== options.applicationNumber) {
@@ -752,7 +752,7 @@
                     notifyWaiter = onChange;
                     return () => { notifyWaiter = null; };
                 }
-            }, 45_000, 'form_click_no_response');
+            }, 110_000, 'form_click_no_response');
             await waitForIdle();
         } finally {
             notifyWaiter = null;

@@ -367,7 +367,7 @@ test('queryGocnetForm fails with form_controls_ambiguous when two separate Başv
     duplicateHarness.dom.window.close();
 });
 
-test('queryGocnetForm rejects with form_value_no_response at 8 s without clicking query', async () => {
+test('queryGocnetForm rejects with form_value_no_response at 30 s without clicking query', async () => {
     const harness = createFormHarness({ respondOnChange: false, respondOnClick: false });
     const clock = installFakeClock(harness.dom.window);
     try {
@@ -380,7 +380,7 @@ test('queryGocnetForm rejects with form_value_no_response at 8 s without clickin
         });
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(clock.activeIntervals(), 1);
-        await clock.advanceBy(7_975);
+        await clock.advanceBy(29_975);
         assert.equal(settled, false);
         await clock.advanceBy(25);
         assert.equal(settled, true);
@@ -396,7 +396,7 @@ test('queryGocnetForm rejects with form_value_no_response at 8 s without clickin
     }
 });
 
-test('queryGocnetForm succeeds when click response arrives after 8 s and before 45 s', async () => {
+test('queryGocnetForm succeeds when click response arrives after 30 s and before 110 s', async () => {
     const harness = createFormHarness({ respondOnChange: true, respondOnClick: false });
     const clock = installFakeClock(harness.dom.window);
     try {
@@ -409,7 +409,7 @@ test('queryGocnetForm succeeds when click response arrives after 8 s and before 
         });
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(harness.calls.some(([entry]) => entry === 'button.fire'), true);
-        await clock.advanceBy(12_000);
+        await clock.advanceBy(35_000);
         assert.equal(settled, false);
         harness.triggerResponse();
         await clock.advanceBy(25);
@@ -454,7 +454,7 @@ test('queryGocnetForm succeeds as soon as a visible dialog appears after click w
     }
 });
 
-test('queryGocnetForm rejects with form_click_no_response at 45 s when neither response nor dialog arrives', async () => {
+test('queryGocnetForm rejects with form_click_no_response at 110 s when neither response nor dialog arrives', async () => {
     const harness = createFormHarness({ respondOnChange: true, respondOnClick: false });
     const clock = installFakeClock(harness.dom.window);
     try {
@@ -466,7 +466,7 @@ test('queryGocnetForm rejects with form_click_no_response at 45 s when neither r
             return value;
         });
         await new Promise((resolve) => setImmediate(resolve));
-        await clock.advanceBy(44_975);
+        await clock.advanceBy(109_975);
         assert.equal(settled, false);
         await clock.advanceBy(25);
         assert.equal(settled, true);

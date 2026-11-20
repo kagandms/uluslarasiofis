@@ -596,7 +596,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
             lastReason = '';
             const query = request.phase === 'history'
                 ? queryGocnetRecordList(document, request.applicationNumber, request.requestId)
-                : queryGocnetRegistration(document, request.applicationNumber, { requestId: request.requestId, timeoutMs: 55_000 });
+                : queryGocnetRegistration(document, request.applicationNumber, { requestId: request.requestId, timeoutMs: 120_000 });
             void query
                 .then((state) => {
                     if (state === 'student_data_filled' && acknowledgeGocnetQuery(document, request.applicationNumber)) {

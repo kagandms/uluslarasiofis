@@ -272,10 +272,23 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
     };
     const sessionStorage = options.sessionStorage || {};
     let readinessCallCount = 0;
+    const activeIntervals = new Set();
+    const trackedSetInterval = (fn, ms, ...args) => {
+        const id = setInterval(fn, ms, ...args);
+        activeIntervals.add(id);
+        return id;
+    };
+    const trackedClearInterval = (id) => {
+        activeIntervals.delete(id);
+        return clearInterval(id);
+    };
 
     const chrome = {
         runtime: {
             lastError: null,
+            getPlatformInfo(callback) {
+                callback?.({});
+            },
             getManifest() {
                 return {
                     content_scripts: [{ js: ['bridge.js'], matches: ['http://localhost/*', 'http://127.0.0.1/*'] }]
@@ -439,7 +452,9 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         Date,
         Error,
         setTimeout,
-        clearTimeout
+        clearTimeout,
+        setInterval: trackedSetInterval,
+        clearInterval: trackedClearInterval
     });
     backgroundContext.importScripts = (...scriptNames) => {
         const sourceByName = {
@@ -456,6 +471,9 @@ function createBackgroundHarness(mainResult, searchResult, options = {}) {
         calls,
         timingLogs,
         storageValues,
+        getActiveIntervalCount() {
+            return activeIntervals.size;
+        },
         sendTabMessage(tabId, message, messageOptions) {
             return backgroundContext.sendTabMessage(tabId, message, messageOptions);
         },
@@ -526,6 +544,7 @@ test('background binds the read-only GöçNet query to the verified YÖKSİS tab
     const harness = createBackgroundHarness({}, {}, { gocnetState: 'no_match' });
     const response = await harness.send({ source: 'IKAMET_PORTAL', action: 'CHECK_GOCNET_TRANSFER',
         requestId: 'gocnet-query-1', applicationNumber: '2099-12-99999999' });
+    await Promise.resolve();
     const query = harness.calls.find((call) => call.type === 'message' && call.message.action === 'YOKSIS_GOCNET_QUERY');
     assert.equal(response.success, true);
     assert.equal(response.state, 'no_match');
@@ -534,6 +553,7 @@ test('background binds the read-only GöçNet query to the verified YÖKSİS tab
     assert.equal(query.message.portalTabId, 1);
     assert.equal(query.message.applicationNumber, '2099-12-99999999');
     assert.equal(query.message.phase, 'history');
+    assert.equal(harness.getActiveIntervalCount(), 0);
 });
 
 test('country commands require the YÖKSİS main frame, a known field and a bounded request', async () => {
