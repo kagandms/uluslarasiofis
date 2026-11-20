@@ -684,82 +684,100 @@
     }
 
     async function queryGocnetForm(options) {
-        if (!/^20\d{2}-\d{2}-\d{5,8}$/.test(options.applicationNumber || '')
-            || typeof options.requestId !== 'string' || options.requestId.length < 1 || options.requestId.length > 128) {
-            throw new Error('bad_input');
-        }
-        await waitForIdle();
-        const documents = collectDocuments();
-        if (documents.some(hasVisibleFormDialog)) {
-            throw new Error('form_dialog_already_open');
-        }
-        const { targets, totalInputs, totalButtons } = findGocnetFormTargets(documents);
-        if (targets.length === 0) {
-            throw new Error(`form_controls_missing (inputs: ${totalInputs}, buttons: ${totalButtons})`);
-        }
-        if (targets.length > 1) {
-            throw new Error(`form_controls_ambiguous (targets: ${targets.length})`);
-        }
-        const target = targets[0];
-        const buttonDisabled = Boolean(target.button.disabled
-            || Array.from(target.button.querySelectorAll?.('button, input') || []).some((child) => child.disabled));
-        if (target.input.disabled || target.input.readOnly || buttonDisabled) {
-            throw new Error('form_controls_disabled');
-        }
-        const targetWindow = target.targetDocument.defaultView;
-        const inputWidget = findZkWidget(target.input, targetWindow);
-        const buttonWidget = findZkWidget(target.button, targetWindow);
-        if (!inputWidget?.setValue || !inputWidget?.fire || !buttonWidget?.fire) {
-            throw new Error('form_zk_widget_missing');
-        }
-        const valueObserver = observeResponse(targetWindow);
+        const startedAt = Date.now();
+        let valueMs = null;
+        let clickMs = null;
         try {
-            inputWidget.setValue(options.applicationNumber);
-            inputWidget.fire('onChange', { value: options.applicationNumber }, { toServer: true });
-            flushDeferredSelections(targetWindow);
-            await waitForResponse(valueObserver, 30_000, 'form_value_no_response');
-            await waitForIdle();
-        } finally { valueObserver.dispose(); }
-        if (target.input.value !== options.applicationNumber || inputWidget.getValue?.() !== options.applicationNumber) {
-            throw new Error('form_value_not_retained');
-        }
-        const queryObserver = observeResponse(targetWindow);
-        let dialogObserver = null;
-        let dialogAppeared = false;
-        let notifyWaiter = null;
-        const hasClickServerSignal = () => {
-            if (!dialogAppeared && hasVisibleFormDialog(target.targetDocument)) dialogAppeared = true;
-            return queryObserver.hasResponse() || dialogAppeared;
-        };
-        try {
-            const Observer = targetWindow.MutationObserver;
-            if (Observer && target.targetDocument?.documentElement) {
-                dialogObserver = new Observer(() => {
-                    if (hasVisibleFormDialog(target.targetDocument)) {
-                        dialogAppeared = true;
-                        notifyWaiter?.();
-                    }
-                });
-                dialogObserver.observe(target.targetDocument.documentElement, {
-                    childList: true, subtree: true, attributes: true
-                });
+            if (!/^20\d{2}-\d{2}-\d{5,8}$/.test(options.applicationNumber || '')
+                || typeof options.requestId !== 'string' || options.requestId.length < 1 || options.requestId.length > 128) {
+                throw new Error('bad_input');
             }
-            buttonWidget.fire('onClick', null, { toServer: true });
-            if (hasVisibleFormDialog(target.targetDocument)) dialogAppeared = true;
-            await waitForResponse({
-                hasResponse: hasClickServerSignal,
-                subscribe: (onChange) => {
-                    notifyWaiter = onChange;
-                    return () => { notifyWaiter = null; };
-                }
-            }, 110_000, 'form_click_no_response');
             await waitForIdle();
+            const documents = collectDocuments();
+            if (documents.some(hasVisibleFormDialog)) {
+                throw new Error('form_dialog_already_open');
+            }
+            const { targets, totalInputs, totalButtons } = findGocnetFormTargets(documents);
+            if (targets.length === 0) {
+                throw new Error(`form_controls_missing (inputs: ${totalInputs}, buttons: ${totalButtons})`);
+            }
+            if (targets.length > 1) {
+                throw new Error(`form_controls_ambiguous (targets: ${targets.length})`);
+            }
+            const target = targets[0];
+            const buttonDisabled = Boolean(target.button.disabled
+                || Array.from(target.button.querySelectorAll?.('button, input') || []).some((child) => child.disabled));
+            if (target.input.disabled || target.input.readOnly || buttonDisabled) {
+                throw new Error('form_controls_disabled');
+            }
+            const targetWindow = target.targetDocument.defaultView;
+            const inputWidget = findZkWidget(target.input, targetWindow);
+            const buttonWidget = findZkWidget(target.button, targetWindow);
+            if (!inputWidget?.setValue || !inputWidget?.fire || !buttonWidget?.fire) {
+                throw new Error('form_zk_widget_missing');
+            }
+            const valueObserver = observeResponse(targetWindow);
+            const valueStartedAt = Date.now();
+            try {
+                inputWidget.setValue(options.applicationNumber);
+                inputWidget.fire('onChange', { value: options.applicationNumber }, { toServer: true });
+                flushDeferredSelections(targetWindow);
+                await waitForResponse(valueObserver, 30_000, 'form_value_no_response');
+                await waitForIdle();
+            } finally {
+                valueMs = Date.now() - valueStartedAt;
+                valueObserver.dispose();
+            }
+            if (target.input.value !== options.applicationNumber || inputWidget.getValue?.() !== options.applicationNumber) {
+                throw new Error('form_value_not_retained');
+            }
+            const queryObserver = observeResponse(targetWindow);
+            let dialogObserver = null;
+            let dialogAppeared = false;
+            let notifyWaiter = null;
+            const hasClickServerSignal = () => {
+                if (!dialogAppeared && hasVisibleFormDialog(target.targetDocument)) dialogAppeared = true;
+                return queryObserver.hasResponse() || dialogAppeared;
+            };
+            let clickStartedAt = null;
+            try {
+                const Observer = targetWindow.MutationObserver;
+                if (Observer && target.targetDocument?.documentElement) {
+                    dialogObserver = new Observer(() => {
+                        if (hasVisibleFormDialog(target.targetDocument)) {
+                            dialogAppeared = true;
+                            notifyWaiter?.();
+                        }
+                    });
+                    dialogObserver.observe(target.targetDocument.documentElement, {
+                        childList: true, subtree: true, attributes: true
+                    });
+                }
+                clickStartedAt = Date.now();
+                buttonWidget.fire('onClick', null, { toServer: true });
+                if (hasVisibleFormDialog(target.targetDocument)) dialogAppeared = true;
+                await waitForResponse({
+                    hasResponse: hasClickServerSignal,
+                    subscribe: (onChange) => {
+                        notifyWaiter = onChange;
+                        return () => { notifyWaiter = null; };
+                    }
+                }, 110_000, 'form_click_no_response');
+                await waitForIdle();
+            } finally {
+                if (clickStartedAt !== null) clickMs = Date.now() - clickStartedAt;
+                notifyWaiter = null;
+                dialogObserver?.disconnect();
+                queryObserver.dispose();
+            }
+            return { success: true, freshResponse: queryObserver.hasResponse() || dialogAppeared };
         } finally {
-            notifyWaiter = null;
-            dialogObserver?.disconnect();
-            queryObserver.dispose();
+            console?.info?.('[YKN][timing] gocnet form', {
+                valueMs,
+                clickMs,
+                totalMs: Date.now() - startedAt
+            });
         }
-        return { success: true, freshResponse: queryObserver.hasResponse() || dialogAppeared };
     }
 
     function isSelectionRetained(target) {

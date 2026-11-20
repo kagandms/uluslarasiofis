@@ -2472,10 +2472,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         ikametTabId = sender.tab ? sender.tab.id : null;
 
         if (request.action === 'CHECK_GOCNET_TRANSFER') {
+            const startedAt = Date.now();
             const keepAlive = setInterval(() => {
                 chrome.runtime?.getPlatformInfo?.(() => {});
             }, 20_000);
             void (async () => {
+                let finalState = 'error';
                 try {
                     if (!Number.isInteger(sender.tab?.id)) throw new Error('Portal tab is not verified.');
                     const target = await getVerifiedYoksisTarget((await resolveGocnetYoksisTab()).id);
@@ -2484,14 +2486,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             ...request, phase: request.phase || 'history', portalTabId: sender.tab.id
                         }));
                     const state = ['no_match', 'existing_record', 'student_data_filled'].includes(result?.state) ? result.state : 'unknown';
+                    finalState = state;
                     sendResponse({ success: state !== 'unknown', requestId: request.requestId, state,
                         ...(state === 'unknown' ? { reason: typeof result?.reason === 'string' && result.reason ? result.reason.slice(0, 160) : 'controller_unknown' } : { yoksisTabId: target.yoksisTabId }) });
                 } catch (error) {
                     // Only our own short, fixed messages are surfaced so staff can tell setup problems from YÖKSİS answers.
                     const reason = typeof error?.message === 'string' ? error.message.slice(0, 160) : 'unknown_error';
+                    finalState = 'unknown';
                     sendResponse({ success: false, requestId: request.requestId, state: 'unknown', reason });
                 } finally {
                     clearInterval(keepAlive);
+                    console?.info?.('[YKN][timing] gocnet check', {
+                        phase: request.phase || 'history',
+                        ms: Date.now() - startedAt,
+                        state: finalState
+                    });
                 }
             })();
             return true;
