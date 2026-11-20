@@ -192,7 +192,7 @@ async function saveGocnetRecord(rootDocument, request) {
     if (identityState !== 'verified') return { state: identityState };
     const phone = findGocnetPhoneInput(rootDocument);
     const button = findGocnetSaveButton(rootDocument);
-    if (!phone || phone.value !== request.phoneNational || !/^5\d{9}$/.test(phone.value) || !button) return { state: 'unknown' };
+    if (!phone || phone.value !== request.phoneNational || !/^\d{7,10}$/.test(phone.value) || !button) return { state: 'unknown' };
     queryInProgress = true;
     try {
         const resultPromise = waitForTransferResult(rootDocument, readGocnetSaveResult);
@@ -622,7 +622,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
         if (request.action === 'YOKSIS_GOCNET_SAVE' && request.applicationNumber
             && typeof request.studentNumber === 'string' && typeof request.passportNumber === 'string'
             && typeof request.firstName === 'string' && typeof request.lastName === 'string'
-            && /^5\d{9}$/.test(request.phoneNational || '')) {
+            && /^\d{7,10}$/.test(request.phoneNational || '')) {
             void saveGocnetRecord(document, request)
                 .then((result) => sendResponse({ requestId: request.requestId, ...result }))
                 .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown' }));

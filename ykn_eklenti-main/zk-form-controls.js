@@ -1,5 +1,5 @@
 (() => {
-    if (window.YknZkForm?.version === '1.2.134') return;
+    if (window.YknZkForm?.version === '1.2.135') return;
     const confirmedSelections = new WeakMap();
     const attemptedSelections = new Set();
     const COUNTRY_ALIAS_GROUPS = [
@@ -510,7 +510,7 @@
     }
 
     async function setGocnetPhone(options) {
-        if (!/^5\d{9}$/.test(options.phoneNational || '') || typeof options.requestId !== 'string'
+        if (!/^\d{7,10}$/.test(options.phoneNational || '') || typeof options.requestId !== 'string'
             || options.requestId.length < 1 || options.requestId.length > 128) throw new Error('GöçNet telefonu doğrulanamadı.');
         await waitForIdle();
         const targets = collectDocuments().flatMap((targetDocument) => Array.from(
@@ -953,5 +953,5 @@
         }
     }
 
-    window.YknZkForm = Object.freeze({ version: '1.2.134', execute });
+    window.YknZkForm = Object.freeze({ version: '1.2.135', execute });
 })();

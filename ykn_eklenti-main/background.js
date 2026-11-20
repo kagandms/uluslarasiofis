@@ -2411,7 +2411,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const isGocnetQuery = ['queryGocnetRecords', 'queryGocnetForm'].includes(command.action)
             && typeof command.applicationNumber === 'string' && /^20\d{2}-\d{2}-\d{5,8}$/.test(command.applicationNumber)
             && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 128;
-        const isGocnetPhoneCommand = command.action === 'setGocnetPhone' && /^5\d{9}$/.test(command.phoneNational || '')
+        const isGocnetPhoneCommand = command.action === 'setGocnetPhone' && /^\d{7,10}$/.test(command.phoneNational || '')
             && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 128;
         const validCommand = isGocnetQuery || isGocnetPhoneCommand || isCountryCommand || command.action === 'waitForIdle' || (['selectRadio', 'verifyRadio'].includes(command.action)
             && allowedValues.includes(command.value) && typeof command.requestId === 'string' && command.requestId.length > 0 && command.requestId.length <= 160);

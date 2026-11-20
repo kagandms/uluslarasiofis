@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readApplicationDocumentFiles } from '../src/staff/application-document-files.js';
-import { describeGocnetPreparationError, normalizeTurkishMobilePhone, resolveRegistrationNumber, resolveTurkishMobilePhone } from '../src/staff/gocnet-transfer.js';
+import { describeGocnetPreparationError, normalizeGocnetPhone, normalizeTurkishMobilePhone, resolveRegistrationNumber, resolveTurkishMobilePhone } from '../src/staff/gocnet-transfer.js';
 
 function createApi({ documents = [], files = [] } = {}) {
     return {
@@ -48,9 +48,32 @@ test('accepts valid Turkish mobile input and returns the ten-digit national numb
     assert.equal(normalizeTurkishMobilePhone('2121234567'), null);
 });
 
-test('uses only a valid per-attempt Turkish mobile correction when the application phone is invalid', () => {
-    assert.equal(resolveTurkishMobilePhone('+7 912 345 67 89', '+90 532 123 45 67'), '5321234567');
-    assert.equal(resolveTurkishMobilePhone('+7 912 345 67 89', '2121234567'), null);
+test('normalizes Turkish mobile and valid international phones to 7..10 digits for GöçNet', () => {
+    assert.equal(normalizeGocnetPhone('+90 500 000 00 01'), '5000000001');
+    assert.equal(normalizeGocnetPhone('0500 000 00 01'), '5000000001');
+    assert.equal(normalizeGocnetPhone('5000000001'), '5000000001');
+    assert.equal(normalizeGocnetPhone('+7 701 000 00 01'), '7010000001');
+    assert.equal(normalizeGocnetPhone('8 (701) 000-00-01'), '7010000001');
+    assert.equal(normalizeGocnetPhone('87000000000'), '7000000000');
+    assert.equal(normalizeGocnetPhone('007 700 000 00 00'), '7000000000');
+    assert.equal(normalizeGocnetPhone('7000000000'), '7000000000');
+    assert.equal(normalizeGocnetPhone('7000001'), '7000001');
+    assert.equal(normalizeGocnetPhone('123'), null);
+    assert.equal(normalizeGocnetPhone('700000'), null);
+    assert.equal(normalizeGocnetPhone('00123456'), null);
+    assert.equal(normalizeGocnetPhone(''), null);
+    assert.equal(normalizeGocnetPhone('   '), null);
+    assert.equal(normalizeGocnetPhone('letters-only'), null);
+    assert.equal(normalizeGocnetPhone('0000000000'), null);
+    assert.equal(normalizeGocnetPhone('7777777777'), null);
+    assert.equal(normalizeGocnetPhone(null), null);
+});
+
+test('resolves foreign application numbers and uses a valid per-attempt correction when invalid', () => {
+    assert.equal(resolveTurkishMobilePhone('+7 701 000 00 01', ''), '7010000001');
+    assert.equal(resolveTurkishMobilePhone('123', '+90 500 000 00 01'), '5000000001');
+    assert.equal(resolveTurkishMobilePhone('123', '+7 700 000 00 01'), '7000000001');
+    assert.equal(resolveTurkishMobilePhone('123', '456'), null);
     assert.equal(resolveTurkishMobilePhone('+90 555 111 22 33', ''), '5551112233');
 });
 

@@ -480,3 +480,66 @@ test('queryGocnetForm rejects with form_click_no_response at 110 s when neither 
         harness.dom.window.close();
     }
 });
+
+test('setGocnetPhone accepts 7 to 10 digits including non-5 numbers and rejects 6 or 11 digits', async () => {
+    const calls = [];
+    const dom = new JSDOM(`<section>
+        <label>İrtibat Telefonu: <input type="text" placeholder="5XXXXXXXXX" maxlength="10" data-widget="phone"></label>
+    </section>`, { runScripts: 'outside-only' });
+    const { window } = dom;
+    const observers = new Set();
+    const widgetFor = (element) => {
+        if (element?.getAttribute?.('data-widget') !== 'phone') return null;
+        return {
+            value: '',
+            setValue(value) {
+                calls.push(['phone.setValue', value]);
+                element.value = value;
+                this.value = value;
+            },
+            getValue() { return this.value; },
+            fire(name, data, opts) {
+                calls.push(['phone.fire', name, data, opts]);
+                if (name === 'onChange') {
+                    for (const watcher of [...observers]) watcher.onResponse();
+                }
+            }
+        };
+    };
+    window.zk = { Widget: { $: widgetFor }, Desktop: { all: {} } };
+    window.zAu = { processing: () => false, getAuRequests: () => [] };
+    window.zWatch = {
+        listen({ onResponse }) { observers.add(onResponse); },
+        unlisten({ onResponse }) { observers.delete(onResponse); }
+    };
+    vm.runInContext(source, dom.getInternalVMContext());
+
+    try {
+        const accepted = await window.YknZkForm.execute({
+            action: 'setGocnetPhone', phoneNational: '7000000000', requestId: 'phone-10'
+        });
+        assert.deepEqual(JSON.parse(JSON.stringify(accepted)), { success: true, verified: true });
+        assert.equal(window.document.querySelector('input').value, '7000000000');
+
+        const acceptedShort = await window.YknZkForm.execute({
+            action: 'setGocnetPhone', phoneNational: '7000001', requestId: 'phone-7'
+        });
+        assert.deepEqual(JSON.parse(JSON.stringify(acceptedShort)), { success: true, verified: true });
+        assert.equal(window.document.querySelector('input').value, '7000001');
+
+        const rejectedShort = await window.YknZkForm.execute({
+            action: 'setGocnetPhone', phoneNational: '700000', requestId: 'phone-6'
+        });
+        assert.equal(rejectedShort.success, false);
+        assert.equal(rejectedShort.verified, false);
+
+        const rejectedLong = await window.YknZkForm.execute({
+            action: 'setGocnetPhone', phoneNational: '70000000001', requestId: 'phone-11'
+        });
+        assert.equal(rejectedLong.success, false);
+        assert.equal(rejectedLong.verified, false);
+        assert.equal(calls.filter(([entry]) => entry === 'phone.fire').length, 2);
+    } finally {
+        dom.window.close();
+    }
+});
