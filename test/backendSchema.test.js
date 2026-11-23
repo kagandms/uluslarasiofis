@@ -72,10 +72,13 @@ test('YÖKSİS audit migration stores one validated latest result per applicatio
     const globPatterns = [...tableSql.matchAll(/GLOB\s+'([^']*)'/g)].map(([, pattern]) => pattern);
 
     assert.ok(tables.includes('yoksis_document_audit_records'));
+    assert.ok(tables.includes('yoksis_audit_imports'));
     assert.deepEqual(columns, [
         'application_number', 'student_number', 'first_name', 'last_name', 'passport_number', 'phone',
         'application_status', 'status_category', 'result_status', 'documents_json', 'search_text',
-        'scanned_at', 'updated_by_staff_id'
+        'scanned_at', 'updated_by_staff_id',
+        'source', 'last_seen_import_id', 'unit', 'program', 'missing_deadline',
+        'goc_last_query_at', 'last_transaction_type', 'transaction_count'
     ]);
     assert.ok(globPatterns.every((pattern) => Buffer.byteLength(pattern, 'utf8') <= 50),
         'D1 rejects GLOB patterns longer than 50 bytes');
