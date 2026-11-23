@@ -139,6 +139,24 @@ test('public locale dictionaries have matching keys for all five supported langu
     }
 });
 
+test('home header includes the localized staff login note linked via aria-describedby', async () => {
+    const publicHtml = await readRepositoryFile('index.html');
+    const document = new JSDOM(publicHtml).window.document;
+    const staffLink = document.querySelector('.public-header-actions .staff-entry[data-i18n="staffLink"][href="/yetkili/"]');
+    const staffNote = document.querySelector('.public-header-actions .staff-entry-note[data-i18n="staffNote"]');
+
+    assert.ok(staffLink);
+    assert.ok(staffNote);
+    assert.ok(staffNote.id);
+    assert.equal(staffLink.getAttribute('aria-describedby'), staffNote.id);
+    assert.equal(staffNote.textContent.trim(), PUBLIC_MESSAGES.tr.staffNote);
+
+    for (const locale of SUPPORTED_LOCALES) {
+        assert.equal(typeof PUBLIC_MESSAGES[locale].staffNote, 'string');
+        assert.ok(PUBLIC_MESSAGES[locale].staffNote.trim().length > 0, `${locale}.staffNote`);
+    }
+});
+
 test('public locale selection applies Arabic RTL direction and persists the selected locale', async () => {
     const publicHtml = await readRepositoryFile('index.html');
     const dom = new JSDOM(publicHtml, { url: 'https://portal.example.test/' });
