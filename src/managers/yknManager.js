@@ -19,8 +19,16 @@ import {
     appendPassportPages,
     replacePassportPages,
     setCropperSourceLoading,
-    updateCropperSources
+    updateCropperSources,
+    applyCropBox,
+    submitCropperTransfer,
+    setCropperDefaults,
+    getCropperGender
 } from '../ui/passportCropperModal.js';
+import { scorePassportPageText } from '../utils/passportPageScore.js';
+import { evaluatePassportPage } from '../services/passportDocumentGuard.js';
+import { detectFaceCrop } from '../services/passportFaceCrop.js';
+import { createYknAutoFlow } from './yknAutoFlow.js';
 import { PDFJS_VERSION } from '../config/pdfjs-version.js';
 import {
     hasYknStudentContextChanged,
@@ -35,6 +43,9 @@ const PASSPORT_ORIENTATION_ANGLES = [0, 90, 180, 270];
 const PASSPORT_ORIENTATION_SCORE_THRESHOLD = 45;
 const PASSPORT_ORIENTATION_OCR_TIMEOUT_MS = 15_000;
 const DOCUMENT_CACHE_MAX_ENTRIES = 8;
+const YKN_AUTO_FLOW_STORAGE_KEY = 'ykn-auto-flow-v1';
+const YKN_AUTO_RUN_PASSPORT_PATTERN = /^[A-Z0-9]{5,20}$/;
+const AUTO_SOURCE_SWITCH_TIMEOUT_MS = 15_000;
 const documentBytesCache = new Map();
 const documentRequestKeys = new Map();
 
@@ -91,115 +102,6 @@ function postAppMessage(payload) {
 
 function readProfileText(value) {
     return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
-}
-
-function scorePassportPageText(text, studentName = '', passportNo = '') {
-    if (!text || typeof text !== 'string') return 0;
-    let score = 0;
-    const upperText = text.toUpperCase();
-
-    // 1. MRZ (Machine Readable Zone) indicators - massive signal for biodata page
-    if (upperText.includes('P<') || /P[A-Z0-9<]{5,}/.test(upperText) || upperText.includes('<<<')) {
-        score += 100;
-    }
-
-    // 2. Passport identification words in multiple languages
-    if (
-        upperText.includes('PASSPORT') ||
-        upperText.includes('PASSEPORT') ||
-        upperText.includes('PASAPORTE') ||
-        upperText.includes('PASAPORT') ||
-        upperText.includes('ПАСПОРТ') ||
-        upperText.includes('جواز') ||
-        upperText.includes('REISEPASS') ||
-        upperText.includes('PASSAPORTO')
-    ) {
-        score += 30;
-    }
-
-    // 3. Student Passport Number Match
-    if (passportNo) {
-        const cleanNo = readProfileText(passportNo).replace(/\s+/g, '').toUpperCase();
-        if (cleanNo.length >= 5 && upperText.replace(/\s+/g, '').includes(cleanNo)) {
-            score += 50;
-        }
-    }
-
-    // 4. Student Name Token Match
-    if (studentName) {
-        const nameTokens = readProfileText(studentName).toUpperCase().split(/\s+/).filter(t => t.length >= 3);
-        let matchedTokens = 0;
-        for (const token of nameTokens) {
-            if (upperText.includes(token)) matchedTokens++;
-        }
-        if (matchedTokens > 0) {
-            score += Math.min(40, matchedTokens * 15);
-        }
-    }
-
-    // 5. Passport field labels (Dates, Birth, Authority, Gender) in multiple languages
-    if (
-        upperText.includes('DATE OF BIRTH') ||
-        upperText.includes('DATE DE NAISSANCE') ||
-        upperText.includes('DOĞUM TARİHİ') ||
-        upperText.includes('ДАТА РОЖДЕНИЯ') ||
-        upperText.includes('ДАТА РОЖД') ||
-        upperText.includes('تاريخ الميلاد')
-    ) {
-        score += 25;
-    }
-    if (
-        upperText.includes('DATE OF EXPIRY') ||
-        upperText.includes('EXPIRATION') ||
-        upperText.includes('VALID UNTIL') ||
-        upperText.includes('GEÇERLİLİK') ||
-        upperText.includes('СРОК ДЕЙСТВИЯ') ||
-        upperText.includes('ДЕЙСТВИТЕЛЕН ДО') ||
-        upperText.includes('تاريخ الانتهاء') ||
-        upperText.includes('تاريخ الصلاحية') ||
-        upperText.includes('MÖHLETI') ||
-        upperText.includes('MUDDATI')
-    ) {
-        score += 25;
-    }
-    if (
-        upperText.includes('DATE OF ISSUE') ||
-        upperText.includes('DÜZENLEME TARİHİ') ||
-        upperText.includes('ISSUED') ||
-        upperText.includes('ДАТА ВЫДАЧИ') ||
-        upperText.includes('تاريخ الإصدار') ||
-        upperText.includes('تاريخ الاصدار') ||
-        upperText.includes('BERILGAN')
-    ) {
-        score += 20;
-    }
-    if (
-        upperText.includes('PLACE OF BIRTH') ||
-        upperText.includes('LIEU DE NAISSANCE') ||
-        upperText.includes('DOĞUM YERİ') ||
-        upperText.includes('МЕСТО РОЖДЕНИЯ') ||
-        upperText.includes('МЕСТО РОЖД') ||
-        upperText.includes('ТУҒАН ЖЕРІ') ||
-        upperText.includes('ТУҒАН ЖЕР') ||
-        upperText.includes('مكان الميلاد') ||
-        upperText.includes('محل الميلاد')
-    ) {
-        score += 20;
-    }
-    if (
-        upperText.includes('AUTHORITY') ||
-        upperText.includes('AUTORITÉ') ||
-        upperText.includes('VEREN MAKAM') ||
-        upperText.includes('ОРГАН ВЫДАЧИ') ||
-        upperText.includes('КЕМ ВЫДАН') ||
-        upperText.includes('جهة الإصدار') ||
-        upperText.includes('جهة الاصدار') ||
-        upperText.includes('SMST')
-    ) {
-        score += 20;
-    }
-
-    return score;
 }
 
 function rotatePassportCanvas(sourceCanvas, rotation) {
@@ -903,6 +805,147 @@ export function initYknManager() {
     const pendingDocumentReads = new Set();
     const cropSourceObjectUrls = new Set();
     const buttonActionTimers = new Map();
+    let latestCropperPageIndex = 0;
+    let isAutoRunSearchClick = false;
+    let pendingAutoSourceSwitch = null;
+    const triedCropSourceUrls = new Set();
+
+    function readAutoFlowEnabled() {
+        try {
+            const stored = window.localStorage?.getItem(YKN_AUTO_FLOW_STORAGE_KEY);
+            if (stored === 'false' || stored === '0' || stored === 'off') return false;
+            if (stored === 'true' || stored === '1' || stored === 'on') return true;
+        } catch {
+            // localStorage erişilemiyorsa varsayılan açık kalır.
+        }
+        return true;
+    }
+
+    function writeAutoFlowEnabled(enabled) {
+        try {
+            window.localStorage?.setItem(YKN_AUTO_FLOW_STORAGE_KEY, enabled ? 'true' : 'false');
+        } catch {
+            // localStorage yazılamıyorsa sessizce devam et.
+        }
+    }
+
+    let autoFlowToggleInput = document.getElementById('ykn-auto-flow-toggle');
+    const initialAutoFlowEnabled = readAutoFlowEnabled();
+    if (!autoFlowToggleInput && inputPassport?.parentElement) {
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'ykn-auto-flow-toggle';
+        toggleLabel.setAttribute('for', 'ykn-auto-flow-toggle');
+        toggleLabel.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; cursor: pointer; user-select: none;';
+
+        autoFlowToggleInput = document.createElement('input');
+        autoFlowToggleInput.type = 'checkbox';
+        autoFlowToggleInput.id = 'ykn-auto-flow-toggle';
+        autoFlowToggleInput.checked = initialAutoFlowEnabled;
+        autoFlowToggleInput.style.cssText = 'accent-color: var(--accent); cursor: pointer;';
+
+        const toggleText = document.createElement('span');
+        toggleText.textContent = 'Otomatik zincir';
+
+        toggleLabel.appendChild(autoFlowToggleInput);
+        toggleLabel.appendChild(toggleText);
+        if (btnSearch && btnSearch.parentElement === inputPassport.parentElement) {
+            inputPassport.parentElement.insertBefore(toggleLabel, btnSearch);
+        } else {
+            inputPassport.insertAdjacentElement('afterend', toggleLabel);
+        }
+    } else if (autoFlowToggleInput) {
+        autoFlowToggleInput.checked = initialAutoFlowEnabled;
+    }
+
+    function isAutoFlowEnabled() {
+        if (autoFlowToggleInput) {
+            return Boolean(autoFlowToggleInput.checked);
+        }
+        return readAutoFlowEnabled();
+    }
+
+    function isOneClickRunning() {
+        return oneClickWorkflow?.status === 'running';
+    }
+
+    function resolvePendingAutoSourceSwitch(result) {
+        if (!pendingAutoSourceSwitch) return;
+        const { resolve, timer } = pendingAutoSourceSwitch;
+        clearTimeout(timer);
+        pendingAutoSourceSwitch = null;
+        resolve(Boolean(result));
+    }
+
+    function selectNextAutoCropSource() {
+        const sources = Array.isArray(currentStudentData?.cropSources) ? currentStudentData.cropSources : [];
+        if (activeCropSourceUrl) {
+            triedCropSourceUrls.add(activeCropSourceUrl);
+        }
+        const nextSource = sources.find((source) => source?.url && !triedCropSourceUrls.has(source.url));
+        if (!nextSource) {
+            return Promise.resolve(false);
+        }
+        triedCropSourceUrls.add(nextSource.url);
+        latestCropperPageIndex = 0;
+        resolvePendingAutoSourceSwitch(false);
+        return new Promise((resolve) => {
+            const timer = setTimeout(() => {
+                if (pendingAutoSourceSwitch?.resolve === resolve) {
+                    pendingAutoSourceSwitch = null;
+                    resolve(false);
+                }
+            }, AUTO_SOURCE_SWITCH_TIMEOUT_MS);
+            pendingAutoSourceSwitch = { resolve, timer };
+            handleCropSourceSelection(nextSource);
+        });
+    }
+
+    const autoFlow = createYknAutoFlow({
+        enabled: isAutoFlowEnabled,
+        click: (id) => {
+            if (id === 'read-acceptance') {
+                btnReadAcceptance?.click();
+            } else if (id === 'copy') {
+                btnCopy?.click();
+            }
+        },
+        getPages: () => (
+            Array.isArray(activeCropSourcePages) && activeCropSourcePages.length > 0
+                ? activeCropSourcePages
+                : (currentStudentData?.passportPages || [])
+        ),
+        getPageIndex: () => latestCropperPageIndex,
+        selectNextSource: selectNextAutoCropSource,
+        detectFace: detectFaceCrop,
+        evaluatePage: evaluatePassportPage,
+        applyCrop: applyCropBox,
+        setDefaults: setCropperDefaults,
+        getGender: getCropperGender,
+        submit: submitCropperTransfer,
+        report: (message, level) => {
+            addStatus(message, level);
+            const flowState = level === 'success'
+                ? 'DONE'
+                : (level === 'error' ? 'STOPPED' : 'RUNNING');
+            window.dispatchEvent(new CustomEvent('ykn:auto-flow-status', {
+                detail: {
+                    state: flowState,
+                    message,
+                    level
+                }
+            }));
+        }
+    });
+
+    if (autoFlowToggleInput) {
+        autoFlowToggleInput.addEventListener('change', () => {
+            const enabled = Boolean(autoFlowToggleInput.checked);
+            writeAutoFlowEnabled(enabled);
+            if (!enabled && autoFlow.isActive()) {
+                autoFlow.cancel('Otomatik zincir kapatıldı.');
+            }
+        });
+    }
 
     const ONE_CLICK_STAGE = Object.freeze({
         ACCEPTANCE_READING: 'ACCEPTANCE_READING',
@@ -1618,6 +1661,11 @@ export function initYknManager() {
         const pages = [];
         for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
             const page = await pdf.getPage(pageNumber);
+            let pageText = '';
+            try {
+                const textContent = await page.getTextContent();
+                pageText = textContent.items.map((item) => item.str).join(' ');
+            } catch (_) {}
             const viewport = page.getViewport({ scale: 1.4 });
             const canvas = document.createElement('canvas');
             canvas.width = viewport.width;
@@ -1626,6 +1674,7 @@ export function initYknManager() {
             pages.push({
                 dataUrl: canvas.toDataURL('image/jpeg', 0.85),
                 pageNumber,
+                text: pageText,
                 label: totalPages > 1 ? `${label} - Sayfa ${pageNumber}` : label
             });
             canvas.width = 0;
@@ -1700,6 +1749,7 @@ export function initYknManager() {
                     setCropperSourceLoading(false);
                     if (pages.length === 0) {
                         addStatus(`${source?.label || 'Seçilen dosya'} görüntülenemiyor. Başka bir belge seçin.`, 'warning');
+                        resolvePendingAutoSourceSwitch(true);
                         return;
                     }
                     if (isPassportCropperOpen()) {
@@ -2221,8 +2271,10 @@ export function initYknManager() {
             }
         } catch (error) {
             if (documentKind === 'cropSource') {
+                activeCropSourcePages = [];
                 setCropperSourceLoading(false);
                 addStatus(`Seçilen belge açılamadı: ${error.message}`, 'error');
+                resolvePendingAutoSourceSwitch(true);
                 if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
                     failOneClick('DOCUMENT_READ_FAILED', error.message);
                 }
@@ -2249,6 +2301,14 @@ export function initYknManager() {
 
     resetStudentActions();
 
+    if (inputPassport) {
+        inputPassport.addEventListener('input', () => {
+            if (autoFlow.isActive()) {
+                autoFlow.cancel('Yeni arama başlatıldı');
+            }
+        });
+    }
+
     if (inputPassport && btnSearch) {
         inputPassport.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
@@ -2260,6 +2320,9 @@ export function initYknManager() {
 
     if (btnSearch) {
         btnSearch.addEventListener('click', () => {
+            if (!isAutoRunSearchClick && autoFlow.isActive()) {
+                autoFlow.cancel('Yeni arama başlatıldı');
+            }
             const passportNo = (inputPassport ? inputPassport.value : '').trim().toUpperCase();
             if (inputPassport) inputPassport.value = passportNo;
             if (!passportNo) {
@@ -2310,6 +2373,7 @@ export function initYknManager() {
                     addStatus('1. Apply Topkapı sekmesinin açık olduğunu kontrol edin.', 'error');
                     addStatus('2. Apply Topkapı ve bu portal sekmesini yenileyin (F5).', 'error');
                     addStatus('3. Chrome Eklentinizin (YÖKSİS Otomasyonu) açık olduğundan emin olun.', 'error');
+                    autoFlow.onSearchDone(null);
                 }
             }, 14000);
         });
@@ -2809,12 +2873,77 @@ export function initYknManager() {
     });
 
     window.addEventListener('ykn:cropper-closed', () => {
+        resolvePendingAutoSourceSwitch(false);
         if (isOneClickActive(ONE_CLICK_STAGE.CROPPER_WAITING)) {
             addStatus('Tek Tık beklemede: fotoğrafı kırpmak için mevcut pasaport cropper’ını yeniden açabilirsiniz.', 'warning');
             return;
         }
         // Cropper kapatılması, öğrenci bilgilerinin kopyalandığı anlamına gelmez.
     });
+
+    if (window.__YKN_CROPPER_READY_HANDLER__) {
+        window.removeEventListener('ykn:cropper-ready', window.__YKN_CROPPER_READY_HANDLER__);
+    }
+    const cropperReadyHandler = (event) => {
+        if (isOneClickRunning()) {
+            return;
+        }
+        const detail = event?.detail || {};
+        latestCropperPageIndex = typeof detail.pageIndex === 'number' && Number.isInteger(detail.pageIndex)
+            ? detail.pageIndex
+            : 0;
+        if (pendingAutoSourceSwitch) {
+            resolvePendingAutoSourceSwitch(true);
+            return;
+        }
+        triedCropSourceUrls.clear();
+        const initialUrl = activeCropSourceUrl
+            || currentStudentData?.passportDocumentUrl
+            || currentStudentData?.passportImageUrl
+            || '';
+        if (initialUrl) triedCropSourceUrls.add(initialUrl);
+        void autoFlow.onCropperReady(detail);
+    };
+    window.__YKN_CROPPER_READY_HANDLER__ = cropperReadyHandler;
+    window.addEventListener('ykn:cropper-ready', cropperReadyHandler);
+
+    if (window.__YKN_AUTO_RUN_HANDLER__) {
+        window.removeEventListener('ykn:auto-run', window.__YKN_AUTO_RUN_HANDLER__);
+    }
+    const autoRunHandler = (event) => {
+        const rawPassport = typeof event?.detail?.passportNo === 'string'
+            ? event.detail.passportNo.trim().toUpperCase()
+            : '';
+        if (!YKN_AUTO_RUN_PASSPORT_PATTERN.test(rawPassport)) {
+            return;
+        }
+        if (isOneClickRunning()) {
+            const message = 'Tek Tık akışı sürüyor; Topi YKN zinciri başlatılmadı.';
+            addStatus(message, 'error');
+            window.dispatchEvent(new CustomEvent('ykn:auto-flow-status', {
+                detail: {
+                    state: 'STOPPED',
+                    level: 'error',
+                    message
+                }
+            }));
+            return;
+        }
+        if (inputPassport) {
+            inputPassport.value = rawPassport;
+        }
+        autoFlow.start(rawPassport, { force: true });
+        if (btnSearch) {
+            isAutoRunSearchClick = true;
+            try {
+                btnSearch.click();
+            } finally {
+                isAutoRunSearchClick = false;
+            }
+        }
+    };
+    window.__YKN_AUTO_RUN_HANDLER__ = autoRunHandler;
+    window.addEventListener('ykn:auto-run', autoRunHandler);
 
     if (btnTransferYoksis) {
         btnTransferYoksis.addEventListener('click', () => {
@@ -3094,6 +3223,9 @@ export function initYknManager() {
                     updateStudentActions(currentStudentData);
                     addStatus('Kabul kodu YÖKSİS sekmesinde aratıldı ve öğrenci formu hazır.', 'success');
                     showToast('YÖKSİS araması tamamlandı.', 'success');
+                    if (!isOneClickRunning()) {
+                        autoFlow.onYoksisReady();
+                    }
                 } else if (response?.success) {
                     currentStudentData = {
                         ...currentStudentData,
@@ -3110,6 +3242,9 @@ export function initYknManager() {
                     updateStudentActions(currentStudentData);
                     addStatus('Kabul kodu YÖKSİS sekmesine gönderildi. Tamamlandı bildirimi gelmese de bilgileri ve alanları YÖKSİS’e aktarabilirsiniz.', 'warning');
                     showToast('YÖKSİS’te form açıldıysa bilgileri aktarabilirsiniz.', 'info');
+                    if (autoFlow.isActive()) {
+                        autoFlow.cancel('YÖKSİS öğrenci formu hazır doğrulanamadı. Form açıldıysa 2. adımı elle başlatabilirsiniz.');
+                    }
                 } else {
                     currentStudentData = {
                         ...currentStudentData,
@@ -3124,6 +3259,9 @@ export function initYknManager() {
                     const errMsg = response?.error || response?.message || 'YÖKSİS tamamlandı bildirimi alınamadı. YÖKSİS’te öğrenci formu açıksa bilgileri doğrudan aktarabilirsiniz.';
                     addStatus(errMsg, 'warning');
                     showToast(errMsg, 'warning');
+                    if (autoFlow.isActive()) {
+                        autoFlow.cancel(errMsg);
+                    }
                 }
             } else if (event.data.action === 'FILL_YOKSIS_FORM') {
                 finishButtonAction('paste-yoksis');
@@ -3227,6 +3365,9 @@ export function initYknManager() {
                     const errorMessage = response?.error || response?.message || 'Apply öğrenci bilgileri okunamadı.';
                     addStatus(errorMessage, 'error');
                     showToast(errorMessage, 'error');
+                    if (autoFlow.isActive()) {
+                        autoFlow.cancel(errorMessage);
+                    }
                 }
             } else if (event.data.action === 'EXTRACT_KABUL_CODE') {
                 if (response?.success) {
@@ -3299,6 +3440,9 @@ export function initYknManager() {
                             setWorkflowStepStatus(1, 'error');
                             addStatus('Kabul mektubu belgesi veya kodu bulunamadı.', 'error');
                             showToast('Kabul mektubu belgesi bulunamadı.', 'error');
+                            if (autoFlow.isActive()) {
+                                autoFlow.cancel('Kabul mektubu belgesi veya kodu bulunamadı.');
+                            }
                         }
                     }
                 } else {
@@ -3312,12 +3456,19 @@ export function initYknManager() {
                         failOneClick('ACCEPTANCE_READ_FAILED', response?.error || 'Kabul mektubu sorgulanamadı.');
                     } else {
                         setWorkflowStepStatus(1, 'error');
-                        addStatus(response?.error || 'Kabul mektubu sorgulanamadı.', 'error');
+                        const errText = response?.error || 'Kabul mektubu sorgulanamadı.';
+                        addStatus(errText, 'error');
+                        if (autoFlow.isActive()) {
+                            autoFlow.cancel(errText);
+                        }
                     }
                 }
             } else if (response?.error) {
                 clearSearchTimeout();
-                if (event.data.action === 'SEARCH_STUDENT') studentName.textContent = 'Arama başlatılamadı';
+                if (event.data.action === 'SEARCH_STUDENT') {
+                    studentName.textContent = 'Arama başlatılamadı';
+                    autoFlow.onSearchDone(null);
+                }
                 addStatus(response.error, 'error');
             }
             return;
@@ -3332,8 +3483,10 @@ export function initYknManager() {
             const documentKind = event.data.data?.documentKind;
             if (documentKind) pendingDocumentReads.delete(documentKind);
             if (documentKind === 'cropSource') {
+                activeCropSourcePages = [];
                 setCropperSourceLoading(false);
                 addStatus(event.data.error || 'Seçilen belge açılamadı.', 'error');
+                resolvePendingAutoSourceSwitch(true);
                 if (isOneClickActive(ONE_CLICK_STAGE.PASSPORT_READING)) {
                     failOneClick('DOCUMENT_READ_FAILED', event.data.error || 'Seçilen belge açılamadı.');
                 }
@@ -3442,7 +3595,15 @@ export function initYknManager() {
                 requestApplyDocument('passport', passUrl);
             }
 
-            if (shouldAutoRunAcceptanceAfterSearch) {
+            if (!isOneClickRunning() && (autoFlow.isActive() || isAutoFlowEnabled())) {
+                shouldAutoRunAcceptanceAfterSearch = false;
+                if (shouldAutoRunCopyAfterSearch) {
+                    shouldAutoRunCopyAfterSearch = false;
+                    if (btnCopy) btnCopy.click();
+                } else {
+                    autoFlow.onSearchDone(currentStudentData);
+                }
+            } else if (shouldAutoRunAcceptanceAfterSearch) {
                 shouldAutoRunAcceptanceAfterSearch = false;
                 if (btnReadAcceptance) btnReadAcceptance.click();
             } else if (shouldAutoRunCopyAfterSearch) {
@@ -3466,6 +3627,7 @@ export function initYknManager() {
                 failOneClick('ACCEPTANCE_DOCUMENT_NOT_FOUND', event.data.error || 'Profil belgeleri bulunamadı.');
             } else {
                 addStatus(event.data.error || 'Profil belgeleri bulunamadı.', 'error');
+                autoFlow.onSearchDone(null);
             }
         }
         else if (event.data.type === 'EVENT' && (
@@ -3497,6 +3659,7 @@ export function initYknManager() {
             }
             const errorMsg = event.data.error ? 'Hata: ' + event.data.error : 'İşlem başarısız oldu.';
             addStatus(errorMsg, 'error');
+            autoFlow.onSearchDone(null);
         }
     };
     window.__YKN_PORTAL_MSG_HANDLER__ = messageHandler;
