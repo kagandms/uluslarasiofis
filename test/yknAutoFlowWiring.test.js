@@ -700,3 +700,25 @@ test('KIRMIZI ÇİZGİ: Otomatik zincir yeni eklenti mesajı, YÖKSİS Kaydet t�
         env.cleanup();
     }
 });
+
+test('GİZLİLİK: yknManager.js içindeki console.* çağrıları belge/OCR metni veya öğrenci kişisel verisi yazmaz', () => {
+    const consoleCalls = yknManagerSource.match(/console\.(?:log|info|warn|error|debug)\s*\([\s\S]*?\);/g) || [];
+    assert.ok(consoleCalls.length > 0, 'yknManager.js içinde en az bir console.* çağrısı beklenir');
+
+    for (const call of consoleCalls) {
+        assert.doesNotMatch(call, /\.slice\s*\(/, `console.* çağrısında metin dilimi (.slice) olmamalı: ${call}`);
+        assert.doesNotMatch(
+            call,
+            /\b(ocrText|pageOcrText|fullDigitalText|decodedText|pageText|fullName|passportNo|pasaportNo)\b/,
+            `console.* çağrısında OCR/kişisel veri alanı olmamalı: ${call}`
+        );
+        const withoutSafeLengths = call
+            .replace(/\(\s*text\s*\|\|\s*['"]{2}\s*\)\.length/g, '')
+            .replace(/\btext\.length\b/g, '');
+        assert.doesNotMatch(
+            withoutSafeLengths,
+            /\btext\b/,
+            `console.* çağrısında ham text içeriği olmamalı: ${call}`
+        );
+    }
+});

@@ -2234,7 +2234,7 @@ export function initYknManager() {
                         return;
                     }
 
-                    console.warn('[YKN] Kabul mektubu içeriğinde YÖKSİS ID bulunamadı. Metin örneği:', (text || '').slice(0, 300));
+                    console.warn('[YKN] Kabul mektubu içeriğinde YÖKSİS ID bulunamadı.', { textLength: (text || '').length });
                     throw new Error('Kabul mektubu PDF belgesinde geçerli YÖKSİS ID bulunamadı.');
                 }
 
