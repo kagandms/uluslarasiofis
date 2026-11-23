@@ -23,7 +23,7 @@
 
 ## Plans, evidence, and drafts
 
-- [Topi staff assistant, YKN automatic chain and YÖKSİS Excel import plan (2026-11-23)](2026-11-23-topi-yetkili-ykn-otomasyon-excel-plani.md) is an unimplemented plan (v2.1, verified against the code at `d7d2562` and the real İkamet İşlemleri Excel export, split into six agent tasks); Task 2A.1 waits for sample passport scans.
+- [Topi staff assistant, YKN automatic chain and YÖKSİS Excel import plan (2026-11-23)](2026-11-23-topi-yetkili-ykn-otomasyon-excel-plani.md) — implemented on task branches and merged into the local test branch `test/combined-2026-11-23` (not merged to `production`, not released); sections 13–15 record extra owner requests, decisions (self-hosted MediaPipe face detection, re-request on approved documents) and the current state. Phase 5 (chat log) and section 12 stage 0 are in progress on their own task branches. YKN chain trial waits for YÖKSİS access.
 - [Home page question form and AI chatbot plan (2026-11-18)](2026-11-18-home-question-form-and-chatbot-plan.md) is an unimplemented, unvalidated plan against `fdcb930`; re-verify it before executing.
 - [Cloudflare usage card](cloudflare-usage-card.md) documents the staff home usage card, its limits and credentials.
 - [`superpowers/plans/`](superpowers/plans/) and [`superpowers/specs/`](superpowers/specs/) contain scoped plans/specifications; their presence does not mean implementation or external activation occurred.
