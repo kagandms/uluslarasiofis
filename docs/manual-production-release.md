@@ -180,6 +180,32 @@ reports no pending migrations, zero eligible revisions remain unapproved, 857 au
 the reviewed source boundary (commit `04d72c2be5d65536cf1a7d141f6f9f24f26b7e4a`) that includes these schema
 changes; it does not prove live artifact equality, rollback safety, or that the Worker has been published.
 
+## 0045 and Workers AI binding baseline evidence
+
+Dated 23 November 2026. Source: the owner explicitly approved, in the session conversation, applying
+`migrations/0045_office_inquiries.sql` (SHA-256
+`58d2fc63afa63c5a83ad5c799fffb99de1d7687ceb775530e73ba1ea27a0dead`) to production D1 with the same command
+as `npm run db:migrate:production` (`wrangler d1 migrations apply uluslarasiofis-production --remote --env production`);
+this workflow never applies migrations. A Time Travel bookmark was recorded before the apply
+(`000006fe-00000516-0000512c-633ce9efd80481ed86cdff5349933546`). The migration only creates the new table
+`office_inquiries` (visitor questions from the home page form, kept until staff delete them) and two indexes
+`idx_office_inquiries_status_created` and `idx_office_inquiries_created`; no existing table or row was read
+or changed. Read-only checks after the apply: `wrangler d1 migrations list --remote --env production` reports
+no pending migrations, the table and both indexes exist, and `office_inquiries` has 0 rows.
+
+The same candidate adds the Workers AI binding declaration (`"ai": {"binding": "AI"}`) to `wrangler.jsonc`
+(top level, staging and production) for the home page assistant. The release workflow never creates it: the
+owner adds the binding by hand in the Cloudflare dashboard (Workers & Pages > goc > Settings > Bindings >
+Add > Workers AI, variable name `AI`) after the release; until then the assistant answers `503`
+(`CHATBOT_UNAVAILABLE`) and the widget is hidden behind `?bot=1`. `scripts/ci/worker-settings.mjs` accepts
+an optional live `AI` binding of type `ai`.
+
+The code-only baseline advanced to `998cfeb4a25bf51b54a6cfc6f08b2cfa12866ba7` (the reviewed source that
+contains migration `0045` and the `ai` declaration). Validation status: the baseline records the reviewed
+source boundary only; it does not prove live artifact equality or rollback safety. The first preflight run
+`45142517656` for `998cfeb` stopped, as designed, at the code-only scope check because these protected paths
+differed from the previous baseline `04d72c2be5d65536cf1a7d141f6f9f24f26b7e4a`.
+
 ## Workers AI binding (chatbot)
 
 Dated 2026-11-23. The Workers AI binding (`AI`) is **not** created or updated by the release
