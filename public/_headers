@@ -8,9 +8,6 @@
 /pdfjs-support/*
   Cache-Control: public, max-age=31536000, immutable
 
-/mediapipe-support/*
-  Cache-Control: public, max-age=31536000, immutable
-
 /fonts/*
   Cache-Control: public, max-age=604800
 
