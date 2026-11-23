@@ -1,0 +1,116 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+    parseCount,
+    parseHoursText,
+    parseStaffIntent,
+    resolvePerson
+} from '../src/server/domain/staffAssistantIntent.js';
+
+test('parseHoursText parses decimals, Turkish words, mixed hours/minutes, and raw out-of-range numbers', () => {
+    assert.equal(parseHoursText('6,5'), 6.5);
+    assert.equal(parseHoursText('6.5 saat'), 6.5);
+    assert.equal(parseHoursText('altı buçuk'), 6.5);
+    assert.equal(parseHoursText('6 buçuk saat'), 6.5);
+    assert.equal(parseHoursText('6 saat 30 dk'), 6.5);
+    assert.equal(parseHoursText('6 saat 30 dakika'), 6.5);
+    assert.equal(parseHoursText('6.25'), 6.25);
+    assert.equal(parseHoursText('25'), 25);
+    assert.equal(parseHoursText('yarım saat'), 0.5);
+    assert.equal(parseHoursText('45 dk'), 0.75);
+    assert.equal(parseHoursText('0 saat'), 0);
+    assert.equal(parseHoursText('merhaba'), null);
+});
+
+test('parseCount parses digits, negative/large numbers, and Turkish number words', () => {
+    assert.equal(parseCount('10 tane'), 10);
+    assert.equal(parseCount('10 tane taksit dilekçesi'), 10);
+    assert.equal(parseCount('on tane taksit dilekçesi'), 10);
+    assert.equal(parseCount('on beş adet'), 15);
+    assert.equal(parseCount('10000 tane taksit dilekçesi'), 10000);
+    assert.equal(parseCount('-3 tane taksit dilekçesi'), -3);
+    assert.equal(parseCount('0 tane taksit dilekçesi'), 0);
+    assert.equal(parseCount('taksit dilekçesi çıkar'), null);
+});
+
+test('resolvePerson resolves known staff names with Turkish suffixes and handles unknown or ambiguous input', () => {
+    assert.equal(resolvePerson('Kağan için'), 'kagan_samet');
+    assert.equal(resolvePerson('Kağan Samet için bugüne 6,5 saat'), 'kagan_samet');
+    assert.equal(resolvePerson('Samet 4 saat'), 'kagan_samet');
+    assert.equal(resolvePerson("Asaf'a 5 saat"), 'asaf');
+    assert.equal(resolvePerson('Eyüp için 3 saat'), 'eyup');
+    assert.equal(resolvePerson("Oğuz'a 7 saat"), 'oguz');
+    assert.equal(resolvePerson('Eray bugün 8 saat'), 'eray');
+    assert.equal(resolvePerson('Ali'), null);
+    assert.equal(resolvePerson('Ali için 5 saat'), null);
+
+    const ambiguous = resolvePerson('Kağan ve Asaf için 5 saat');
+    assert.equal(typeof ambiguous, 'object');
+    assert.ok(ambiguous && typeof ambiguous.ask === 'string' && ambiguous.ask.length > 0);
+});
+
+test('parseStaffIntent matches deterministic Turkish commands for supported tools', () => {
+    assert.deepEqual(
+        parseStaffIntent("AB123456 pasaportunu ykn'ye ver"),
+        { tool: 'run_ykn_flow', args: { passportNo: 'AB123456' } }
+    );
+
+    const printIntent = parseStaffIntent('10 tane taksit dilekçesi çıkar');
+    assert.equal(printIntent?.tool, 'propose_documents_print');
+    assert.equal(printIntent?.args.copies, 10);
+
+    const workHoursIntent = parseStaffIntent('Kağan için bugüne 6,5 saat');
+    assert.equal(workHoursIntent?.tool, 'propose_work_hours');
+    assert.equal(workHoursIntent?.args.person, 'kagan_samet');
+    assert.equal(workHoursIntent?.args.hours, 6.5);
+    assert.equal(workHoursIntent?.args.dateText, undefined);
+
+    const workHoursDotIntent = parseStaffIntent('Kağan için bugüne 6.5 saat');
+    assert.equal(workHoursDotIntent?.tool, 'propose_work_hours');
+    assert.equal(workHoursDotIntent?.args.hours, 6.5);
+    assert.equal(workHoursDotIntent?.args.dateText, undefined);
+
+    const yesterdayWorkHours = parseStaffIntent('Kağan için düne 6,5 saat');
+    assert.equal(yesterdayWorkHours?.tool, 'propose_work_hours');
+    assert.ok(yesterdayWorkHours?.args.dateText);
+
+    const tebligatIntent = parseStaffIntent('Ahmet Demir tebligat bul');
+    assert.equal(tebligatIntent?.tool, 'search_tebligat');
+    assert.equal(tebligatIntent?.args.query, 'Ahmet Demir');
+
+    const yoksisIntent = parseStaffIntent('20260000001 eksik evrak durumu');
+    assert.equal(yoksisIntent?.tool, 'lookup_yoksis_audit');
+    assert.ok(yoksisIntent?.args.query.includes('20260000001'));
+
+    const appIntent = parseStaffIntent('20260000001 başvurusunu sorgula');
+    assert.equal(appIntent?.tool, 'search_applications');
+    assert.ok(appIntent?.args.query.includes('20260000001'));
+
+    const navIntent = parseStaffIntent('Başvurular ekranını aç');
+    assert.deepEqual(navIntent, { tool: 'navigate', args: { view: 'applications' } });
+
+    const disenrollmentForm = parseStaffIntent('2 tane kayıt silme formu çıkar');
+    assert.equal(disenrollmentForm?.tool, 'propose_documents_print');
+    assert.equal(disenrollmentForm?.args.copies, 2);
+});
+
+test('parseStaffIntent returns null for red-line and destructive requests', () => {
+    for (const redLineMessage of [
+        'sil',
+        'başvuruyu sil',
+        'bu kaydı arşivle',
+        'talep gönder',
+        "Apply'a talep gönder",
+        'durumu onayla',
+        'başvuruyu onayla',
+        "YÖKSİS'e kaydet",
+        'AB123456 ykn ver ve talep gönder',
+        "AB123456 için YKN çalıştırıp YÖKSİS'e kaydet"
+    ]) {
+        assert.equal(
+            parseStaffIntent(redLineMessage),
+            null,
+            `Expected null for red-line message: ${redLineMessage}`
+        );
+    }
+});

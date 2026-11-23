@@ -46,6 +46,7 @@ import { runPrintCleanup } from './services/printCleanupService.js';
 import { getScheduledWork } from './services/scheduled-work.js';
 import { readCloudflareUsage } from './services/cloudflare-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
+import { handleStaffAssistant } from './routes/staffAssistantRoutes.js';
 import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAuditRoutes.js';
 import { handleStaffRecordNotes } from './routes/staffRecordNoteRoutes.js';
 import { createPublicInquiry } from './routes/inquiryRoutes.js';
@@ -116,6 +117,7 @@ async function routeApi(request, environment, requestId, cache) {
         return readCloudflareUsage({ environment, cache });
     }
     if (pathname === '/api/staff/work-hours') return handleStaffWorkHours(request, environment, requestId);
+    if (pathname === '/api/staff/assistant') return handleStaffAssistant(request, environment, requestId);
     if (pathname.startsWith('/api/staff/yoksis-document-audit/')) {
         return handleStaffYoksisDocumentAudit(request, environment, requestId);
     }
