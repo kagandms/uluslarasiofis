@@ -138,3 +138,33 @@ test('staff logo returns to the protected workspace home without resetting tool 
         dom.window.close();
     }
 });
+
+test('Gelen Sorular card has no number shortcut badge and opens #view-inquiries via shared navigation until Escape returns home', (context) => {
+    const dom = installWorkspace(context);
+    const document = dom.window.document;
+    const inquiriesCard = document.querySelector('#home-screen .home-action[data-workspace-view="inquiries"]');
+
+    assert.ok(inquiriesCard);
+    assert.equal(inquiriesCard.querySelector('.home-action-shortcut'), null);
+    assert.equal(inquiriesCard.hasAttribute('aria-keyshortcuts'), false);
+
+    inquiriesCard.click();
+
+    assert.equal(document.getElementById('home-screen').hidden, true);
+    assert.equal(document.getElementById('workspace-content').hidden, false);
+    assert.equal(document.getElementById('workspace-title').textContent.trim(), 'Gelen Sorular');
+    assert.equal(document.getElementById('view-inquiries').hidden, false);
+    assert.equal(document.activeElement.id, 'inquiries-title');
+
+    document.querySelector('.workspace-nav [data-workspace-view="archive"]').click();
+    assert.equal(document.getElementById('view-inquiries').hidden, true);
+    assert.equal(document.getElementById('view-archive').hidden, false);
+
+    inquiriesCard.click();
+    assert.equal(document.getElementById('view-inquiries').hidden, false);
+
+    document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(document.getElementById('home-screen').hidden, false);
+    assert.equal(document.getElementById('workspace-content').hidden, true);
+    assert.equal(document.activeElement.id, 'home-screen-title');
+});

@@ -8,6 +8,7 @@ import { createAuditRepository } from './auditRepository.js';
 import { createDocumentRepository } from './documentRepository.js';
 import { createResubmissionUploadRepository } from './resubmissionUploadRepository.js';
 import { createNotificationRepository } from './notificationRepository.js';
+import { createOfficeInquiryRepository } from './officeInquiryRepository.js';
 import { createRateLimitRepository } from './rateLimitRepository.js';
 import { createSessionRepository } from './sessionRepository.js';
 import { createStaffRecordNoteRepository } from './staffRecordNoteRepository.js';
@@ -33,6 +34,7 @@ export function createD1Repositories(database) {
         documents: createDocumentRepository(database),
         resubmissionUploads: createResubmissionUploadRepository(database),
         notifications: createNotificationRepository(database),
+        officeInquiries: createOfficeInquiryRepository(database),
         rateLimits: createRateLimitRepository(database),
         sessions: createSessionRepository(database),
         staff: createStaffRepository(database),

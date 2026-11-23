@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Topi — Uluslararası Ofis Asistanı (Round 5 Tail &amp; Motion Preview)</title>
+  <style>
+    :root {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --public-burgundy-shadow: rgba(126, 24, 48, 0.24);
+
+      --page-bg: #f6f7f9;
+      --page-surface: #ffffff;
+      --page-surface-alt: #f8f9fb;
+      --page-border: #e2e6ee;
+      --page-text: #20232a;
+      --page-muted: #59616d;
+      --chat-log-bg: #fcfcfd;
+      --notice-bg: #f8f9fb;
+      --notice-text: #4a5260;
+
+      --mascot-outline: #641126;
+      --mascot-coat: #f6efe9;
+      --mascot-mark: #c7bec2;
+      --mascot-surface: #fffbf8;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+      --mascot-speed: 1.5;
+
+      color-scheme: light;
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body.is-dark {
+      --public-burgundy: #c6395c;
+      --public-burgundy-hover: #9f2745;
+      --public-burgundy-light: #dc5073;
+      --public-burgundy-soft: #311a23;
+      --public-burgundy-border: #783c4d;
+      --public-burgundy-shadow: rgba(0, 0, 0, 0.45);
+
+      --page-bg: #11141b;
+      --page-surface: #1a1f2a;
+      --page-surface-alt: #212736;
+      --page-border: #2f3748;
+      --page-text: #eef1f6;
+      --page-muted: #a6b0c2;
+      --chat-log-bg: #161a24;
+      --notice-bg: #1f2432;
+      --notice-text: #b8c2d4;
+
+      --mascot-outline: #8d2a44;
+      --mascot-coat: #f4ece5;
+      --mascot-mark: #c4babf;
+      --mascot-surface: #f8eff2;
+      --mascot-card: #ffffff;
+      --mascot-ink: #1e161c;
+      --mascot-accent: #e5a934;
+
+      color-scheme: dark;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--page-bg);
+      color: var(--page-text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body.is-paused svg * {
+      animation-play-state: paused !important;
+    }
+
+    body.is-reduced-motion *,
+    body.is-reduced-motion svg * {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid var(--page-border);
+      background: var(--page-surface);
+    }
+
+    .topbar-inner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.65rem 1rem;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0.75rem 1rem;
+    }
+
+    .brand-head h1 {
+      margin: 0;
+      font-size: 1.08rem;
+      line-height: 1.25;
+      color: var(--public-burgundy);
+    }
+
+    .brand-head p {
+      margin: 0.15rem 0 0;
+      font-size: 0.78rem;
+      color: var(--page-muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 0.18rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.6rem;
+      background: var(--page-surface-alt);
+      gap: 0.18rem;
+    }
+
+    .speed-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-height: 2rem;
+      padding: 0.2rem 0.6rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.45rem;
+      background: var(--page-surface-alt);
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--page-text);
+    }
+
+    .speed-control input[type="range"] {
+      width: 84px;
+      accent-color: var(--public-burgundy);
+      cursor: pointer;
+    }
+
+    .speed-control output {
+      min-width: 2.5rem;
+      text-align: right;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: var(--public-burgundy);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.3rem;
+      min-height: 2rem;
+      padding: 0.28rem 0.62rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.45rem;
+      background: var(--page-surface);
+      color: var(--page-text);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-sm {
+      min-height: 1.65rem;
+      padding: 0.16rem 0.5rem;
+      font-size: 0.72rem;
+    }
+
+    .control-group .btn {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .btn[aria-pressed="true"],
+    .control-group .btn[aria-pressed="true"] {
+      border-color: var(--public-burgundy);
+      background: var(--public-burgundy);
+      color: #ffffff;
+    }
+
+    .btn-accent {
+      border-color: var(--public-burgundy-border);
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    .btn-accent:hover {
+      border-color: var(--public-burgundy);
+      background: var(--public-burgundy);
+      color: #ffffff;
+    }
+
+    .btn:focus-visible,
+    .speed-control input:focus-visible {
+      outline: 2px solid var(--public-burgundy);
+      outline-offset: 2px;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 1.15rem 1rem 3rem;
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .card {
+      border: 1px solid var(--page-border);
+      border-top: 4px solid var(--public-burgundy);
+      border-radius: 1rem;
+      background: var(--page-surface);
+      padding: 1.15rem;
+      display: grid;
+      gap: 1.1rem;
+    }
+
+    .card-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.35rem 1rem;
+      border-bottom: 1px solid var(--page-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .card-head h2 {
+      margin: 0;
+      font-size: 1.16rem;
+      color: var(--public-burgundy);
+    }
+
+    .head-actions {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .pill-tag {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.74rem;
+      padding: 0.16rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid var(--public-burgundy-border);
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    .card-caption {
+      margin: 0.25rem 0 0;
+      color: var(--page-muted);
+      font-size: 0.88rem;
+      flex-basis: 100%;
+    }
+
+    .section-label {
+      margin: 0 0 0.55rem;
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--page-muted);
+    }
+
+    .surface-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .surface-panel {
+      border-radius: 0.85rem;
+      padding: 0.9rem;
+      display: grid;
+      gap: 0.7rem;
+      min-width: 0;
+    }
+
+    .surface-light {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #641126;
+      --mascot-coat: #f6efe9;
+      --mascot-mark: #c7bec2;
+      --mascot-surface: #fffbf8;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+      background: #ffffff;
+      color: #20232a;
+      border: 1px solid #d9dde5;
+    }
+
+    .surface-dark {
+      --public-burgundy: #c6395c;
+      --public-burgundy-hover: #9f2745;
+      --public-burgundy-light: #dc5073;
+      --public-burgundy-soft: #311a23;
+      --public-burgundy-border: #783c4d;
+      --mascot-outline: #8d2a44;
+      --mascot-coat: #f4ece5;
+      --mascot-mark: #c4babf;
+      --mascot-surface: #f8eff2;
+      --mascot-card: #ffffff;
+      --mascot-ink: #1e161c;
+      --mascot-accent: #e5a934;
+      background: #161922;
+      color: #eef1f6;
+      border: 1px solid #2f3748;
+    }
+
+    .surface-burgundy {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      --mascot-coat: #f6efe9;
+      --mascot-mark: #c7bec2;
+      --mascot-surface: #fffbf8;
+      --mascot-card: #ffffff;
+      --mascot-ink: #241b22;
+      --mascot-accent: #d89b27;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      color: #ffffff;
+      border: 1px solid #7e1830;
+    }
+
+    .surface-title {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .surface-title span:last-child {
+      font-weight: 500;
+      opacity: 0.78;
+      font-size: 0.72rem;
+    }
+
+    .state-row {
+      display: grid;
+      gap: 0.45rem;
+      padding-top: 0.6rem;
+      border-top: 1px solid rgba(128, 136, 154, 0.24);
+    }
+
+    .state-row-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.25rem 0.6rem;
+    }
+
+    .state-row-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .state-row-note {
+      font-size: 0.72rem;
+      opacity: 0.76;
+    }
+
+    .size-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.65rem 0.9rem;
+    }
+
+    .size-cell {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.22rem;
+    }
+
+    .size-cell code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.68rem;
+      opacity: 0.76;
+    }
+
+    .burgundy-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1rem;
+      align-items: center;
+      padding-top: 0.45rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.22);
+    }
+
+    .burgundy-item {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+      min-width: 68px;
+    }
+
+    .burgundy-item span {
+      font-size: 0.7rem;
+      font-weight: 600;
+      opacity: 0.92;
+    }
+
+    /* Round 5 Tail Hero (160px) & Tail Close-Up Row (120px) */
+    .tail-hero-stage {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1.25rem 1.75rem;
+      padding: 1.25rem 1.4rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.9rem;
+      background: var(--page-surface);
+    }
+
+    .tail-hero-canvas {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 1rem 1.25rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface);
+    }
+
+    .tail-hero-canvas code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.72rem;
+      color: var(--page-muted);
+    }
+
+    .tail-hero-notes {
+      flex: 1;
+      min-width: 240px;
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .tail-hero-notes h3 {
+      margin: 0;
+      font-size: 0.98rem;
+      color: var(--public-burgundy);
+    }
+
+    .tail-hero-notes p {
+      margin: 0;
+      font-size: 0.84rem;
+      color: var(--page-muted);
+    }
+
+    .tail-hero-notes ul {
+      margin: 0.2rem 0 0;
+      padding-left: 1.15rem;
+      font-size: 0.8rem;
+      color: var(--page-text);
+      display: grid;
+      gap: 0.2rem;
+    }
+
+    .tail-closeup-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .tail-closeup-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.75rem 0.65rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.8rem;
+      background: var(--page-surface);
+      text-align: center;
+    }
+
+    .tail-closeup-head {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--page-text);
+    }
+
+    .tail-closeup-note {
+      font-size: 0.7rem;
+      line-height: 1.35;
+      color: var(--page-muted);
+    }
+
+    /* Hello spotlight + 28px Calm Avatar row */
+    .spotlight-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+      gap: 1rem;
+    }
+
+    .hello-stage {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.95rem;
+      border: 1px solid var(--public-burgundy-border);
+      border-radius: 0.85rem;
+      background: var(--public-burgundy-soft);
+    }
+
+    .hello-sizes {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.85rem;
+    }
+
+    .calm-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.7rem 0.95rem;
+      padding: 0.9rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+    }
+
+    .calm-item {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+      min-width: 58px;
+      padding: 0.42rem 0.48rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.6rem;
+      background: var(--page-surface);
+    }
+
+    .calm-item span {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--page-muted);
+    }
+
+    .mascot-slot {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .mascot-slot svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Widget Context */
+    .widget-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .mock-box {
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+      padding: 0.9rem;
+      display: grid;
+      gap: 0.8rem;
+      min-width: 0;
+    }
+
+    .launcher-samples {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .mock-launcher {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 3.15rem;
+      padding: 0.4rem 1.05rem 0.4rem 0.55rem;
+      border: 1px solid #7e1830;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      color: #ffffff;
+      font: inherit;
+      font-size: 0.92rem;
+      font-weight: 700;
+      box-shadow: 0 8px 22px rgba(126, 24, 48, 0.26);
+    }
+
+    .mock-launcher-lg {
+      min-height: 4rem;
+      padding: 0.35rem 1.15rem 0.35rem 0.45rem;
+    }
+
+    .mock-launcher-orb-wrap {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .mock-launcher-orb {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 1px solid #7e1830;
+      background: linear-gradient(135deg, #7e1830 0%, #9a203d 100%);
+      box-shadow: 0 8px 22px rgba(126, 24, 48, 0.26);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .mock-launcher-orb-wrap span {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--page-muted);
+    }
+
+    .mock-panel {
+      border: 1px solid var(--page-border);
+      border-radius: 1rem;
+      background: var(--page-surface);
+      overflow: hidden;
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.1);
+    }
+
+    .mock-header {
+      --public-burgundy: #7e1830;
+      --public-burgundy-hover: #641126;
+      --public-burgundy-light: #9a203d;
+      --public-burgundy-soft: #fbf2f4;
+      --public-burgundy-border: #e2c0c8;
+      --mascot-outline: #521020;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.65rem 0.85rem;
+      background: #7e1830;
+      color: #ffffff;
+    }
+
+    .mock-header-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      min-width: 0;
+    }
+
+    .mock-header-title {
+      margin: 0;
+      font-size: 0.94rem;
+      font-weight: 700;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .mock-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.9rem;
+      height: 1.9rem;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 0.45rem;
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    .mock-notice {
+      margin: 0;
+      padding: 0.42rem 0.85rem;
+      border-bottom: 1px solid var(--page-border);
+      background: var(--notice-bg);
+      color: var(--notice-text);
+      font-size: 0.72rem;
+    }
+
+    .mock-log {
+      padding: 0.8rem;
+      background: var(--chat-log-bg);
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    .mock-msg-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
+      min-width: 0;
+    }
+
+    .mock-msg-body {
+      display: grid;
+      gap: 0.35rem;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .mock-state-badge {
+      width: fit-content;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.08rem 0.42rem;
+      border-radius: 999px;
+      border: 1px solid var(--public-burgundy-border);
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    .mock-bubble {
+      margin: 0;
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      border-end-start-radius: 0.25rem;
+      background: var(--page-surface);
+      color: var(--page-text);
+      font-size: 0.84rem;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .mock-action-btn {
+      width: fit-content;
+      padding: 0.28rem 0.65rem;
+      border: 1px solid var(--public-burgundy);
+      border-radius: 0.48rem;
+      background: var(--page-surface);
+      color: var(--public-burgundy);
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .rtl-box {
+      border: 1px solid var(--page-border);
+      border-radius: 0.85rem;
+      background: var(--page-surface-alt);
+      padding: 0.9rem;
+    }
+
+    .rtl-grid {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 0.85rem;
+      align-items: start;
+    }
+
+    .rtl-box [dir="rtl"] .mock-launcher {
+      padding: 0.4rem 0.55rem 0.4rem 1.05rem;
+    }
+
+    /* Mapping Table */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--page-border);
+      border-radius: 0.75rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 600px;
+      font-size: 0.84rem;
+    }
+
+    th, td {
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--page-border);
+      vertical-align: middle;
+    }
+
+    th {
+      background: var(--page-surface-alt);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--page-muted);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    td code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.3rem;
+      background: var(--public-burgundy-soft);
+      color: var(--public-burgundy);
+    }
+
+    @media (max-width: 860px) {
+      .surface-grid,
+      .spotlight-grid,
+      .widget-grid,
+      .rtl-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 0.85rem;
+      }
+      .surface-panel,
+      .mock-box,
+      .rtl-box {
+        padding: 0.72rem;
+      }
+      .size-strip {
+        gap: 0.55rem 0.65rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-head">
+        <h1>Topi · Uluslararası Ofis Asistanı</h1>
+        <p>Round 5 real cat-tail &amp; motion preview (2026-11-20) · 1.5x default speed · 8 states + .is-calm · Inline CSS-only SVG · Offline</p>
+      </div>
+      <div class="controls">
+        <div class="control-group" role="group" aria-label="Live preview state">
+          <button type="button" class="btn" data-state-btn="idle" aria-pressed="true">Idle</button>
+          <button type="button" class="btn" data-state-btn="thinking" aria-pressed="false">Thinking</button>
+          <button type="button" class="btn" data-state-btn="understood" aria-pressed="false">Understood</button>
+          <button type="button" class="btn" data-state-btn="checking" aria-pressed="false">Checking</button>
+          <button type="button" class="btn" data-state-btn="handoff" aria-pressed="false">Handoff</button>
+          <button type="button" class="btn" data-state-btn="confused" aria-pressed="false">Confused</button>
+          <button type="button" class="btn" data-state-btn="sleepy" aria-pressed="false">Sleepy</button>
+          <button type="button" class="btn" data-state-btn="hello" aria-pressed="false">Hello</button>
+        </div>
+        <button type="button" class="btn" id="toggle-play" aria-pressed="false">Pause all</button>
+        <label class="speed-control" for="speed-slider">
+          <span>Speed</span>
+          <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1.5">
+          <output id="speed-output" for="speed-slider">1.5x</output>
+        </label>
+        <button type="button" class="btn" id="toggle-dark" aria-pressed="false">Dark mode</button>
+        <button type="button" class="btn" id="toggle-motion" aria-pressed="false">Reduced motion</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Round 5 Top Inspection: Big 160 px Idle Cat + 120 px Tail Close-Up Row -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Round 5 Tail Inspection · 160 px Idle &amp; 120 px Per-State Tail Close-Ups</h2>
+        <div class="head-actions">
+          <span class="pill-tag">3-segment follow-through · 1.5x default</span>
+        </div>
+        <p class="card-caption">Redesigned real cat tail: thick rump base tapering smoothly to a rounded tip (~1.3x body height), relaxed S-curve / soft question-mark resting pose, 3 flat tabby bands in forehead-stripe tone (<code>var(--mascot-mark)</code>), and 3 nested segments (base, middle +60 ms, tip +120 ms) for genuine follow-through motion.</p>
+      </div>
+
+      <div class="tail-hero-stage">
+        <div class="tail-hero-canvas">
+          <div id="tail-hero-slot"></div>
+          <code>idle · 160px · plain background · --mascot-speed: 1.5</code>
+        </div>
+        <div class="tail-hero-notes">
+          <h3>What changed in Round 5</h3>
+          <p>Character, body, head, colors, chest card, and traced Topkapı emblem are unchanged. Only the tail and the owner-approved <strong>1.5x</strong> default speed changed.</p>
+          <ul>
+            <li><strong>Filled tapered silhouette:</strong> grows from behind the lower back/rump (thick base, smooth taper to a rounded tip, matching <code>2.3</code> outline and <code>var(--mascot-coat)</code> fill).</li>
+            <li><strong>Tabby bands:</strong> 3 soft flat bands along the upper half and tip in <code>var(--mascot-mark)</code> (no gradients).</li>
+            <li><strong>3-segment follow-through:</strong> nested base, middle (+60 ms), and tip (+120 ms) groups pivoting at each joint; <code>prefers-reduced-motion: reduce</code> stops all motion on the static resting S-curve.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-label">Tail close-up — every state's tail pose &amp; motion at 120 px</div>
+        <div class="tail-closeup-row" id="tail-closeup-row"></div>
+      </div>
+    </section>
+
+    <!-- 0. Hello One-Shot & 28 px Calm Avatar Row -->
+    <section class="card">
+      <div class="card-head">
+        <h2>New One-Shot <code>.is-hello</code> &amp; 28 px Calm Avatars (<code>.is-calm</code>)</h2>
+        <div class="head-actions">
+          <button type="button" class="btn btn-accent btn-sm" id="replay-all-hello">↻ Replay hello</button>
+          <span class="pill-tag">--mascot-speed · 1.6s one-shot</span>
+        </div>
+        <p class="card-caption"><code>.is-hello</code> plays a single ~1.6 s greeting (raised-paw wave, small hop, perked ears) and settles smoothly into the idle pose. <code>.is-calm</code> disables all loops except natural blinking so 28 px message avatars stay peaceful while users read.</p>
+      </div>
+
+      <div class="spotlight-grid">
+        <div>
+          <div class="section-label">One-shot greeting (.is-hello) — click Replay to watch again</div>
+          <div class="hello-stage" id="hello-spotlight">
+            <div class="hello-sizes" id="hello-sizes"></div>
+            <button type="button" class="btn btn-accent" id="replay-stage-hello">↻ Replay 1.6s wave</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-label">28 px calm-avatar row (.is-calm — blink only, no distracting loops)</div>
+          <div class="calm-strip" id="calm-avatar-row"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1. All 8 States x 4 Sizes on Light / Dark / Burgundy -->
+    <section class="card">
+      <div class="card-head">
+        <h2>All 8 States at 28 / 36 / 56 / 120 px (Inline SVG Loops)</h2>
+        <span class="pill-tag">topi-cat.svg</span>
+        <p class="card-caption">Every instance is an inline <code>&lt;svg&gt;</code> so all CSS keyframe loops run live. Use the top bar to pause all, scale <code>--mascot-speed</code> from 0.5x to 2.0x, toggle dark mode, or test <code>prefers-reduced-motion</code> static fallbacks.</p>
+      </div>
+
+      <div class="surface-grid">
+        <div class="surface-panel surface-light" id="matrix-light">
+          <div class="surface-title">
+            <span>Light background</span>
+            <span>#ffffff · default tokens</span>
+          </div>
+        </div>
+        <div class="surface-panel surface-dark" id="matrix-dark">
+          <div class="surface-title">
+            <span>Dark background</span>
+            <span>#161922 · dark-mode tokens</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface-panel surface-burgundy">
+        <div class="surface-title">
+          <span>Burgundy launcher / header surface (56 px &amp; 36 px)</span>
+          <span>#7e1830 → #9a203d</span>
+        </div>
+        <div class="burgundy-strip" id="matrix-burgundy"></div>
+      </div>
+    </section>
+
+    <!-- 2. Widget Context (LTR Turkish) -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Widget Context (LTR — Turkish)</h2>
+        <div class="head-actions">
+          <button type="button" class="btn btn-accent btn-sm" id="simulate-open">Simulate panel open (.is-hello)</button>
+          <span class="pill-tag">Launcher + Panel Header + Calm 28px Bubbles</span>
+        </div>
+        <p class="card-caption">Launcher buttons and the panel header run full lively motion and switch with the top state bar (click "Simulate panel open" to see <code>.is-hello</code> settle into idle). Inside the chat log, 28 px message avatars use <code>.is-calm</code> so replies stay easy to read.</p>
+      </div>
+
+      <div class="widget-grid">
+        <div class="mock-box">
+          <div class="section-label">Launcher button "Asistan" (switches with top bar)</div>
+          <div class="launcher-samples">
+            <div class="mock-launcher" id="launcher-pill-sm"></div>
+            <div class="mock-launcher mock-launcher-lg" id="launcher-pill-lg"></div>
+            <div class="mock-launcher-orb-wrap">
+              <div class="mock-launcher-orb" id="launcher-orb"></div>
+              <span>Asistan (56px)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mock-panel">
+          <div class="mock-header">
+            <div class="mock-header-brand" id="panel-header-brand"></div>
+            <span class="mock-close" aria-hidden="true">✕</span>
+          </div>
+          <p class="mock-notice">Yapay zekâ hata yapabilir; resmi karar Uluslararası Ofise aittir.</p>
+          <div class="mock-log" id="mock-chat-log"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. RTL Sample (Arabic) -->
+    <section class="card">
+      <div class="card-head">
+        <h2>RTL Sample (Arabic · dir="rtl")</h2>
+        <span class="pill-tag">توبي · مساعد المكتب الدولي</span>
+        <p class="card-caption">Verifies motion, orientation, emblem badge, and layout spacing inside right-to-left Arabic UI. Launcher and header respond to the top state bar; chat avatars use <code>.is-calm</code>.</p>
+      </div>
+
+      <div class="rtl-box">
+        <div class="rtl-grid" dir="rtl" lang="ar">
+          <div class="mock-launcher" id="rtl-launcher"></div>
+          <div class="mock-panel">
+            <div class="mock-header">
+              <div class="mock-header-brand" id="rtl-header-brand"></div>
+              <span class="mock-close" aria-hidden="true">✕</span>
+            </div>
+            <div class="mock-log" id="rtl-chat-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Reply-to-State Mapping Table -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Which Reply Triggers Which State</h2>
+        <span class="pill-tag">Widget Integration Contract</span>
+        <p class="card-caption">Deterministic mapping from widget/reply event to root SVG modifier class on <code>&lt;svg class="mascot-svg mascot-cat"&gt;</code>. Add <code>.is-calm</code> on 28 px message avatars.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Preview</th>
+              <th>State</th>
+              <th>Root class</th>
+              <th>Motion &amp; visual cue</th>
+              <th>Triggered by</th>
+            </tr>
+          </thead>
+          <tbody id="mapping-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Inline SVG template (verbatim copy of topi-cat.svg) -->
+  <template id="tpl-topi">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-cat" aria-hidden="true" focusable="false"><title>Topi</title><style>/*<![CDATA[*/.mascot-cat{--p:var(--public-burgundy,#7e1830);--o:var(--mascot-outline,var(--public-burgundy-hover,#641126));--s:var(--public-burgundy-soft,#fbf2f4);--b:var(--public-burgundy-border,#e2c0c8);--c:var(--mascot-coat,#f6efe9);--m:var(--mascot-mark,#c7bec2);--S:var(--mascot-surface,#fffbf8);--D:var(--mascot-card,#fff);--i:var(--mascot-ink,#241b22);--a:var(--mascot-accent,#d89b27);--V:var(--mascot-speed,1.5);--e:cubic-bezier(.34,1.56,.64,1);& path{stroke-linejoin:round}.h{display:none}.c,.C{fill:var(--c)}.M{fill:var(--m)}.B{fill:var(--b)}.s,.F{fill:var(--S)}.p,.D0{fill:var(--D)}.c,.O,.o,.s{stroke:var(--o)}.c,.O,.J{stroke-width:2.3}.O,.r,.k,.b{fill:none;stroke-linecap:round}.s{stroke-width:2}.k,.b,.p{stroke-width:1.7}.k{stroke:var(--i)}.b,.p{stroke:var(--p)}.a{--n:none;--d:2.8s;--t:ease-in-out;--l:0s;--r:infinite;--u:0;--v:0;--w:0;--f:0;--x:0;--y:0;--z:0;--q:0;transform-box:fill-box;animation:var(--n) calc(var(--d)/var(--V)) var(--t) calc(var(--l)/var(--V)) var(--r) forwards}.g{transform-origin:50% 98%}.d{transform-origin:50% 95%;--n:br}.f{transform-origin:50% 92%;--n:km;--d:3.7s;--y:-.9px;--v:2.2;--q:.4px;--w:-1.8}.l{transform-origin:55% 68%}.u{transform-origin:45% 68%;--n:et;--d:5.1s}.t{--n:kr;--d:3s;--u:-4;--v:4}.x{transform-origin:100% 87%;--u:-3}.y{transform-origin:73% 88%;--l:.06s}.z{transform-origin:68% 83%;--l:.12s;--u:-6;--v:5}.q{transform-origin:100% 30%}:is(.i,.W,.U,.Z,.J,.D){transform-origin:50%}.i{--n:bk;--d:8.2s}.P{transform-origin:15% 65%}.w{transform-origin:12% 85%}.H{transform-origin:15% 30%}.K{transform-origin:20% 85%}.Q{transform-origin:50% 60%}:is(.W,.U,.Q,.P,.H,.J){--t:var(--e)}.W{--n:dt;--d:1.5s}.n{--l:.22s}.m{--l:.44s}.U{--n:sp;--d:2.1s}.v{--l:-.7s}.V{--l:-1.4s}.Z{--n:zz}&:is(.is-thinking,.is-understood,.is-checking,.is-handoff){.I,.R{display:none}.u{--n:kp;--v:-8}}&:is(.is-thinking,.is-understood,.is-checking,.is-confused,.is-hello) .l{--n:kp;--v:8}&:is(.is-understood,.is-sleepy) .ie{display:none}&.is-thinking{.s1{display:inline}.d{--d:1.9s;--t:var(--e);--y:-1.1px}.t{--d:1.4s;--u:-5;--v:5}.x{--u:-4}.z{--u:-7;--v:6}.f{--d:2.5s;--l:.15s}.eo{translate:.9px -1.2px}.E{--n:km;--d:3.4s;--x:-2.2px;--y:-.3px;--z:.8px}.P{--n:k3;--d:2.1s;--y:-1.6px;--v:-14;--w:4}}&.is-understood{.s2{display:inline}.g{--n:hp;--d:2.6s;--t:var(--e)}.t{--d:1.5s;--t:var(--e)}.x{--u:7;--v:10}.y{--u:-14;--v:-11}.z{--u:2;--v:16}:is(.l,.u){--d:2.6s;--t:var(--e)}.w{--n:kr;--d:1.05s;--u:-9;--v:14}}&.is-checking{.s3{display:inline}.t{--d:3.8s}.x{--u:-7;--v:-2}.y{--u:-3;--v:4}.z{--u:-2;--v:5}:is(.f,.E,.K){--n:km;--d:2.9s}.f{--l:.14s;--u:-2;--x:1.2px;--y:-.6px;--v:5;--z:.7px;--q:.5px;--w:2}.eo{translate:.8px .8px}.E{--x:.9px;--y:-.5px;--z:-.7px;--q:.5px}.K{--f:-1px;--u:-6;--x:2.4px;--y:-1.5px;--v:9;--z:1.5px;--q:1.8px;--w:4}.D{--n:km;--d:2.3s;--y:-.3px;--v:-15;--w:5}}&.is-handoff{.s4{display:inline}.g{--n:km;--x:1.2px;--y:.3px;--v:4;--z:.8px;--w:2}.eo{translate:0 1.2px}.t{--d:1.7s;--t:var(--e)}.x{--u:6;--v:11}.y{--u:-13;--v:-9}.z{--u:-4;--v:12}.H{--n:k3;--x:1.2px;--y:2.2px;--v:12;--w:-3}.J{--n:k3;--l:.08s;--y:1.7px}}&.is-confused{.I{display:none}.s5{display:inline}.f{rotate:-7deg;--n:kr;--d:3.2s;--u:-8;--v:8}.eo{translate:0 .2px}.u{--n:kr;--d:3.2s;--u:14;--v:22}.t{--d:4s}.x{--u:1;--v:5}.y{--u:-4;--v:1}.z{--u:-18;--v:6}.Q{--n:km;--d:2.3s;--u:-7;--y:-2.5px;--v:9;--q:-.5px;--w:-4}}&.is-sleepy{.I,.x{display:none}.s6{display:inline}.d{--d:4.4s}.f{translate:0 2.4px;--n:nd;--d:4.8s}.u{--n:none}.q{--n:kr;--d:4.4s;--v:-2.5}}&.is-hello{.w{display:inline}.a{--d:1.6s;--r:1}.i{--d:8.2s;--r:infinite}.g{--n:hp;--t:var(--e)}.d{--n:none}:is(.f,.l,.u){--t:var(--e)}.u{--n:kp;--v:-8}.t{--n:tw;--v:5;--w:-4}.y{--v:3}.z{--w:-6}.w{--n:hw;--t:var(--e)}.R{opacity:0;--n:hr}}&.mascot-cat.is-calm{.a{--n:none}:is(.i,.t,.q){--r:infinite}.i{--n:bk;--d:8.2s}:is(.t,.q){--n:kr;--d:6s;--v:-1}.t{--u:1}}}@keyframes bk{0%,43%,47%,88%,92%,96%,to{scale:1}45%,90%,94%{scale:1 .08}}@keyframes br{0%,to{translate:0;scale:1}50%{translate:0 var(--y);scale:1.03 1.04}}@keyframes tw{0%,to{rotate:0deg}18%,56%{rotate:calc(var(--v)*1deg)}37%,75%{rotate:calc(var(--w)*1deg)}}@keyframes kr{0%,to{rotate:calc(var(--u)*1deg)}50%{rotate:calc(var(--v)*1deg)}}@keyframes kp{0%,to{rotate:0deg;translate:0}25%,65%{rotate:calc(var(--v)*1deg);translate:0 -.8px}}@keyframes km{0%,to{translate:var(--f);rotate:calc(var(--u)*1deg)}35%{translate:var(--x) var(--y);rotate:calc(var(--v)*1deg)}70%{translate:var(--z) var(--q);rotate:calc(var(--w)*1deg)}}@keyframes k3{0%,76%,to{translate:0;rotate:0deg}12%,36%,60%{translate:var(--x) var(--y);rotate:calc(var(--v)*1deg)}24%,48%{translate:0 -.4px;rotate:calc(var(--w)*1deg)}}@keyframes et{0%,82%,94%,to{rotate:0deg}85%{rotate:13deg}88%{rotate:-4deg}91%{rotate:8deg}}@keyframes dt{0%,65%,to{scale:.85;opacity:.45}30%{translate:0 -2.4px;scale:1.18;opacity:1}}@keyframes hp{0%,66%,to{translate:0;scale:1}11%{translate:0 .7px;scale:1.06 .92}25%{translate:0 -4.4px;scale:.95 1.06}39%{translate:0 .8px;scale:1.07 .91}51%{translate:0 -.8px;scale:.99 1.02}}@keyframes sp{0%,to{scale:.62;opacity:.38}38%{scale:1.22;rotate:18deg;opacity:1}70%{scale:.88;rotate:-8deg;opacity:.82}}@keyframes nd{0%,to{translate:0 2.2px;rotate:-1deg}70%{translate:0 4.8px;rotate:-8deg}79%{translate:0 1px;rotate:2deg}89%{translate:0 2.4px;rotate:-1.5deg}}@keyframes zz{0%{translate:-.6px 1.8px;scale:.82;opacity:0}22%,60%{translate:0;scale:1;opacity:1}to{translate:1.1px -2.8px;scale:1.08;opacity:0}}@keyframes hw{0%{rotate:-15deg;opacity:0}12%,42%,70%{rotate:14deg;opacity:1}27%,56%{rotate:-12deg;opacity:1}86%{rotate:-14deg;opacity:.8}to{rotate:-18deg;opacity:0}}@keyframes hr{0%,84%{opacity:0}94%,to{opacity:1}}@media(prefers-reduced-motion:reduce){.mascot-cat *{animation:none!important}}/*]]>*/</style><defs><g id="emblem"><path fill="#444444" d="M118 8h129v18H118zm151 0h132v18H269z"/><path fill="#8b1328" d="M35 37H247V475H118V255H35ZM269 37H460V255H401V475H269Z"/></g><path id="c" d="M49.2 23.3C52 26.4 52.5 31.2 50.2 35.2 47.2 40.2 40.4 42.4 32 42.4 23.6 42.4 16.8 40.2 13.8 35.2 11.5 31.2 12 26.4 14.8 23.3"/><ellipse id="p" rx="4" ry="2.6" class="s"/><path id="s" d="M28.4 34.8Q30.2 36.8 32 34.8 33.8 36.8 35.6 34.8" class="k"/><g id="e" fill="var(--i)"><circle cx="23.5" cy="27" r="2.8"/><circle cx="40.5" cy="27" r="2.8"/><g fill="#fff"><circle cx="24.4" cy="26.1" r=".9"/><circle cx="41.4" cy="26.1" r=".9"/></g></g><path id="t" d="M6.1 42.2Q5.8 38.2 4.4 35.4A1 1 0 0 1 6 34.2Q8.8 37 9.5 41.8"/><path id="q" d="M17.8 50.6Q6.4 49.6 6.2 56.2 6 61.2 11.8 60.6A1 1 0 0 0 11.8 58.6Q9.6 58.4 10.2 55.8 10.8 54.2 17.8 56.4"/></defs><g class="a g"><g class="a t x"><path class="C" d="M17.8 57Q11.5 57 8.4 51.5L12.2 48.9Q13.8 51 17.8 51Z"/><path class="O" d="M17.8 57Q11.5 57 8.4 51.5M12.2 48.9Q13.8 51 17.8 51"/><g class="a t y"><path class="C" d="M8.4 51.5Q6.2 47 6.1 42.2L9.5 41.8Q9.9 45.6 12.2 48.9A2.3 2.3 0 0 1 8.4 51.5Z"/><path class="M" d="M6.3 44.5 9.9 44.1 10.5 45.6 6.5 46.1Z"/><path class="O" d="M8.4 51.5Q6.2 47 6.1 42.2M9.5 41.8Q9.9 45.6 12.2 48.9"/><g class="a t z"><circle cx="7.8" cy="42" r="1.7" class="C"/><use href="#t" class="C"/><path class="M" d="M4.9 36.4 7 35.3 7.9 36.6 5.4 37.9ZM5.7 39.4 8.7 38.9 9.1 40.3 5.9 40.8Z"/><use href="#t" class="O"/></g></g></g><g class="a q s6 h"><use href="#q" class="C"/><path class="M" d="M9.7 58.2 9.5 60.6 10.7 60.7 10.8 58.5ZM6.6 57.9 9.8 56.6 10 57.8 7.4 59.4Z"/><use href="#q" class="O"/></g><g class="a d"><path d="M16.5 40C14.5 48.5 16.5 59.2 23 59.2H41C47.5 59.2 49.5 48.5 47.5 40Z" class="c"/><ellipse cx="32" cy="50" rx="10.4" ry="7.2" class="F"/><path d="M19.5 41.2Q32 45.2 44.5 41.2" class="r" stroke="var(--p)" stroke-width="3.2"/><circle cx="32" cy="44.1" r="1.3" fill="var(--a)" class="o" stroke-width=".9"/><rect x="24" y="44.8" width="16" height="15.4" rx="2" class="D0" stroke="var(--p)" stroke-width="1.4"/><use href="#emblem" transform="translate(25.4 46.1) scale(.0265)"/></g><g class="a f"><g class="a l"><path d="M15.8 25.5L14.8 23.3 14.4 12.2C14.3 9.8 17 8.9 19.1 10.4L25.6 15 27.6 17Z" class="c"/><path d="M17.2 19.6L17.1 13 22.2 16.6Z" class="B"/></g><g class="a u"><path d="M36.4 17L38.4 15 44.9 10.4C47 8.9 49.7 9.8 49.6 12.2L49.2 23.3 48.2 25.5Z" class="c"/><path d="M46.8 19.6L46.9 13 41.8 16.6Z" class="B"/></g><use href="#c" class="C"/><path d="M14.8 25V23.3Q20.5 21 25.6 15C29.6 14.1 34.4 14.1 38.4 15Q43.5 21 49.2 23.3V25Z" class="C"/><use href="#c" class="O"/><path d="M25.6 15C29.6 14.1 34.4 14.1 38.4 15" class="O"/><g class="M"><rect x="30.6" y="15" width="2.8" height="5" rx="1.4"/><rect x="26.2" y="15.6" width="2.4" height="3.8" rx="1.2"/><rect x="35.4" y="15.6" width="2.4" height="3.8" rx="1.2"/></g><path d="M10.2 30.6L16.4 31.3M11.2 34.6L16.8 33.9M53.8 30.6L47.6 31.3M52.8 34.6L47.2 33.9" class="r o" stroke-width="1.6"/><ellipse cx="32" cy="33.8" rx="7.6" ry="4.6" class="F"/><path d="M30.1 31Q32 30.2 33.9 31L32 33.2Z" fill="var(--public-burgundy-light,#9a203d)"/><g class="a i ie"><g class="eo"><g class="a E"><use href="#e"/></g></g></g><use href="#s" class="I"/><path d="M29.8 35.6Q32 34.8 34.2 35.6" class="k s1 h"/><g class="s2 h"><path d="M20.4 27.6Q23.5 23.4 26.6 27.6M37.4 27.6Q40.5 23.4 43.6 27.6" class="k" stroke-width="2.2"/><g class="B" opacity=".85"><circle cx="18.2" cy="31" r="2"/><circle cx="45.8" cy="31" r="2"/></g><use href="#s"/></g><use href="#s" class="s4 h"/><path d="M29.4 35.2Q32 36.4 34.6 35.2" class="k s3 h"/><g class="s5 h"><path d="M20.2 22.8Q23.5 21.4 26.2 22.8M37.8 22.8Q40.5 21.4 43.8 22.8" class="r o" stroke-width="1.5"/><path d="M29.6 35.6Q32 34.4 34.4 35.6" class="k"/></g><g class="s6 h"><path d="M20.4 27Q23.5 30 26.6 27M37.4 27Q40.5 30 43.6 27" class="k" stroke-width="2.1"/><path d="M30.4 35.4Q32 36.2 33.6 35.4" class="k" stroke-width="1.5"/></g></g><use href="#p" x="18.5" y="58.2"/><use href="#p" class="a R" x="45.5" y="58.2"/><path class="a P s s1 h" d="M42.8 48.2C46.6 45.2 51 46.8 49.8 51.2 48.6 54.4 43.4 54.5 42.2 51.4Z"/><g class="a w s2 h"><path d="M45.8 51.5C49.8 50.8 55.6 47.4 56.2 42.8 56.6 39.8 53.6 38.4 51.3 40.2 49.4 41.8 47.8 45.4 45.6 48.2Z" class="s"/><circle cx="53.1" cy="42.8" r="1.3" class="B"/></g><path class="a H s s4 h" d="M43.5 49.5C48.8 48.5 52.2 52 50 56 48.4 58.6 44 57.5 43.2 53.8Z"/></g><g class="s1 h" fill="var(--p)"><rect x="42.5" y="1.4" width="19.8" height="8.8" rx="4.4" class="p"/><circle class="a W" cx="47.7" cy="5.8" r="1.4"/><circle class="a W n" cx="52.4" cy="5.8" r="1.4"/><circle class="a W m" cx="57.1" cy="5.8" r="1.4"/></g><g class="s2 h" fill="var(--a)"><path class="a U o" d="M55.8 7.4L57.2 11 60.8 12.4 57.2 13.8 55.8 17.4 54.4 13.8 50.8 12.4 54.4 11Z" stroke-width="1.2"/><circle class="a U v" cx="60.4" cy="7.2" r="1.2"/><path class="a U V o" d="M50.2 3.8L51 5.6 52.8 6.4 51 7.2 50.2 9 49.4 7.2 47.6 6.4 49.4 5.6Z" stroke-width=".9"/></g><g class="s4 h"><circle cx="54.2" cy="56.2" r="5.8" class="p"/><path class="a b J" d="M51.4 55L54.2 58.2 57 55"/></g><g class="s3 h"><rect x="47.5" y="42.2" width="13.6" height="16.8" rx="1.8" class="D0 o" stroke-width="1.8"/><path d="M50.5 46.6H58.1M50.5 50.4H56.5M50.5 54.2H54.9" class="r" stroke="var(--b)" stroke-width="1.6"/><path class="a D o" d="M57.6 42.2L61.1 45.7 57.6 45.7Z" fill="var(--s)" stroke-width="1.2"/><g class="a K"><path d="M49.6 51.8L45.2 56.8" class="r o" stroke-width="2.9"/><circle cx="53" cy="48.2" r="5" fill="var(--s)" fill-opacity=".75" stroke="var(--p)" stroke-width="2.1"/><path d="M50.7 46.4A3.2 3.2 0 0 1 53.2 45" class="r" stroke="#fff" stroke-width="1.3"/><ellipse cx="45.8" cy="56.6" rx="3.7" ry="2.5" class="s"/></g></g><g class="s5 h"><g class="a Q"><circle cx="55.5" cy="9.2" r="6.8" class="p"/><path d="M53.4 7.5C53.4 5.9 54.7 5.1 55.8 5.2 57.1 5.3 57.8 6.2 57.7 7.3 57.6 8.5 55.8 8.8 55.7 10" class="b" stroke-width="2"/><circle cx="55.7" cy="12.6" r="1.1" fill="var(--p)"/></g></g><g class="s6 h"><rect x="45.6" y="1.2" width="16.8" height="10.4" rx="5.2" class="p"/><path class="a b Z" d="M48.8 6H52.2L48.8 9.2H52.2"/><path class="a b Z V" d="M54.2 3.7H59L54.2 8.5H59"/></g></svg>
+  </template>
+
+  <script>
+    (() => {
+      const SIZES = [28, 36, 56, 120];
+      const STATES = [
+        {
+          key: 'idle',
+          cls: '(default)',
+          label: '1 · Idle',
+          tailNote: 'Lazy S-wave sway (±7°, 3s base / 2s at 1.5x)',
+          cue: 'Breathing (2.8s), lazy 3-segment S-wave tail sway (3s, +60/+120ms lag), gentle head bob (3.7s), ear twitch (5.1s), blink + double blink (8.2s) — scaled by 1.5x default',
+          trigger: 'Default / welcome & resting state',
+          bubbleTr: 'Merhaba! Ben Topi. Başvuru süreci, gerekli belgeler veya başvuru durumunuz hakkında soru sorabilirsiniz.'
+        },
+        {
+          key: 'thinking',
+          cls: '.is-thinking',
+          label: '2 · Thinking',
+          tailNote: 'Faster brisk swish (1.4s base)',
+          cue: 'Bouncy body bob (1.9s), brisk 3-segment tail swish (1.4s), rhythmic paw tap (2.1s), 3 bubbling dots wave (1.5s), eyes glancing up-left & up-right (3.4s)',
+          trigger: 'Request in flight',
+          bubbleTr: 'Yanıtınız hazırlanıyor…'
+        },
+        {
+          key: 'understood',
+          cls: '.is-understood',
+          label: '3 · Understood',
+          tailNote: 'Straight up with happy tip flick (1.5s)',
+          cue: 'Happy hop with anticipation squat & landing squash (2.6s), tail standing straight up with happy tip flick (1.5s), raised paw waving "tamam" (1.05s), 3 twinkling sparkles (2.1s)',
+          trigger: 'Deterministic document list or knowledge answer',
+          bubbleTr: 'İkamet izni için gerekli belgeler: pasaport fotokopisi, öğrenci belgesi, sağlık sigortası ve 4 biyometrik fotoğraf.'
+        },
+        {
+          key: 'checking',
+          cls: '.is-checking',
+          label: '4 · Checking',
+          tailNote: 'Low, slow concentrated sway (3.8s)',
+          cue: 'Magnifier sweeping left-right over document with tilt (2.9s), head & eyes following, document corner flapping (2.3s), low slow tail sway (3.8s)',
+          trigger: 'Application status summary',
+          bubbleTr: 'Başvuru özeti: Belgeleriniz Uluslararası Ofis tarafından inceleniyor. Şu an eksik belge görünmüyor.'
+        },
+        {
+          key: 'handoff',
+          cls: '.is-handoff',
+          label: '5 · Handoff',
+          tailNote: 'Lifted up & flicking (1.7s)',
+          cue: 'Pointing paw bounces down 3 pulses + rest (2.8s), chevron pulsing in sync, body leaning toward badge, tail lifted & flicking (1.7s)',
+          trigger: 'Reply with inquiry action or fingerprint redirect',
+          bubbleTr: 'Bu konu için ekibimizin dosyanızı doğrudan incelemesi gerekiyor. Aşağıdaki soru formundan bize yazabilirsiniz.',
+          actionTr: 'Soru formuna git'
+        },
+        {
+          key: 'confused',
+          cls: '.is-confused',
+          label: '6 · Confused',
+          tailNote: 'Slow question-mark tip curl (4s)',
+          cue: 'Head tilt wobble ±8° (3.2s), "?" bobbing & wobbling (2.3s), right ear flopping, slow question-mark tail tip curl (4s)',
+          trigger: 'Refusal or fallback menu',
+          bubbleTr: 'Bu konuda resmi yönlendirme yapamıyorum. Aşağıdaki konu başlıklarından birini seçebilir veya ofisimize yazabilirsiniz.'
+        },
+        {
+          key: 'sleepy',
+          cls: '.is-sleepy',
+          label: '7 · Sleepy',
+          tailNote: 'Wrapped low around body, barely moving (4.4s)',
+          cue: 'Slow deep breathing (4.4s), head nodding off & startled jerk back (4.8s), "z z" floating up & fading in sequence (2.8s), tapered tabby tail wrapped low around body, barely moving (4.4s)',
+          trigger: 'HTTP 503 / daily limit reached',
+          bubbleTr: 'Günlük yanıt sınırına ulaşıldı veya servis şu an kullanılamıyor. Lütfen biraz sonra tekrar deneyin.'
+        },
+        {
+          key: 'hello',
+          cls: '.is-hello',
+          label: '8 · Hello (one-shot)',
+          tailNote: 'Quick two-beat wag (1.6s one-shot)',
+          cue: '1.6s one-shot (1 forwards): 3-wave raised paw, small hop, perked ears & quick two-beat follow-through tail wag, then settles smoothly into idle pose',
+          trigger: 'Once when the chat panel first opens',
+          bubbleTr: 'Hoş geldiniz! Size nasıl yardımcı olabilirim?'
+        }
+      ];
+
+      const STATE_CLASSES = STATES.filter((s) => s.key !== 'idle').map((s) => `is-${s.key}`);
+      const tpl = document.getElementById('tpl-topi');
+      let cloneSeq = 0;
+
+      function createTopi(sizePx, stateKey, { isLive = false, isCalm = false } = {}) {
+        const slot = document.createElement('span');
+        slot.className = 'mascot-slot';
+        slot.style.width = `${sizePx}px`;
+        slot.style.height = `${sizePx}px`;
+
+        const svg = tpl.content.firstElementChild.cloneNode(true);
+        const seq = ++cloneSeq;
+        const suffix = `-n${seq}`;
+
+        // Keep inline <style> on the first mounted SVG only to avoid 80x duplicate stylesheet parsing
+        if (seq > 1) {
+          const styleEl = svg.querySelector('style');
+          if (styleEl) styleEl.remove();
+        }
+
+        // Namespace <defs> IDs per inline instance so multiple copies share zero duplicate IDs in DOM
+        const idMap = new Map();
+        for (const el of svg.querySelectorAll('defs [id]')) {
+          const oldId = el.getAttribute('id');
+          const newId = `${oldId}${suffix}`;
+          idMap.set(`#${oldId}`, `#${newId}`);
+          el.setAttribute('id', newId);
+        }
+        for (const useEl of svg.querySelectorAll('use[href]')) {
+          const ref = useEl.getAttribute('href');
+          if (idMap.has(ref)) useEl.setAttribute('href', idMap.get(ref));
+        }
+
+        if (stateKey !== 'idle') svg.classList.add(`is-${stateKey}`);
+        if (isCalm) svg.classList.add('is-calm');
+        if (isLive) svg.dataset.liveMascot = 'true';
+
+        slot.append(svg);
+        return slot;
+      }
+
+      function replayHello(scope = document) {
+        const nodes = scope.querySelectorAll('svg.mascot-cat.is-hello');
+        for (const svg of nodes) {
+          svg.classList.remove('is-hello');
+          void svg.getBoundingClientRect();
+          svg.classList.add('is-hello');
+        }
+      }
+
+      // Round 5 Top Tail Inspection: 160px Idle Hero + 120px Per-State Tail Close-Up Row
+      document.getElementById('tail-hero-slot').append(createTopi(160, 'idle'));
+
+      const tailCloseupRow = document.getElementById('tail-closeup-row');
+      const closeupItems = [
+        ...STATES.map((st) => ({ key: st.key, name: st.key, note: st.tailNote, isCalm: false })),
+        { key: 'idle', name: 'calm (.is-calm)', note: 'Almost still (±1°, 6s base)', isCalm: true }
+      ];
+      for (const item of closeupItems) {
+        const card = document.createElement('div');
+        card.className = 'tail-closeup-card';
+        card.append(createTopi(120, item.key, { isCalm: item.isCalm }));
+
+        const head = document.createElement('div');
+        head.className = 'tail-closeup-head';
+        const title = document.createElement('span');
+        title.textContent = item.name;
+        head.append(title);
+        if (item.key === 'hello') {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-accent btn-sm';
+          btn.textContent = '↻';
+          btn.title = 'Replay hello two-beat wag';
+          btn.addEventListener('click', () => replayHello(card));
+          head.append(btn);
+        }
+
+        const note = document.createElement('span');
+        note.className = 'tail-closeup-note';
+        note.textContent = item.note;
+
+        card.append(head, note);
+        tailCloseupRow.append(card);
+      }
+
+      // 0. Hello spotlight & 28px Calm Avatar Row
+      const helloSizes = document.getElementById('hello-sizes');
+      for (const sz of [36, 56, 120]) {
+        const cell = document.createElement('div');
+        cell.className = 'size-cell';
+        cell.append(createTopi(sz, 'hello'));
+        const tag = document.createElement('code');
+        tag.textContent = `${sz}px`;
+        cell.append(tag);
+        helloSizes.append(cell);
+      }
+
+      const calmRow = document.getElementById('calm-avatar-row');
+      for (const st of STATES) {
+        const item = document.createElement('div');
+        item.className = 'calm-item';
+        item.append(createTopi(28, st.key, { isCalm: true }));
+        const cap = document.createElement('span');
+        cap.textContent = st.key;
+        item.append(cap);
+        calmRow.append(item);
+      }
+
+      // 1. Light & Dark matrices
+      function populateMatrix(containerId) {
+        const panel = document.getElementById(containerId);
+        for (const st of STATES) {
+          const row = document.createElement('div');
+          row.className = 'state-row';
+
+          const head = document.createElement('div');
+          head.className = 'state-row-head';
+          const lbl = document.createElement('span');
+          lbl.className = 'state-row-label';
+          lbl.textContent = `${st.label} (${st.cls})`;
+          head.append(lbl);
+
+          if (st.key === 'hello') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-accent btn-sm';
+            btn.textContent = '↻ Replay';
+            btn.addEventListener('click', () => replayHello(row));
+            head.append(btn);
+          } else {
+            const note = document.createElement('span');
+            note.className = 'state-row-note';
+            note.textContent = st.trigger;
+            head.append(note);
+          }
+
+          const strip = document.createElement('div');
+          strip.className = 'size-strip';
+          for (const sz of SIZES) {
+            const cell = document.createElement('div');
+            cell.className = 'size-cell';
+            cell.append(createTopi(sz, st.key));
+            const tag = document.createElement('code');
+            tag.textContent = `${sz}px`;
+            cell.append(tag);
+            strip.append(cell);
+          }
+
+          row.append(head, strip);
+          panel.append(row);
+        }
+      }
+
+      populateMatrix('matrix-light');
+      populateMatrix('matrix-dark');
+
+      // Burgundy strip
+      const burgundyStrip = document.getElementById('matrix-burgundy');
+      for (const st of STATES) {
+        const item = document.createElement('div');
+        item.className = 'burgundy-item';
+        item.append(createTopi(56, st.key), createTopi(36, st.key));
+        const cap = document.createElement('span');
+        cap.textContent = st.key;
+        item.append(cap);
+        burgundyStrip.append(item);
+      }
+
+      // 2. LTR Widget Mockups
+      const launcherSm = document.getElementById('launcher-pill-sm');
+      launcherSm.append(createTopi(36, 'idle', { isLive: true }));
+      const smTxt = document.createElement('span');
+      smTxt.textContent = 'Asistan';
+      launcherSm.append(smTxt);
+
+      const launcherLg = document.getElementById('launcher-pill-lg');
+      launcherLg.append(createTopi(56, 'idle', { isLive: true }));
+      const lgTxt = document.createElement('span');
+      lgTxt.textContent = 'Asistan';
+      launcherLg.append(lgTxt);
+
+      document.getElementById('launcher-orb').append(createTopi(56, 'idle', { isLive: true }));
+
+      const panelBrand = document.getElementById('panel-header-brand');
+      panelBrand.append(createTopi(36, 'idle', { isLive: true }));
+      const panelTitle = document.createElement('h3');
+      panelTitle.className = 'mock-header-title';
+      panelTitle.textContent = 'Topi · Uluslararası Ofis Asistanı';
+      panelBrand.append(panelTitle);
+
+      const chatLog = document.getElementById('mock-chat-log');
+      for (const st of STATES.filter((s) => s.key !== 'hello')) {
+        const row = document.createElement('div');
+        row.className = 'mock-msg-row';
+        row.append(createTopi(28, st.key, { isCalm: true }));
+
+        const body = document.createElement('div');
+        body.className = 'mock-msg-body';
+
+        const badge = document.createElement('span');
+        badge.className = 'mock-state-badge';
+        badge.textContent = `${st.key} · ${st.cls} + .is-calm`;
+
+        const bubble = document.createElement('p');
+        bubble.className = 'mock-bubble';
+        bubble.textContent = st.bubbleTr;
+
+        body.append(badge, bubble);
+        if (st.actionTr) {
+          const btn = document.createElement('span');
+          btn.className = 'mock-action-btn';
+          btn.textContent = st.actionTr;
+          body.append(btn);
+        }
+
+        row.append(body);
+        chatLog.append(row);
+      }
+
+      // 3. RTL Arabic Sample
+      const rtlLauncher = document.getElementById('rtl-launcher');
+      rtlLauncher.append(createTopi(36, 'idle', { isLive: true }));
+      const rtlLauncherTxt = document.createElement('span');
+      rtlLauncherTxt.textContent = 'المساعد';
+      rtlLauncher.append(rtlLauncherTxt);
+
+      const rtlBrand = document.getElementById('rtl-header-brand');
+      rtlBrand.append(createTopi(36, 'idle', { isLive: true }));
+      const rtlTitle = document.createElement('h3');
+      rtlTitle.className = 'mock-header-title';
+      rtlTitle.textContent = 'توبي · مساعد المكتب الدولي';
+      rtlBrand.append(rtlTitle);
+
+      const rtlLog = document.getElementById('rtl-chat-log');
+      const rtlMessages = [
+        {
+          state: 'idle',
+          text: 'مرحباً! أنا توبي. يمكنك السؤال عن إجراءات التقديم أو المستندات المطلوبة أو حالة طلبك.'
+        },
+        {
+          state: 'understood',
+          text: 'المستندات المطلوبة لتصريح الإقامة: نسخة جواز السفر، شهادة الطالب، التأمين الصحي و4 صور بيومترية.'
+        },
+        {
+          state: 'handoff',
+          text: 'يحتاج فريقنا لمراجعة ملفك مباشرةً. يمكنك إرسال استفسارك عبر النموذج أدناه.',
+          action: 'الانتقال إلى نموذج الاستفسار'
+        }
+      ];
+
+      for (const msg of rtlMessages) {
+        const row = document.createElement('div');
+        row.className = 'mock-msg-row';
+        row.append(createTopi(28, msg.state, { isCalm: true }));
+        const body = document.createElement('div');
+        body.className = 'mock-msg-body';
+        const bubble = document.createElement('p');
+        bubble.className = 'mock-bubble';
+        bubble.textContent = msg.text;
+        body.append(bubble);
+        if (msg.action) {
+          const btn = document.createElement('span');
+          btn.className = 'mock-action-btn';
+          btn.textContent = msg.action;
+          body.append(btn);
+        }
+        row.append(body);
+        rtlLog.append(row);
+      }
+
+      // 4. Trigger Mapping Table
+      const tbody = document.getElementById('mapping-tbody');
+      for (const st of STATES) {
+        const tr = document.createElement('tr');
+        const tdIcon = document.createElement('td');
+        tdIcon.append(createTopi(36, st.key));
+
+        const tdName = document.createElement('td');
+        tdName.innerHTML = `<strong>${st.key}</strong>`;
+
+        const tdCls = document.createElement('td');
+        tdCls.innerHTML = `<code>${st.cls}</code>`;
+
+        const tdCue = document.createElement('td');
+        tdCue.textContent = st.cue;
+
+        const tdTrigger = document.createElement('td');
+        tdTrigger.textContent = st.trigger;
+
+        tr.append(tdIcon, tdName, tdCls, tdCue, tdTrigger);
+        tbody.append(tr);
+      }
+
+      // Interactive top bar controls
+      const stateButtons = [...document.querySelectorAll('[data-state-btn]')];
+      function setLiveState(nextState) {
+        for (const btn of stateButtons) {
+          btn.setAttribute('aria-pressed', String(btn.dataset.stateBtn === nextState));
+        }
+        for (const svg of document.querySelectorAll('svg[data-live-mascot="true"]')) {
+          for (const cls of STATE_CLASSES) svg.classList.remove(cls);
+          if (nextState !== 'idle') {
+            if (nextState === 'hello') void svg.getBoundingClientRect();
+            svg.classList.add(`is-${nextState}`);
+          }
+        }
+      }
+      for (const btn of stateButtons) {
+        btn.addEventListener('click', () => setLiveState(btn.dataset.stateBtn));
+      }
+
+      const playBtn = document.getElementById('toggle-play');
+      playBtn.addEventListener('click', () => {
+        const nextPaused = !document.body.classList.contains('is-paused');
+        document.body.classList.toggle('is-paused', nextPaused);
+        playBtn.setAttribute('aria-pressed', String(nextPaused));
+        playBtn.textContent = nextPaused ? 'Play all' : 'Pause all';
+      });
+
+      const speedSlider = document.getElementById('speed-slider');
+      const speedOutput = document.getElementById('speed-output');
+      speedSlider.addEventListener('input', () => {
+        const val = Number(speedSlider.value);
+        document.documentElement.style.setProperty('--mascot-speed', String(val));
+        speedOutput.textContent = `${val.toFixed(1)}x`;
+      });
+
+      const darkBtn = document.getElementById('toggle-dark');
+      darkBtn.addEventListener('click', () => {
+        const next = !document.body.classList.contains('is-dark');
+        document.body.classList.toggle('is-dark', next);
+        darkBtn.setAttribute('aria-pressed', String(next));
+      });
+
+      const motionBtn = document.getElementById('toggle-motion');
+      motionBtn.addEventListener('click', () => {
+        const next = !document.body.classList.contains('is-reduced-motion');
+        document.body.classList.toggle('is-reduced-motion', next);
+        motionBtn.setAttribute('aria-pressed', String(next));
+      });
+
+      document.getElementById('replay-all-hello').addEventListener('click', () => replayHello(document));
+      document.getElementById('replay-stage-hello').addEventListener('click', () => replayHello(document.getElementById('hello-spotlight')));
+      document.getElementById('simulate-open').addEventListener('click', () => setLiveState('hello'));
+    })();
+  </script>
+</body>
+</html>

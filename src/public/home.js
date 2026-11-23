@@ -1,5 +1,6 @@
 import { SESSION3_MESSAGES, PUBLIC_MESSAGES } from './i18n/messages.js';
 import { listPublicDocumentOverview } from '../server/domain/documentPolicy.js';
+import { initHomeInquiryForm } from './homeInquiryForm.js';
 
 function readMessages(locale) {
     return { ...(SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr), ...(PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr) };
@@ -51,6 +52,52 @@ export function renderPublicDocumentOverview(root, locale) {
     if (addressPolicies.length) list.append(createAddressEvidenceCard(document, messages, addressPolicies));
 
     root.replaceChildren(list);
+}
+
+export const CHATBOT_PILOT_QUERY_GATE = 'bot';
+
+/**
+ * Returns true only when the pilot query parameter `?bot=1` is present.
+ * @param {string} [search] URL query string (defaults to current window search).
+ * @returns {boolean}
+ */
+export function isChatbotPilotEnabled(search = globalThis.window?.location?.search ?? '') {
+    try {
+        return new URLSearchParams(search).get(CHATBOT_PILOT_QUERY_GATE) === '1';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Lazily imports and mounts the pilot chatbot widget only when `?bot=1` is active.
+ * @param {string} [locale] Active public locale.
+ * @param {{root?: Document, locationSearch?: string, loader?: () => Promise<typeof import('./homeChatbot.js')>, fetcher?: typeof fetch}} [options]
+ * @returns {Promise<ReturnType<typeof import('./homeChatbot.js').initHomeChatbot>|null>}
+ */
+export async function initHomeChatbotGate(
+    locale,
+    { root = document, locationSearch, loader = () => import('./homeChatbot.js'), fetcher } = {}
+) {
+    const search = locationSearch ?? root?.defaultView?.location?.search ?? '';
+    if (!isChatbotPilotEnabled(search)) return null;
+    const mountRoot = root?.getElementById('home-chatbot-root');
+    if (!mountRoot || mountRoot.dataset.chatbotInitialized === 'true') return null;
+    const { initHomeChatbot } = await loader();
+    return initHomeChatbot({ locale, root, mountElement: mountRoot, fetcher });
+}
+
+/**
+ * Mounts the public inquiry form on `#questions` once, independent of document overview rendering.
+ * @param {string} [locale] Active public locale.
+ * @param {{root?: Document, fetcher?: typeof fetch}} [options] Optional document and fetch overrides.
+ * @returns {ReturnType<typeof initHomeInquiryForm>} Controller handle or null when missing/already mounted.
+ */
+export function initHomeQuestions(locale, { root = document, fetcher } = {}) {
+    const questionsSection = root?.getElementById('questions');
+    if (!questionsSection || questionsSection.dataset.inquiryInitialized === 'true') return null;
+    questionsSection.dataset.inquiryInitialized = 'true';
+    return initHomeInquiryForm(questionsSection, { locale, fetcher });
 }
 
 function createAddressEvidenceCard(document, messages, policies) {

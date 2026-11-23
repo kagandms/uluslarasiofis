@@ -28,15 +28,18 @@ function updateLaser(card) {
 }
 
 function numberCard(card, index) {
-    if (card.querySelector('.home-action-shortcut')) return;
-    const shortcut = String(index + 1);
-    const badge = card.ownerDocument.createElement('span');
-    badge.className = 'home-action-shortcut';
-    badge.textContent = shortcut;
-    badge.setAttribute('aria-hidden', 'true');
-    card.setAttribute('aria-keyshortcuts', shortcut);
-    card.append(badge);
-    createLaser(card);
+    if (index < 9 && !card.querySelector('.home-action-shortcut')) {
+        const shortcut = String(index + 1);
+        const badge = card.ownerDocument.createElement('span');
+        badge.className = 'home-action-shortcut';
+        badge.textContent = shortcut;
+        badge.setAttribute('aria-hidden', 'true');
+        card.setAttribute('aria-keyshortcuts', shortcut);
+        card.append(badge);
+    }
+    if (!card.querySelector('.home-action-laser')) {
+        createLaser(card);
+    }
 }
 
 /**

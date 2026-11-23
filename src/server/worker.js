@@ -48,6 +48,9 @@ import { readCloudflareUsage } from './services/cloudflare-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
 import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAuditRoutes.js';
 import { handleStaffRecordNotes } from './routes/staffRecordNoteRoutes.js';
+import { createPublicInquiry } from './routes/inquiryRoutes.js';
+import { handlePublicChat } from './routes/chatbotRoutes.js';
+import { handleStaffInquiries } from './routes/staffInquiryRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -208,6 +211,9 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/staff/record-notes' || pathname.startsWith('/api/staff/record-notes/')) {
         return handleStaffRecordNotes(request, environment, requestId);
     }
+    if (pathname === '/api/staff/inquiries' || pathname.startsWith('/api/staff/inquiries/')) {
+        return handleStaffInquiries(request, environment, requestId);
+    }
     const gocnetEventMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/gocnet-attempts\/([^/]+)\/events$/);
     if (gocnetEventMatch) {
         let applicationId;
@@ -306,6 +312,8 @@ async function routeApi(request, environment, requestId, cache) {
         return readCurrentNotificationPreferences(request, environment);
     }
     if (pathname === '/api/public/applications/tracking-lookup') return lookupApplicationTracking(request, environment);
+    if (pathname === '/api/public/inquiries') return createPublicInquiry(request, environment, requestId);
+    if (pathname === '/api/public/chat') return handlePublicChat(request, environment, requestId);
     if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
     if (pathname === '/api/public/applications/current/declaration') return acceptCurrentApplicationDeclaration(request, environment, requestId);
     if (pathname === '/api/public/applications/current/contact-acknowledgement') {

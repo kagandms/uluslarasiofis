@@ -44,6 +44,9 @@
       "remote": false
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "env": {
     "staging": {
       "name": "goc-staging",
@@ -83,7 +86,10 @@
           "bucket_name": "uluslarasiofis-print-staging",
           "remote": false
         }
-      ]
+      ],
+      "ai": {
+        "binding": "AI"
+      }
     },
     "production": {
       "name": "goc",
@@ -136,6 +142,9 @@
           "remote": false
         }
       ],
+      "ai": {
+        "binding": "AI"
+      },
       "secrets": {
         "required": [
           "PRINTER_SECRET",

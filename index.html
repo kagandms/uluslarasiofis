@@ -40,6 +40,7 @@
     }
     </script>
     <link rel="stylesheet" href="/src/public/public.css" />
+    <link rel="stylesheet" href="/src/public/chatbot.css" />
     <title>İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Portalı</title>
   </head>
   <body data-page="home">
@@ -71,7 +72,7 @@
             <option value="ar">العربية</option>
           </select>
         </label>
-        <a class="staff-entry" href="/yetkili/" data-i18n="staffLink">Yetkili girişi</a>
+        <a class="staff-entry" href="/yetkili/"><span class="staff-entry-title" data-i18n="staffLink">Yetkili girişi</span><span class="staff-entry-note" data-i18n="staffNote">(Uluslararası Ofis Görevlileri İçin)</span></a>
       </div>
     </header>
 
@@ -86,6 +87,7 @@
           <a class="home-cta home-cta-secondary" href="/basvuruya-devam-et/" data-i18n="homeResumeAction">Başvuruma Devam Et</a>
           <button type="button" id="btn-access-recovery" class="home-cta home-cta-secondary" aria-expanded="false" aria-controls="access-recovery-panel" data-i18n="recoveryToggleAction">Başvuru Numaramı Unuttum</button>
           <button type="button" id="btn-hero-guide" class="home-cta home-cta-secondary" data-i18n="homeGuideAction">Nasıl Kullanılır?</button>
+          <a id="btn-home-questions" class="home-cta home-cta-secondary" href="#questions" data-inquiry-i18n="inquiryCta">Sorunuz mu var?</a>
           <a id="home-privacy-notice" class="home-cta home-cta-secondary" href="https://www.topkapi.edu.tr/tr-TR/gizlilik-politikasi/13455" target="_blank" rel="noopener noreferrer" data-i18n="homeOfficialPrivacyNotice">Üniversitenin KVKK metni</a>
         </nav>
         <section id="access-recovery-panel" class="recovery-panel" aria-labelledby="recovery-form-heading" hidden>
@@ -143,12 +145,18 @@
           </ol>
         </section>
       </div>
+
+      <section id="questions" class="public-section inquiry-section" aria-labelledby="questions-heading">
+        <h2 id="questions-heading" data-inquiry-i18n="inquiryHeading">Sorunuz mu var?</h2>
+        <p class="public-section-intro" data-inquiry-i18n="inquiryIntro">Başvuru süreci veya belgeler hakkında sorunuzu bırakın; Uluslararası Öğrenci Ofisi telefon veya WhatsApp üzerinden size dönüş yapsın.</p>
+      </section>
     </main>
 
     <footer class="public-footer">
       <span data-i18n="footerText">İstanbul Topkapı Üniversitesi Uluslararası Öğrenci Ofisi</span>
       <button type="button" id="btn-privacy-notice" class="public-footer-link" data-i18n="privacyNoticeOpen">KVKK bilgilendirmesi</button>
     </footer>
+    <div id="home-chatbot-root"></div>
     <script type="module" src="/src/public/main.js"></script>
   </body>
 </html>

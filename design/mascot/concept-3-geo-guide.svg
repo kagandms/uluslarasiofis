@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="mascot-svg mascot-geo" aria-hidden="true" focusable="false">
+  <title>Nokta — Minimal Geometric Helper Mascot</title>
+  <style>
+    .mascot-geo {
+      --m-primary: var(--public-burgundy, #7e1830);
+      --m-primary-light: var(--public-burgundy-light, #9a203d);
+      --m-outline: var(--mascot-outline, var(--public-burgundy-hover, #641126));
+      --m-soft: var(--public-burgundy-soft, #fbf2f4);
+      --m-border: var(--public-burgundy-border, #e2c0c8);
+      --m-surface: var(--mascot-surface, #ffffff);
+      --m-ink: var(--mascot-ink, #241b22);
+    }
+    .mascot-geo #state-thinking,
+    .mascot-geo #state-handoff {
+      display: none;
+    }
+    .mascot-geo.is-thinking #state-idle,
+    .mascot-geo.is-thinking #state-handoff {
+      display: none;
+    }
+    .mascot-geo.is-thinking #state-thinking {
+      display: inline;
+    }
+    .mascot-geo.is-handoff #state-idle,
+    .mascot-geo.is-handoff #state-thinking {
+      display: none;
+    }
+    .mascot-geo.is-handoff #state-handoff {
+      display: inline;
+    }
+    .mascot-geo .geo-dot {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: geoDotBob 1.35s ease-in-out infinite;
+    }
+    .mascot-geo .geo-dot-2 { animation-delay: 0.2s; }
+    .mascot-geo .geo-dot-3 { animation-delay: 0.4s; }
+    @keyframes geoDotBob {
+      0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+      40% { opacity: 1; transform: translateY(-2px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mascot-geo .geo-dot {
+        animation: none;
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+
+  <!-- Shared symmetric geometric head (readable down to 24px, neutral in LTR and RTL) -->
+  <g class="geo-base">
+    <!-- Minimal side guide-pills -->
+    <rect x="6" y="25.5" width="5.5" height="11" rx="2.75" fill="var(--m-soft)" stroke="var(--m-primary)" stroke-width="2.4"/>
+    <rect x="52.5" y="25.5" width="5.5" height="11" rx="2.75" fill="var(--m-soft)" stroke="var(--m-primary)" stroke-width="2.4"/>
+
+    <!-- Core rounded-square face badge -->
+    <rect x="11" y="10.5" width="42" height="40.5" rx="16" fill="var(--m-surface)" stroke="var(--m-primary)" stroke-width="3.2"/>
+
+    <!-- Subtle top accent bar echoing the portal's burgundy top-rule -->
+    <rect x="24" y="15.5" width="16" height="3.6" rx="1.8" fill="var(--m-border)"/>
+
+    <!-- Soft geometric cheek circles -->
+    <circle cx="18.6" cy="35.6" r="2.6" fill="var(--m-border)" opacity="0.55"/>
+    <circle cx="45.4" cy="35.6" r="2.6" fill="var(--m-border)" opacity="0.55"/>
+  </g>
+
+  <!-- State 1: Idle (default) -->
+  <g id="state-idle">
+    <rect x="21.4" y="24.2" width="5.4" height="8.4" rx="2.7" fill="var(--m-ink)"/>
+    <rect x="37.2" y="24.2" width="5.4" height="8.4" rx="2.7" fill="var(--m-ink)"/>
+    <circle cx="24.8" cy="26.5" r="1.15" fill="#ffffff"/>
+    <circle cx="40.6" cy="26.5" r="1.15" fill="#ffffff"/>
+    <path d="M25.4 38.6 Q32 44.2 38.6 38.6" fill="none" stroke="var(--m-primary)" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- State 2: Thinking (high-contrast dots inside face for 24-28px clarity) -->
+  <g id="state-thinking">
+    <rect x="22.4" y="22.6" width="5.2" height="6.8" rx="2.6" fill="var(--m-ink)"/>
+    <rect x="38.2" y="22.6" width="5.2" height="6.8" rx="2.6" fill="var(--m-ink)"/>
+    <circle cx="25.6" cy="24.7" r="1" fill="#ffffff"/>
+    <circle cx="41.4" cy="24.7" r="1" fill="#ffffff"/>
+    <circle class="geo-dot geo-dot-1" cx="23.5" cy="39.8" r="2.4" fill="var(--m-primary)"/>
+    <circle class="geo-dot geo-dot-2" cx="32" cy="39.8" r="2.4" fill="var(--m-primary)"/>
+    <circle class="geo-dot geo-dot-3" cx="40.5" cy="39.8" r="2.4" fill="var(--m-primary)"/>
+  </g>
+
+  <!-- State 3: Handoff (downward gaze + symmetric downward pointer chevron below) -->
+  <g id="state-handoff">
+    <rect x="21.4" y="26.6" width="5.4" height="7.4" rx="2.7" fill="var(--m-ink)"/>
+    <rect x="37.2" y="26.6" width="5.4" height="7.4" rx="2.7" fill="var(--m-ink)"/>
+    <circle cx="24.8" cy="28.7" r="1.05" fill="#ffffff"/>
+    <circle cx="40.6" cy="28.7" r="1.05" fill="#ffffff"/>
+    <path d="M26.5 39.2 Q32 43.2 37.5 39.2" fill="none" stroke="var(--m-primary)" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M22.5 51 L32 61 L41.5 51 Z" fill="var(--m-surface)" stroke="var(--m-primary)" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M28 53.2 L32 57.2 L36 53.2" fill="none" stroke="var(--m-primary)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

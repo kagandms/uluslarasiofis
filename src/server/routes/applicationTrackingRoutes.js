@@ -102,6 +102,37 @@ export async function readCurrentApplicationTracking(request, environment) {
 }
 
 /**
+ * Reads a privacy-minimized public tracking view for one application reference number.
+ * @param {object} repositories D1 repository collection.
+ * @param {string} referenceNumber Candidate application reference number.
+ * @returns {Promise<{found: boolean, application: object|null, documents: object[]}>} Public-safe tracking result.
+ */
+export async function readPublicTrackingByReference(repositories, referenceNumber) {
+    const normalizedReference = normalizeApplicationReference(referenceNumber);
+    if (!isValidApplicationReference(normalizedReference)) {
+        return { found: false, application: null, documents: [] };
+    }
+    const application = await repositories.applications.findTrackableByReferenceNumber(normalizedReference);
+    if (!application) return { found: false, application: null, documents: [] };
+
+    const [storedRequirements, studentMessages, rejectionReason] = await Promise.all([
+        repositories.documents.listStudentRequirements(application.id),
+        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id),
+        application.status === 'rejected'
+            ? repositories.applicationNotes.readLatestStudentApplicationRejection(application.id)
+            : null
+    ]);
+    const requirementsWithMessages = storedRequirements.map((requirement) => ({
+        ...requirement, student_message: studentMessages.get(requirement.document_record_id)
+    }));
+    return {
+        found: true,
+        application: createTrackingApplicationDto(application, rejectionReason),
+        documents: createDocumentTrackingView(application, requirementsWithMessages, createPublicTrackingDocumentDto)
+    };
+}
+
+/**
  * Reads a privacy-minimized public tracking view by unguessable application reference.
  * @param {Request} request Same-origin JSON POST request.
  * @param {object} environment Worker bindings containing D1.
@@ -123,22 +154,5 @@ export async function lookupApplicationTracking(request, environment) {
 
     const repositories = createD1Repositories(environment.DB);
     await enforceRateLimit(repositories, request, APPLICATION_TRACKING_RATE_LIMIT);
-    const application = await repositories.applications.findTrackableByReferenceNumber(referenceNumber);
-    if (!application) return { found: false, application: null, documents: [] };
-
-    const [storedRequirements, studentMessages, rejectionReason] = await Promise.all([
-        repositories.documents.listStudentRequirements(application.id),
-        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id),
-        application.status === 'rejected'
-            ? repositories.applicationNotes.readLatestStudentApplicationRejection(application.id)
-            : null
-    ]);
-    const requirementsWithMessages = storedRequirements.map((requirement) => ({
-        ...requirement, student_message: studentMessages.get(requirement.document_record_id)
-    }));
-    return {
-        found: true,
-        application: createTrackingApplicationDto(application, rejectionReason),
-        documents: createDocumentTrackingView(application, requirementsWithMessages, createPublicTrackingDocumentDto)
-    };
+    return readPublicTrackingByReference(repositories, referenceNumber);
 }

@@ -3,7 +3,7 @@ import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/me
 import { initializeApplicationWizard } from './applicationWizard.js';
 import { initializeApplicationTracking } from './applicationTracking.js';
 import * as applicationApi from './applicationApi.js';
-import { renderPublicDocumentOverview } from './home.js';
+import { initHomeChatbotGate, initHomeQuestions, renderPublicDocumentOverview } from './home.js';
 import { initHomeResumeForm } from './homeResumeForm.js';
 import { initHomeRecoveryForm } from './homeRecoveryForm.js';
 import { PILOT_UX_MESSAGES } from './i18n/pilotUxMessages.js';
@@ -118,6 +118,8 @@ function initPublicPortal() {
     if (document.body.dataset.page === 'home') {
         initScrollReveal();
         initializePrivacyNoticeModal();
+        initHomeQuestions(document.documentElement.lang);
+        void initHomeChatbotGate(document.documentElement.lang);
         initHomeRecoveryForm({
             root: document,
             api: applicationApi,
@@ -204,6 +206,10 @@ function initScrollReveal() {
         document.querySelectorAll('.status-timeline-step').forEach((step) => {
             setupElement(step, 'reveal-from-right');
         });
+
+        // 4. Questions / Inquiry Section
+        const questionsSection = document.getElementById('questions');
+        if (questionsSection) setupElement(questionsSection, 'reveal-from-bottom');
     };
 
     registerElements();
