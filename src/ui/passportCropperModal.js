@@ -150,6 +150,14 @@ function initCropperInstance() {
             const imgData = passportCropperInstance.getImageData();
             baseRotation = imgData.rotate || 0;
             applyRotation();
+            const { cropperSelectMedeni } = getElements();
+            window.dispatchEvent(new CustomEvent('ykn:cropper-ready', {
+                detail: {
+                    pageIndex: currentCropperPageIndex,
+                    aspectRatio: currentAspectRatio,
+                    medeni: cropperSelectMedeni?.value || ''
+                }
+            }));
         }
     });
 }
@@ -215,6 +223,71 @@ export function setCropperSourceLoading(isLoading) {
     if (sourceSelector) sourceSelector.disabled = isLoading;
     if (btnTransfer) btnTransfer.disabled = isLoading;
     if (btnDownload) btnDownload.disabled = isLoading;
+}
+
+/**
+ * Aktif kırpıcı örneğine piksel tabanlı kırpma kutusunu uygular.
+ *
+ * @param {{ x: number, y: number, width: number, height: number }} box - Piksel kırpma kutusu.
+ * @returns {boolean} Kutu uygulandıysa `true`, aktif kırpıcı yoksa veya kutu geçersizse `false`.
+ */
+export function applyCropBox(box) {
+    if (
+        !passportCropperInstance ||
+        !box ||
+        !Number.isFinite(box.x) ||
+        !Number.isFinite(box.y) ||
+        !Number.isFinite(box.width) ||
+        !Number.isFinite(box.height) ||
+        box.width <= 0 ||
+        box.height <= 0
+    ) {
+        return false;
+    }
+    try {
+        passportCropperInstance.setData({
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Kırpıcıdaki mevcut kırpma alanıyla YÖKSİS aktarımını tetikler.
+ */
+export function submitCropperTransfer() {
+    downloadCroppedImage(true);
+}
+
+/**
+ * Kırpıcıdaki boş ve düzenlenebilir varsayılan alanları doldurur.
+ *
+ * @param {{ medeni?: string }} [defaults={}] - Uygulanacak varsayılan alanlar.
+ */
+export function setCropperDefaults({ medeni } = {}) {
+    const { cropperSelectMedeni } = getElements();
+    if (!cropperSelectMedeni || cropperSelectMedeni.disabled || cropperSelectMedeni.value) {
+        return;
+    }
+    const normalized = normalizeProfileMaritalStatus(medeni);
+    if (!normalized) return;
+    cropperSelectMedeni.value = normalized;
+    cropperSelectMedeni.dispatchEvent(new Event('change'));
+}
+
+/**
+ * Kırpıcıdaki seçili cinsiyet değerini döndürür.
+ *
+ * @returns {string} Seçili cinsiyet veya boş dize.
+ */
+export function getCropperGender() {
+    const { cropperSelectGender } = getElements();
+    return String(cropperSelectGender?.value || '').trim();
 }
 
 function formatDateDisplay(isoDate) {
