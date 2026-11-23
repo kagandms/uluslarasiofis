@@ -2,7 +2,7 @@
 export const CHATBOT_MESSAGES = Object.freeze({
     tr: Object.freeze({
         launcherLabel: 'Asistan',
-        launcherTagline: 'Asistanınız Topi',
+        launcherTagline: 'Ben Topi',
         launcherAriaLabel: 'Yardım asistanını aç',
         panelName: 'Topi',
         panelTitle: 'Uluslararası Ofis Asistanı',
@@ -28,7 +28,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     }),
     en: Object.freeze({
         launcherLabel: 'Assistant',
-        launcherTagline: 'Your assistant Topi',
+        launcherTagline: "I'm Topi",
         launcherAriaLabel: 'Open help assistant',
         panelName: 'Topi',
         panelTitle: 'International Office Assistant',
@@ -54,7 +54,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     }),
     ru: Object.freeze({
         launcherLabel: 'Ассистент',
-        launcherTagline: 'Ваш помощник Topi',
+        launcherTagline: 'Я Topi',
         launcherAriaLabel: 'Открыть помощника',
         panelName: 'Топи',
         panelTitle: 'Ассистент международного офиса',
@@ -80,7 +80,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     }),
     tk: Object.freeze({
         launcherLabel: 'Kömekçi',
-        launcherTagline: 'Kömekçiňiz Topi',
+        launcherTagline: 'Men Topi',
         launcherAriaLabel: 'Kömekçini aç',
         panelName: 'Topi',
         panelTitle: 'Halkara ofis kömekçisi',
@@ -106,7 +106,7 @@ export const CHATBOT_MESSAGES = Object.freeze({
     }),
     ar: Object.freeze({
         launcherLabel: 'المساعد',
-        launcherTagline: 'مساعدكم توبي',
+        launcherTagline: 'أنا توبي',
         launcherAriaLabel: 'فتح المساعد',
         panelName: 'توبي',
         panelTitle: 'مساعد المكتب الدولي',
