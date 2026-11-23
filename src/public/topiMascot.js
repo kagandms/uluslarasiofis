@@ -20,6 +20,10 @@ export const TOPI_SVG_SOURCE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox=
 
 export const TOPI_MOUSE_SVG_SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="mascot-svg mascot-mouse" aria-hidden="true" focusable="false"><path class="mouse-tail" d="M7.5 16.2Q4.2 16.8 3 14.2 2.2 12 4 10.6" fill="none" stroke="var(--public-burgundy-border,#c7bec2)" stroke-width="1.4" stroke-linecap="round"/><path d="M7.2 16C7.2 12.6 10.2 11.4 14 12.2 17.2 12.9 20 14.3 21.2 15.8 19.6 17.9 16.5 18.8 12.5 18.8 9 18.8 7.2 17.8 7.2 16Z" fill="var(--mascot-mark,#b5acb1)" stroke="var(--mascot-outline,var(--public-burgundy-hover,#641126))" stroke-width="1.3" stroke-linejoin="round"/><circle cx="15" cy="11.2" r="2.7" fill="var(--mascot-mark,#b5acb1)" stroke="var(--mascot-outline,var(--public-burgundy-hover,#641126))" stroke-width="1.2"/><circle cx="15.2" cy="11.3" r="1.4" fill="var(--public-burgundy-border,#e2c0c8)"/><circle cx="17.6" cy="14.6" r=".95" fill="var(--mascot-ink,#241b22)"/><circle cx="21.2" cy="15.7" r="1" fill="var(--public-burgundy,#7e1830)"/><path d="M19.8 16.4 22.4 15.8M19.8 16.9 22.3 17.5M10.5 18.8 10 20.2M16 18.8 16.8 20" fill="none" stroke="var(--mascot-outline,var(--public-burgundy-hover,#641126))" stroke-width="1" stroke-linecap="round"/></svg>';
 
+export const TOPI_YARN_SVG_SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="mascot-svg mascot-yarn" aria-hidden="true" focusable="false"><path class="yarn-tail" d="M5.2 17.5Q2.8 18.8 2 16.4 1.4 14.3 3.6 13.6" fill="none" stroke="var(--public-burgundy,#7e1830)" stroke-width="1.4" stroke-linecap="round"/><circle cx="12.5" cy="12.5" r="7.5" fill="var(--public-burgundy-border,#e2c0c8)" stroke="var(--mascot-outline,var(--public-burgundy-hover,#641126))" stroke-width="1.3"/><path d="M7.2 8.2Q12.5 11.4 18.5 8.8M6 12.2Q12.2 15.2 19.6 12.6M7.6 16.4Q12.8 18.2 17.8 15.8M9.5 5.8Q12 12.2 9.4 18.8M14.4 5.4Q16.2 12.2 13.8 19.4" fill="none" stroke="var(--public-burgundy,#7e1830)" stroke-width="1.2" stroke-linecap="round"/></svg>';
+
+const TOPI_TOYS = Object.freeze(['mouse', 'yarn']);
+
 let instanceSeq = 0;
 
 function normalizeState(state) {
@@ -164,6 +168,25 @@ export function createTopi(document, { state = 'idle', calm = false, size = 28 }
     return wrapper;
 }
 
+function createTopiToyElement(document, source, { className, svgClassName, size = 22 }) {
+    const svg = parseSvgElement(document, source);
+    if (!svg) return null;
+
+    const normalizedSize = Number.isFinite(Number(size)) && Number(size) > 0 ? String(Number(size)) : '22';
+    svg.setAttribute('width', normalizedSize);
+    svg.setAttribute('height', normalizedSize);
+    svg.setAttribute('class', svgClassName);
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+
+    const wrapper = document.createElement('span');
+    wrapper.className = className;
+    wrapper.setAttribute('aria-hidden', 'true');
+    wrapper.append(svg);
+
+    return wrapper;
+}
+
 /**
  * Creates a decorative inline mouse SVG wrapped in `<span class="topi-mouse" aria-hidden="true">`.
  * @param {Document} document Target document.
@@ -171,20 +194,118 @@ export function createTopi(document, { state = 'idle', calm = false, size = 28 }
  * @returns {HTMLSpanElement|null}
  */
 export function createTopiMouse(document, { size = 22 } = {}) {
-    const svg = parseSvgElement(document, TOPI_MOUSE_SVG_SOURCE);
-    if (!svg) return null;
+    return createTopiToyElement(document, TOPI_MOUSE_SVG_SOURCE, {
+        className: 'topi-mouse',
+        svgClassName: 'mascot-svg mascot-mouse',
+        size
+    });
+}
 
-    const normalizedSize = Number.isFinite(Number(size)) && Number(size) > 0 ? String(Number(size)) : '22';
-    svg.setAttribute('width', normalizedSize);
-    svg.setAttribute('height', normalizedSize);
-    svg.setAttribute('class', 'mascot-svg mascot-mouse');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('focusable', 'false');
+/**
+ * Creates a decorative inline yarn-ball SVG wrapped in `<span class="topi-yarn" aria-hidden="true">`.
+ * @param {Document} document Target document.
+ * @param {{size?: number}} [options]
+ * @returns {HTMLSpanElement|null}
+ */
+export function createTopiYarn(document, { size = 22 } = {}) {
+    return createTopiToyElement(document, TOPI_YARN_SVG_SOURCE, {
+        className: 'topi-yarn',
+        svgClassName: 'mascot-svg mascot-yarn',
+        size
+    });
+}
+
+/**
+ * Picks the next Topi toy (`'mouse'` or `'yarn'`), ensuring the same toy never appears more than 2 rounds in a row.
+ * @param {Array<'mouse'|'yarn'>} [previous] List of past toy picks.
+ * @param {() => number} [random] Random number generator returning `[0, 1)`.
+ * @returns {'mouse'|'yarn'}
+ */
+export function pickTopiToy(previous = [], random = Math.random) {
+    const roll = typeof random === 'function' ? random() : Math.random();
+
+    if (Array.isArray(previous) && previous.length >= 2) {
+        const last = previous[previous.length - 1];
+        const prev = previous[previous.length - 2];
+        if (TOPI_TOYS.includes(last) && last === prev) {
+            return last === 'mouse' ? 'yarn' : 'mouse';
+        }
+    }
+
+    return roll < 0.5 ? 'mouse' : 'yarn';
+}
+
+/**
+ * Creates an animated launcher playtime wrapper that alternates between Topi toys on animation cycles.
+ * @param {Document} document Target document.
+ * @param {{reducedMotion?: boolean, random?: () => number, size?: number, initialToy?: 'mouse'|'yarn'}} [options]
+ * @returns {{element: HTMLSpanElement|null, next: () => ('mouse'|'yarn'|null), destroy: () => void}}
+ */
+export function createTopiPlaytime(
+    document,
+    { reducedMotion = false, random = Math.random, size = 22, initialToy = 'mouse' } = {}
+) {
+    if (reducedMotion || !document) {
+        return {
+            element: null,
+            next: () => null,
+            destroy() {}
+        };
+    }
 
     const wrapper = document.createElement('span');
-    wrapper.className = 'topi-mouse';
+    wrapper.className = 'topi-playtime';
     wrapper.setAttribute('aria-hidden', 'true');
-    wrapper.append(svg);
 
-    return wrapper;
+    const history = [];
+    let currentToyEl = null;
+    let destroyed = false;
+
+    const handleAnimationCycle = () => {
+        if (destroyed) return;
+        next();
+    };
+
+    function detachListeners(el) {
+        if (!el) return;
+        el.removeEventListener('animationiteration', handleAnimationCycle);
+        el.removeEventListener('animationend', handleAnimationCycle);
+    }
+
+    function mountToy(toyName) {
+        detachListeners(currentToyEl);
+        const nextEl = toyName === 'yarn'
+            ? createTopiYarn(document, { size })
+            : createTopiMouse(document, { size });
+        if (!nextEl) {
+            currentToyEl = null;
+            return null;
+        }
+        wrapper.replaceChildren(nextEl);
+        currentToyEl = nextEl;
+        currentToyEl.addEventListener('animationiteration', handleAnimationCycle);
+        currentToyEl.addEventListener('animationend', handleAnimationCycle);
+        history.push(toyName);
+        return toyName;
+    }
+
+    function next() {
+        if (destroyed) return null;
+        return mountToy(pickTopiToy(history, random));
+    }
+
+    function destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        detachListeners(currentToyEl);
+        currentToyEl = null;
+    }
+
+    mountToy(initialToy === 'yarn' ? 'yarn' : 'mouse');
+
+    return {
+        element: wrapper,
+        next,
+        destroy
+    };
 }
