@@ -557,7 +557,7 @@ test('staff can request resubmission directly on an approved document and repeat
             SELECT body, visibility, author_type, author_staff_id
             FROM application_notes
             WHERE application_id = ?
-            ORDER BY created_at DESC, id DESC
+            ORDER BY rowid DESC
             LIMIT 1
         `).bind(applicationId).first();
         assert.deepEqual({ ...noteRow }, {
@@ -571,7 +571,7 @@ test('staff can request resubmission directly on an approved document and repeat
             SELECT event_type, safe_metadata_json
             FROM audit_events
             WHERE application_id = ? AND event_type = 'staff.document_resubmission_requested'
-            ORDER BY created_at DESC, id DESC
+            ORDER BY rowid DESC
             LIMIT 1
         `).bind(applicationId).first();
         assert.ok(auditRow);
