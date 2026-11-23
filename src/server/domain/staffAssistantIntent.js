@@ -64,13 +64,19 @@ const ARCHIVE_MOVE_PATTERN = /(?:^|[^\p{L}])arsive\s+(?:[\p{L}\p{N}'’]+\s+){0,
 const APPROVE_VERB_PATTERN = /(?:^|[^\p{L}])onayl(?:a(?:r\w*|yabil\w*|yin\w*|sin\w*|sana\w*|nsin\w*|nabil\w*|nmeli\w*|nacak\w*|niyor\w*|yacak\w*|mak\w*|ma\w*|meli\w*|yayim|yalim)?|iyor\w*)(?=$|[^\p{L}])/u;
 const REJECT_VERB_PATTERN = /(?:^|[^\p{L}])redd(?:et(?:sin\w*|sene\w*|mek\w*|me\w*|meli\w*)?|ed(?:er\w*|ebil\w*|in\w*|ilsin\w*|iyor\w*|ecek\w*|eyim|elim))(?=$|[^\p{L}])/u;
 const SAVE_BUTTON_PATTERN = /(?:^|[^\p{L}])kaydet\s+tusu\w*(?=$|[^\p{L}])/u;
+const MARK_VERB_PATTERN = /(?:^|[^\p{L}])isaretl(?:e(?:r\w*|yabil\w*|yebil\w*|yin\w*|sin\w*|sene\w*|nsin\w*|nebil\w*|nmeli\w*|necek\w*|niyor\w*|yecek\w*|mek\w*|me\w*|meli\w*|yeyim|yelim)?|iyor\w*)(?=$|[^\p{L}])/u;
+const STATUS_VALUE_MAKE_PATTERN = /(?:^|[^\p{L}])(?:iletildi|tamamlandi|reddedildi|onaylandi|arsivlendi|iptal(?:\s+edildi)?|beklemede|inceleniyor|eksik\s+evrak|eksik\s+belge)\s+(?:olarak\s+)?yap(?:ar\w*|abil\w*|in(?:iz)?|sin\w*|sana\w*|ilsin\w*|ilabil\w*|ilacak\w*|iliyor\w*|iyor\w*|acak\w*|mak\w*|ma\w*|mali\w*|ayim|alim)?(?=$|[^\p{L}])/u;
+const UNDO_VERB_PATTERN = /(?:^|[^\p{L}])geri\s+al(?:ir\w*|abil\w*|in(?:iz|sin\w*)?|sin\w*|sana\w*|iyor\w*|acak\w*|mak\w*|ma\w*|mali\w*|ayim|alim)?(?=$|[^\p{L}])/u;
 
 const RED_LINE_PATTERNS = Object.freeze([
     ARCHIVE_VERB_PATTERN,
     ARCHIVE_MOVE_PATTERN,
     APPROVE_VERB_PATTERN,
     REJECT_VERB_PATTERN,
-    SAVE_BUTTON_PATTERN
+    SAVE_BUTTON_PATTERN,
+    MARK_VERB_PATTERN,
+    STATUS_VALUE_MAKE_PATTERN,
+    UNDO_VERB_PATTERN
 ]);
 
 const DELETE_VERB_PATTERN = /(?:^|[^\p{L}])(?:sil(?:er\w*|sen\w*|sin\w*|ebil\w*|eyim|elim|iyor\w*|ecek\w*|eceg\w*|meli\w*|in(?:iz|sin\w*|meli\w*|ebil\w*|ecek\w*|iyor\w*)?|me(?:yi|ye|k\w*|n\w*)?|dir\w*)?|purge)(?=$|[^\p{L}])/u;
@@ -85,6 +91,18 @@ const CANCEL_TARGET_PATTERN = /(?:^|[^\p{L}])(?:basvuru\w*|kayit\w*|kayd\w*|ogre
 const SEND_VERB_PATTERN = /(?:^|[^\p{L}])gonder(?:ir\w*|ebil\w*|in\w*|sin\w*|ilsin\w*|sene\w*|iyor\w*|ecek\w*|mek\w*|me\w*|meli\w*|eyim|elim)?(?=$|[^\p{L}])/u;
 const REQUEST_TARGET_PATTERN = /(?:^|[^\p{L}])tale(?:p|b)\w*(?=$|[^\p{L}])/u;
 const APPLY_TARGET_PATTERN = /(?:^|[^\p{L}])apply(?:['’]?(?:a|ya|e|ye|da|de|dan|den))?(?=$|[^\p{L}])/u;
+
+const GOC_TARGET_PATTERN = /(?:^|[^\p{L}])goc(?:['’]?e|e|net(?:['’]?e|e)?|\s+idares\w*)?(?=$|[^\p{L}])/u;
+const FORWARD_VERB_PATTERN = /(?:^|[^\p{L}])ilet(?:ir\w*|ebil\w*|in(?:iz)?|sin\w*|sene\w*|ilsin\w*|ilebil\w*|ilecek\w*|iliyor\w*|iyor\w*|ecek\w*|mek\w*|me\w*|meli\w*|eyim|elim)?(?=$|[^\p{L}])/u;
+
+const MOVE_VERB_PATTERN = /(?:^|[^\p{L}])tasi(?:r\w*|yabil\w*|yin\w*|sin\w*|sana\w*|nsin\w*|nabil\w*|nmali\w*|nacak\w*|niyor\w*|yor\w*|yacak\w*|mak\w*|ma\w*|mali\w*|yayim|yalim)?(?=$|[^\p{L}])/u;
+const MOVE_TARGET_PATTERN = /(?:^|[^\p{L}])(?:basvuru\w*|ogrenci\w*|kayit\w*|kayd\w*)(?=$|[^\p{L}])/u;
+
+const CHANGE_VERB_PATTERN = /(?:^|[^\p{L}])degistir(?:ir\w*|ebil\w*|in\w*|sin\w*|sene\w*|ilsin\w*|ilebil\w*|ilecek\w*|iliyor\w*|iyor\w*|ecek\w*|mek\w*|me\w*|meli\w*|eyim|elim)?(?=$|[^\p{L}])/u;
+const UPDATE_VERB_PATTERN = /(?:^|[^\p{L}])guncell(?:e(?:r\w*|yebil\w*|yin\w*|sin\w*|sene\w*|nsin\w*|nebil\w*|nmeli\w*|necek\w*|niyor\w*|yecek\w*|mek\w*|me\w*|meli\w*|yeyim|yelim)?|iyor\w*)(?=$|[^\p{L}])/u;
+const EDIT_VERB_PATTERN = /(?:^|[^\p{L}])duzenl(?:e(?:r\w*|yebil\w*|yin\w*|sin\w*|sene\w*|nsin\w*|nebil\w*|nmeli\w*|necek\w*|niyor\w*|yecek\w*|mek\w*|me\w*|meli\w*|yeyim|yelim)?|iyor\w*)(?=$|[^\p{L}])/u;
+const EDIT_TARGET_PATTERN = /(?:^|[^\p{L}])(?:ad(?:i(?:n(?:i|a|da|dan))?|lar\w*)?|soyad\w*|isim\w*|ismi\w*|numara\w*|belge\w*|basvuru\w*|durum\w*|kayit\w*|kayd\w*|ogrenci\w*|evrak\w*|pasaport\w*)(?=$|[^\p{L}])/u;
+const OLARAK_PATTERN = /(?:^|[^\p{L}])olarak(?=$|[^\p{L}])/u;
 
 const SAVE_VERB_PATTERN = /(?:^|[^\p{L}])kayd(?:et(?:sin\w*|sene\w*|mek\w*|me\w*|meli\w*)?|ed(?:er\w*|ebil\w*|in\w*|ilsin\w*|iyor\w*|ecek\w*|eyim|elim))(?=$|[^\p{L}])/u;
 const SAVE_CONTEXT_PATTERN = /(?:^|[^\p{L}])(?:yoksis(?:['’]?(?:e|te|de|i|ten|den))?|basvuru\w*|durum\w*|apply(?:['’]?(?:a|ya|e|ye|da|de))?)(?=$|[^\p{L}])/u;
@@ -129,6 +147,21 @@ export function isRedLineStaffMessage(message) {
         return true;
     }
     if (SEND_VERB_PATTERN.test(normalized) && (REQUEST_TARGET_PATTERN.test(normalized) || APPLY_TARGET_PATTERN.test(normalized))) {
+        return true;
+    }
+    if (GOC_TARGET_PATTERN.test(normalized) && (FORWARD_VERB_PATTERN.test(normalized) || SEND_VERB_PATTERN.test(normalized))) {
+        return true;
+    }
+    if (MOVE_VERB_PATTERN.test(normalized) && MOVE_TARGET_PATTERN.test(normalized)) {
+        return true;
+    }
+    if (
+        (CHANGE_VERB_PATTERN.test(normalized) || UPDATE_VERB_PATTERN.test(normalized) || EDIT_VERB_PATTERN.test(normalized))
+        && EDIT_TARGET_PATTERN.test(normalized)
+    ) {
+        return true;
+    }
+    if (OLARAK_PATTERN.test(normalized) && (SAVE_VERB_PATTERN.test(normalized) || UPDATE_VERB_PATTERN.test(normalized))) {
         return true;
     }
     if (SAVE_VERB_PATTERN.test(normalized) && SAVE_CONTEXT_PATTERN.test(normalized)) {
