@@ -2,7 +2,7 @@ import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from '../../public/i18n/messages.j
 import { ACCOMMODATION_TYPES, DOCUMENT_ANSWER_OPTIONS } from '../../shared/document-conditions.js';
 import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
 import * as evidence from '../domain/chatbotEvidence.js';
-import { CHATBOT_LANGUAGES } from '../domain/chatbotKnowledge.js';
+import { CHATBOT_LANGUAGES, readKnowledge } from '../domain/chatbotKnowledge.js';
 import {
     CHATBOT_REFUSAL_MARKER,
     buildChatbotSystemPrompt,
@@ -339,6 +339,21 @@ const UNHELPFUL_MODEL_REPLY_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])(?:(?:ال)?معلومات\s+غير\s+كافيه|(?:يلزم|تحتاج|نحتاج|مطلوب)\s+(?:الي\s+)?(?:مزيد\s+من\s+)?معلومات\s+(?:اضافيه|اكثر)|(?:ال)?مدخلات\s+(?:غير\s+كافيه|ناقصه)|يرجي\s+تقديم\s+(?:مزيد\s+من\s+|المزيد\s+من\s+)?(?:التفاصيل|المعلومات))(?:[^\p{L}]|$)/u
 ]);
 
+const STUDENT_CARD_PATTERNS = Object.freeze([
+    // tr
+    /(?<![\p{L}\p{N}])(?:ogrenci(?:\s+kimlik)?|okul)\s+kart[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
+    // en
+    /(?<![\p{L}\p{N}])student\s+(?:(?:id\s+)?cards?|id(?!\s*(?:[:=]\s*\d|number|num|no|code|\d)))(?![\p{L}\p{N}])/u,
+    // ru
+    /(?<![\p{L}\p{N}])(?:(?:студенческ|studenchesk)[\p{L}\p{N}]*\s+(?:карт|билет|kart|bilet)[\p{L}\p{N}]*|(?:карт|билет)[\p{L}\p{N}]*\s+студент[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+    // tk
+    /(?<![\p{L}\p{N}])talyp(?:\s+sahadatnama)?\s+kart[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
+    // ar
+    /(?<![\p{L}\p{N}])(?:و|ف|ب|ل)?بطاقه\s+(?:ال)?طالب(?![\p{L}\p{N}])/u
+]);
+
+const STUDENT_CARD_RESIDENCE_EXCLUSION_PATTERN = /(?<![\p{L}\p{N}])(?:e-?ikamet[\p{L}\p{N}]*|ikamet[\p{L}\p{N}]*|oturma\s+izn[\p{L}\p{N}]*|residence\s+permit[\p{L}\p{N}]*|вид[\p{L}\p{N}]*\s+на\s+жительств[\p{L}\p{N}]*|внж|vnzh|ruhsat[\p{L}\p{N}]*|rugsa[td][\p{L}\p{N}]*|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?اقام(?:ه|ت[\p{L}\p{N}]*))(?![\p{L}\p{N}])/u;
+
 export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     STATUS_RULES_BY_LANGUAGE,
     STAGE_STATUS_PATTERNS,
@@ -356,7 +371,9 @@ export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     OFFICE_HANDOFF_PATTERNS,
     HANDOFF_PATTERNS,
     PROMPT_OVERRIDE_MARKER_PATTERNS,
-    UNHELPFUL_MODEL_REPLY_PATTERNS
+    UNHELPFUL_MODEL_REPLY_PATTERNS,
+    STUDENT_CARD_PATTERNS,
+    STUDENT_CARD_RESIDENCE_EXCLUSION_PATTERN
 });
 
 const DOCUMENT_FACT_KEYS = Object.freeze([
@@ -617,6 +634,28 @@ function hasPromptOverrideMarker(messageContent) {
     if (typeof messageContent !== 'string') return false;
     const normalized = evidence.normalizeForEvidence(messageContent);
     return PROMPT_OVERRIDE_MARKER_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/**
+ * Returns true when the user asks about their university student ID card (printing, loss, renewal),
+ * excluding document-list requests, application status queries, reference numbers, and residence-permit questions.
+ * @param {string} messageContent Raw user message text.
+ * @returns {boolean} True if deterministic student_card knowledge lookup applies.
+ */
+export function isStudentCardQuestion(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    if (extractApplicationReferences(messageContent).length > 0) return false;
+    if (isOtherStudentsDataRequest(messageContent) || hasPromptOverrideMarker(messageContent)) {
+        return false;
+    }
+    if (isOtherPersonApplicationStatusRequest(messageContent)) return false;
+    if (isVeryShortDocumentQuestion(messageContent) || isAskingWhichDocumentsAreNeeded(messageContent)) {
+        return false;
+    }
+    if (isStatusQuestionWithoutReference(messageContent)) return false;
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    if (STUDENT_CARD_RESIDENCE_EXCLUSION_PATTERN.test(normalized)) return false;
+    return STUDENT_CARD_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 /**
@@ -988,6 +1027,13 @@ export async function handlePublicChat(request, environment, requestId) {
             return routeResult({
                 reply: `${getChatbotFixedText('refusal', validated.language)} ${getChatbotFixedText('otherPersonStatusNote', validated.language)}`,
                 actions: [{ type: 'inquiry' }]
+            });
+        }
+        if (isStudentCardQuestion(lastUserMessage)) {
+            outcome = 'knowledge';
+            return routeResult({
+                reply: readKnowledge('student_card', validated.language).text,
+                actions: []
             });
         }
         if (hasExplicitPersonComplaintUrgentHandoff(lastUserMessage)) {
