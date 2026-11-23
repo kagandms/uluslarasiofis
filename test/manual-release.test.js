@@ -141,6 +141,21 @@ test('unknown/duplicate/missing non-secret bindings and compatibility drift stop
     assert.throws(()=>assertWorkerSettings(settings,prod,'different'));
     assert.equal(settingsSnapshot({...settings,bindings:[{name:'S',type:'secret_text',text:'MUST_NOT_CAPTURE'}]}).bindings[0].text,undefined);
 });
+test('optional Workers AI binding is accepted only as a single ai binding and survives inheritance',()=>{
+    const prod={vars:{PRINT_ENABLED:'true'},r2_buckets:[{binding:'DOCUMENTS'},{binding:'PRINT_FILES'}],ai:{binding:'AI'}};
+    assertWorkerSettings(settings,prod,'2026-09-28');
+    const withAi={...settings,bindings:[...settings.bindings,{name:'AI',type:'ai'}]};
+    assertWorkerSettings(withAi,prod,'2026-09-28');
+    assertWorkerSettings(withAi,{vars:{PRINT_ENABLED:'true'},r2_buckets:[{binding:'DOCUMENTS'},{binding:'PRINT_FILES'}]},'2026-09-28');
+    for(const badType of ['plain_text','kv_namespace','d1','r2_bucket',undefined])
+        assert.throws(()=>assertWorkerSettings({...settings,bindings:[...settings.bindings,{name:'AI',type:badType}]},prod,'2026-09-28'));
+    assert.throws(()=>assertWorkerSettings({...settings,bindings:[...settings.bindings,{name:'AI',type:'ai'},{name:'AI',type:'ai'}]},prod,'2026-09-28'));
+    assert.throws(()=>assertWorkerSettings({...withAi,bindings:[...withAi.bindings,{name:'UNREVIEWED',type:'kv_namespace'}]},prod,'2026-09-28'));
+    const inherited=inheritWorkerMetadata({main_module:'index.js',compatibility_date:'2026-09-28',compatibility_flags:[]},withAi,sha,'synthetic-asset-token',old);
+    assert.ok(inherited.bindings.some(b=>b.name==='AI'&&b.type==='inherit'&&b.version_id==='latest'));
+    assertStagedVersion({annotations:{'workers/message':`release:${sha}`},resources:{bindings:withAi.bindings,
+        script_runtime:{compatibility_date:withAi.compatibility_date,compatibility_flags:[]},script:{handlers:['fetch','scheduled']}}},{handlers:['fetch','scheduled']},withAi,sha);
+});
 test('activation uses only staged candidate at 100%, once, after final source/live checks',async()=>{
     const calls=[];const form=new FormData();form.set('metadata','{}');let uploaded=false;
     await publishPrepared({bundle:{form,metadata:{main_module:'index.js',compatibility_date:'2026-09-28'}},plan:{manifest:{},byHash:new Map()},settings,sha,activeVersion:old,

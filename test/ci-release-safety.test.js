@@ -306,3 +306,25 @@ test('release script authenticates both production HEAD refresh fetches with the
     assert.equal(fetches.length, 2);
     assert.ok(fetches.every(call => call.includes('...gitAuthEnv()')));
 });
+
+test('local worker smoke refuses credentials, strips ai only from the temp copy, stays local, and checks chatbot 503 fallback', () => {
+    const smoke = readFileSync(new URL('../scripts/ci/local-worker-smoke.mjs', import.meta.url), 'utf8');
+    for (const credential of ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY', 'CLOUDFLARE_EMAIL']) {
+        assert.match(smoke, new RegExp(credential));
+    }
+    assert.match(smoke, /Local smoke refuses service credential/);
+    assert.match(smoke, /127\.0\.0\.1/);
+    assert.match(smoke, /never switch to a remote endpoint/);
+    assert.doesNotMatch(smoke, /--remote/);
+    assert.match(smoke, /binding\.remote === false/);
+    assert.match(smoke, /config\.ai\?\.binding,\s*'AI'/);
+    assert.match(smoke, /config\.env\?\.production\?\.ai\?\.binding,\s*'AI'/);
+    assert.match(smoke, /const configPath = join\(checkout, 'wrangler\.jsonc'\)/);
+    assert.match(smoke, /delete config\.ai/);
+    assert.match(smoke, /delete envConfig\.ai/);
+    assert.match(smoke, /writeFileSync\(configPath,/);
+    assert.doesNotMatch(smoke, /writeFileSync\(\s*join\(\s*root/);
+    assert.match(smoke, /\/api\/public\/chat/);
+    assert.match(smoke, /503/);
+    assert.match(smoke, /CHATBOT_UNAVAILABLE/);
+});

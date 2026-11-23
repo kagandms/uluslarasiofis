@@ -180,6 +180,18 @@ reports no pending migrations, zero eligible revisions remain unapproved, 857 au
 the reviewed source boundary (commit `04d72c2be5d65536cf1a7d141f6f9f24f26b7e4a`) that includes these schema
 changes; it does not prove live artifact equality, rollback safety, or that the Worker has been published.
 
+## Workers AI binding (chatbot)
+
+Dated 2026-11-23. The Workers AI binding (`AI`) is **not** created or updated by the release
+workflow. The owner adds it by hand once in the Cloudflare dashboard (**Workers & Pages > goc >
+Settings > Bindings > Add > Workers AI**, variable name `AI`). Releases inherit it by name
+(`bindings_inherit=strict` / `type: inherit`, `version_id: latest`), and preflight accepts `AI`
+(type `ai`) as optional so releases work both before and after that manual dashboard step. Before
+the live binding exists, `POST /api/public/chat` answers HTTP `503` (`CHATBOT_UNAVAILABLE`) and the
+widget stays hidden behind `?bot=1`. `scripts/ci/local-worker-smoke.mjs` strips `ai` only from its
+temporary checkout copy on purpose so `vite dev` runs offline without credentials and verifies the
+`503` fallback. Validation status: written, not yet exercised by a live release.
+
 ## Permissions and remaining recovery risk
 
 Existing account-scoped **Workers Scripts Edit** must permit Worker assets upload, version creation and

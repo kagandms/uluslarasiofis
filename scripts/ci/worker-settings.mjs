@@ -2,8 +2,15 @@ import assert from 'node:assert/strict';
 
 export function assertWorkerSettings(settings, production, compatibilityDate) {
     const expected = new Set(['ASSETS', 'DB', ...production.r2_buckets.map(b => b.binding), ...Object.keys(production.vars)]);
+    let seenAi = false;
     for (const b of settings.bindings || []) {
         if (b.type === 'secret_text') continue; // Exact secret-name/type check is performed separately.
+        if (b.name === 'AI' && !expected.has('AI')) {
+            assert.equal(b.type, 'ai', 'Unexpected or duplicate live binding; normal publication stopped.');
+            assert.ok(!seenAi, 'Unexpected or duplicate live binding; normal publication stopped.');
+            seenAi = true;
+            continue;
+        }
         assert.ok(expected.delete(b.name), 'Unexpected or duplicate live binding; normal publication stopped.');
     }
     assert.equal(expected.size, 0, 'Required live binding is missing.');

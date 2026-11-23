@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,11 +34,22 @@ try {
         cpSync(join(root, file), target, { dereference: false });
     }
     symlinkSync(join(root, 'node_modules'), join(checkout, 'node_modules'), 'dir');
-    const config = JSON.parse(readFileSync(join(checkout, 'wrangler.jsonc'), 'utf8'));
+    const configPath = join(checkout, 'wrangler.jsonc');
+    const config = JSON.parse(readFileSync(configPath, 'utf8'));
     assert.equal(config.name, 'uluslarasiofis-local');
     assert.equal(config.d1_databases.length, 1);
     assert.equal(config.d1_databases[0].database_id, '00000000-0000-0000-0000-000000000000');
     assert.ok([...config.d1_databases, ...config.r2_buckets].every(binding => binding.remote === false));
+    assert.equal(config.ai?.binding, 'AI');
+    assert.equal(config.env?.production?.ai?.binding, 'AI');
+    // Workers AI has no local simulator; strip ai only from the temporary checkout copy so vite dev stays offline.
+    delete config.ai;
+    if (config.env && typeof config.env === 'object') {
+        for (const envConfig of Object.values(config.env)) {
+            if (envConfig && typeof envConfig === 'object') delete envConfig.ai;
+        }
+    }
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
     run(['d1', 'migrations', 'apply', 'uluslarasiofis-local', '--local']);
     const second = run(['d1', 'migrations', 'apply', 'uluslarasiofis-local', '--local']);
     assert.match(second, /No migrations to apply/i);
@@ -75,7 +86,11 @@ try {
     }
     const headers = { Origin: base, 'Content-Type': 'application/json' };
     const post = (path, body) => fetch(base + path, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
-    let response = await post('/api/public/applications/tracking-lookup', { reference_number: 'ITU-7K9M-4X2P' });
+    let response = await post('/api/public/chat', { messages: [{ role: 'user', content: 'merhaba' }], language: 'tr' });
+    assert.equal(response.status, 503, 'Chatbot without AI binding must return 503');
+    const chatUnavailable = await response.json();
+    assert.equal(chatUnavailable.error?.code, 'CHATBOT_UNAVAILABLE');
+    response = await post('/api/public/applications/tracking-lookup', { reference_number: 'ITU-7K9M-4X2P' });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).found, false);
     assert.equal((await fetch(`${base}/api/public/applications/current`)).status, 401);
@@ -94,7 +109,7 @@ try {
     assert.equal(response.status, 200);
     const current = await response.json();
     assert.equal(current.application?.status ?? current.status, 'draft');
-    console.log('PASS: six HTML pages, missing lookup, anonymous 401, synthetic draft 201 and owner reload 200');
+    console.log('PASS: six HTML pages, chatbot 503 without AI, missing lookup, anonymous 401, synthetic draft 201 and owner reload 200');
 } catch (error) {
     // Only the synthetic isolated runtime is logged. Never log API bodies/cookies.
     console.error(workerLog);
