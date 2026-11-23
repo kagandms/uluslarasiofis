@@ -37,3 +37,8 @@ export const CHATBOT_IP_DAILY_LIMIT = Object.freeze({
 export const CHATBOT_GLOBAL_DAILY_LIMIT = Object.freeze({
     endpoint: 'chatbot-global-daily', identity: 'global', maxRequests: 300, windowSeconds: 86400
 });
+
+/** Campus NAT shares one IP; allow up to 60 public chat feedback votes per IP in 15 minutes. */
+export const CHAT_FEEDBACK_RATE_LIMIT = Object.freeze({
+    endpoint: 'chat-feedback', maxRequests: 60, windowSeconds: 900
+});
