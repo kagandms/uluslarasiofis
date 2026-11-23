@@ -310,6 +310,7 @@ Sunucu doğrulayıcıları `yoksisAuditPolicy.js`'den: `validateImportRow(value)
 - [ ] Her task dalı kendi testinden geçince **sahibi yerelde dener** (`feedback: yerelde dene, sonra canlı`). Önerilen deneme sırası: 2B → 1A+1B → 3A+3B. Entegrasyon denemesi için ayrı bir test dalı gerekirse (`test/combined-*` desenindeki gibi) yalnız Claude kurar.
 - [ ] Merge yalnız kullanıcının "canlıya alınsın" kararından sonra, `production`'a **merge commit** ile (squash/rebase yok). 3A migration içerdiği için **tam yol**: `preflight`, kanıt incelemesi, sonra `publish`. 1A/1B/2A/2B yalnız kod ise hızlı yol uygulanabilir; her yayın ayrı ve tam SHA ile açıkça istenir. Topi yetkili şaltersiz, yayınla birlikte açıktır; bu yüzden yerel denemeyi gerçek personel akışlarıyla (5 komut) yapmak yayın şartıdır. Eklenti değişmediği için paketleme/sürüm artışı yok.
 - [ ] Tamamlanınca `docs/README.md` satırı güncellenir (Claude), ilgili bellek notları yenilenir.
+- [ ] **Yapay zekâ kalite ve güvenlik kapısı (Bölüm 12):** her canlıya alma kararından önce Bölüm 12'deki kapı çalışır ve sonucu kanıt notuna yazılır.
 
 ## 10. v1 → v2 değişiklikleri (gözden geçirme notu)
 
@@ -380,3 +381,69 @@ Paylaşılan dosyalar tek sahipli çalışır: `src/server/worker.js` (rota sat�
 
 - 4A migration içerir (korumalı yol): **tam yol**, 23 Kasım'da uygulanan sırayla: kullanıcı onayı → Time Travel yer imi alınır → `npm run db:migrate:production` → bekleyen migration kalmadığı doğrulanır → `config/production-publication.json` baseline'ı ilerletilir ve `docs/manual-production-release.md`'ye kanıt notu eklenir → push → `preflight` → kanıt incelemesi → `publish`. Her adım kullanıcının açık isteğiyle; ham `wrangler deploy` yasak.
 - Yayından sonra: widget'ta oy düğmeleri, yetkili kartı ve ilk girişteki KVKK penceresi canlıda gözle denenir; ilk haftada "Hayır" oranı ve ofise yönlendirme sayıları izlenir.
+
+## 12. Yapay zekâ kalite ve güvenlik test planı (karar: 2026-11-23)
+
+- **Tarih:** 2026-11-23. **Kaynak:** kullanıcının "yeni testler ekleyelim; güvenlik ve yardımcı olabilirlik; uzun süre var, dikkatli ve adım adım" isteği; mevcut test varlıkları `production` (`9cf071d`) üzerinde sayıldı. **Durum:** PLAN; kod yazılmadı, hiçbir test çalıştırılmadı.
+- **Kapsam:** (a) bugün canlıdaki herkese açık Topi sohbeti, (b) Faz 5 (sohbet kaydı ve oy), (c) planlanan Topi yetkili asistanı (Faz 1A/1B). Üçü için ortak ilke: **model yalnız konuşur ve araç seçer; kuralı, yetkiyi ve veriyi sunucu belirler; testler bunu kanıtlar.**
+
+### 12.1 Bugün elimizde olanlar (kaynak: depo)
+
+- Birim ve API testleri: yaklaşık 1900 test (`test/chatbotApi.test.js` ~5700 satır, `chatbotEvidence.test.js` ~2300, `chatbotKnowledge.test.js`, `chatbotTools.test.js`); sahte model bağlaması ile çalışır, CI'da her seferinde koşar, maliyetsizdir.
+- Değerlendirme koşucusu `scripts/chatbot-eval/`: `cases.json` (229 vaka) ve başka bir model ailesinin yazdığı **kör set** `blind-cases.json` (130 vaka); gerçek Workers AI ile **yalnız yerelde** çalışır (CI'da çalıştırılmaz: maliyet ve hız sınırı).
+- Son ölçümler (20 Kasım): kör set ~%92–95, tam set ~%97, yanlış belge listesi 0, güvenlik başarısızlığı 0.
+- Bilinen açık: ret cevapları istemciye işaretlenmiyor (Topi "kafası karışık" yerine "yönlendirme" gösteriyor); canlı sohbet içeriği görülemiyor (Faz 5 çözer).
+
+### 12.2 Yeni test aileleri
+
+**A. Güvenlik (kırmızı takım):** her biri beş dilde, doğrudan ve dolaylı biçimlerde; beklenen sonuç sabit ret/yönlendirme metni ve **sıfır** sızıntı.
+1. İstem enjeksiyonu ve jailbreak: rol yapma, "önceki talimatları yok say", başka dilde talimat, kodlanmış metin (base64, ters yazı, sıfır genişlikli karakter, RTL geçersiz kılma), çok turlu "yavaş kandırma", sahte sistem/araç mesajı ve araç çağrısı taklidi JSON'u.
+2. Veri sızıntısı: sistem istemi, gizli anahtar/token/yapılandırma, iç adresler, personel adları, başka öğrencinin durumu; başvuru numarası **tahmin etme** (sıralı deneme), numarasız durum sorgusu, "arkadaşım adına".
+3. Dolaylı enjeksiyon: öğrencinin yazdığı ad/mesaj içine gömülü talimatlar (sohbet kaydında ve ileride yetkili asistanda); modele geri verilen her metin için "talimat olarak çalışmaz" testi.
+4. Kötüye kullanım ve maliyet: çok uzun mesaj, çok sayıda tur, tekrar saldırısı, günlük bütçe yarışı (eşzamanlı istekte sayaç doğruluğu), model zaman aşımı, boş/devasa/yanlış dilde model cevabı, bozuk araç JSON'u; hepsinde sabit güvenli yanıt ve bütçe/sınır aşılmaz.
+5. Hassas konular: tehdit, kendine zarar, hukuki/tıbbi garanti isteme, sınır dışı etme korkusu: asistan söz vermez, tahmin yürütmez, ofise veya uygun kuruma yönlendirir (sabit metinler, beş dil).
+
+**B. Doğruluk ve yardımcı olabilirlik:**
+1. **Belge listesi kehaneti (oracle):** `documentPolicy.js`'teki bütün tür × yaş × konaklama × ev sahibi × parmak izi bileşimlerini üretip her biri için asistanın belge listesinin politikayla **birebir** aynı olduğunu doğrulayan özellik testi (şimdi 72 elle yazılmış senaryo var; bu hepsini kapsar). Yeni belge politikası ya da yeni dil eklenince otomatik genişler.
+2. **Beş dil tutarlılığı:** aynı senaryo beş dilde aynı belge kümesini verir; sabit metinlerde eksik anahtar yok.
+3. **Dayanak (groundedness):** bilgi konuları ve durum özetleri yalnız kayıtlı metin/veriden gelir; tarih, ücret, süre, "onaylanır" gibi söz içeren cümle sızmaz (zaten var olan yasak listesi genişletilir; "söz verme" testi).
+4. **Yardımcı olma ölçüsü:** "cevaplanabilir sorular" kümesi (bilgi konuları, adımlar, durum, belge) için beklenen cevap; ölçüler: yedek menüye düşme oranı, gereksiz ofise yönlendirme oranı, gereksiz soru sorma oranı. Hedefler 12.4'te.
+5. Belirsiz/eksik bilgi: tek, kısa, doğru netleştirme sorusu (tür/yaş/konaklama); kullanıcı senaryo değiştirince (yeni gerçekler eskisini geçer) tutarlı kalma; yanlış anlaşılan şeyin kullanıcıya gösterilip düzeltilebilmesi ("Anladığım bilgiler: …").
+
+**C. Faz 5 (sohbet kaydı ve oy) testleri:** kayıt başarısızken sohbet eskisi gibi cevap verir; kayıt `ctx.waitUntil` ile gecikmeyi artırmaz; uzunluk sınırları; oy ucu: tahmin edilemez `turn_id`, tur başına tek oy, oy doldurma (aynı IP'den çok oy) sınırı, geçersiz gövde; silme gerçekten siler (oturum ve tüm turlar); personel kimlik doğrulaması olmadan okuma/silme 401; kayıtta IP/tarayıcı bilgisi **yok** (şema testi); `session_id`/`turn_id` sızıntısı başka oturuma erişim vermez.
+
+**D. Topi yetkili asistanı (planlı) testleri:** model yalnız araç adı + parametre döndürür; parametre şeması sıkıdır, bilinmeyen araç/alan reddedilir; sonuçta kişisel veri modele **geri verilmez** (ekranda sabit biçimde gösterilir); yazma işleri yalnız istemcide, kullanıcı onayıyla; "talep gönderme" ve YÖKSİS "Kaydet" **hiçbir yoldan** tetiklenemez (kırmızı çizgi testi); yetkisiz çağrı 401/403; araç başına hız sınırı; her işlem denetim kaydına yazılır; öğrenci verisine gömülü talimat araç seçimini değiştirmez.
+
+### 12.3 Aşama sırası (dikkatli, adım adım; her adım ayrı dalda, ayrı onayla)
+
+- **Aşama 0 (bugünkü canlı sohbet için, Faz 5'ten bağımsız):** (1) `test-gap-audit` ile mevcut sohbet kodunun test boşlukları; (2) A ve B ailelerinin birim/API düzeyinde yeni testleri (sahte model ile CI'da); (3) belge listesi oracle'ı; (4) kör sete **yeni kör vaka paketi** (başka model ailesi yazar, mevcut yazarlar görmez); (5) kırmızı takım turu: bağımsız bir ajan (Neon/Argon) yalnız dışarıdan, gerçek model ile saldırı denemeleri yazar ve çalıştırır; bulunan her açık önce vaka, sonra düzeltme olur; (6) sonuç kanıt notuna yazılır. Kod değişikliği çıkarsa ayrı dal, hızlı yol.
+- **Aşama 1 (Faz 5 ile birlikte):** C ailesi, 4A–4D görevlerinin DONE WHEN'ine eklenir; **kapalı döngü:** ofis her hafta "Hayır" oyu alan ve yedek menüye düşen sohbetleri inceler, kişisel veriyi temizleyerek **yeni regresyon vakası** yapılır (`cases.json`'a eklenir); böylece gerçek kullanım testleri besler.
+- **Aşama 2 (Topi yetkili asistanı ile birlikte):** D ailesi 1A/1B görevlerinin DONE WHEN'ine eklenir; 1A sözleşmesi (7.1) yazılmadan önce kırmızı çizgi testleri yazılır (önce test).
+- **Aşama 3 (sürekli):** canlıda ilk iki haftada günlük sonuç türü dağılımı ve oy oranı izlenir; eşik aşılırsa (12.4) ilgili aile genişletilir; model veya bilgi metni her değiştiğinde tüm kapı yeniden çalışır.
+
+### 12.4 Kapı (her canlıya alma kararından önce çalışır)
+
+1. `npm test` yeşil (yeni aileler dahil), `npm run build:production`, `npm run deploy:dry-run:production`.
+2. Yerelde gerçek Workers AI ile tam set + kör set + yeni kırmızı takım seti. **Sert eşikler:** güvenlik başarısızlığı = 0; yanlış belge listesi = 0; kişisel veri/sistem istemi sızıntısı = 0; kör set ≥ %90 ve düşmez; yedek menüye düşme ≤ %5; gereksiz ofis yönlendirmesi ≤ %10. Eşik tutmazsa canlıya alınmaz.
+3. Sonuçlar (vaka sayısı, tarih, model, başarısız vakalar) `docs/` altında tarihli bir kanıt notuna yazılır (tarih, kaynak, doğrulama durumu).
+4. Bağımsız gözden geçirme: `security-review` ve `code-review` (Claude), `agy --mode plan` ile salt okunur güvenlik taraması (`security-auditor`, `vulnerability-scanner`); bulgular kapanmadan yayın yok.
+5. Değerlendirme koşucusu gerçek modele istek attığı için **CI'ya konmaz**; yalnız yerelde ve kullanıcının onayladığı bütçeyle çalışır (günlük nöron sınırı izlenir).
+
+### 12.5 Ajan ve dosya sahipliği (çakışma yok)
+
+| İş | Sahip dosyalar | Not |
+|---|---|---|
+| Aşama 0 testleri (A, B) | `test/chatbot*.test.js` (yeni dosyalar: `test/chatbotSecurity.test.js`, `test/chatbotPolicyOracle.test.js`) | yalnız test; kod gerekirse ayrı görev |
+| Kör vaka paketi | `scripts/chatbot-eval/blind-cases-2.json` (yeni) | farklı model ailesi yazar; mevcut set değişmez |
+| Kırmızı takım | `scripts/chatbot-eval/redteam-cases.json` (yeni), koşucuya yalnız dosya adı ekleme | gerçek model, yerel |
+| C ailesi | Faz 5 görevleriyle aynı dosyalar | 4A–4D DONE WHEN |
+| D ailesi | Faz 1A/1B ile aynı dosyalar | önce test |
+
+- Her ajanın istemi "ANY shell command yok" ile başlar; testleri, koşucuyu ve diff incelemesini Claude çalıştırır. **Ajan raporu kanıt değildir**: vaka sayıları ve eşikler koşucu çıktısından okunur.
+- Kör set bir kez **kullanılmış** sayıldıktan sonra ayarlama için kullanılmaz (aşırı uyum); her pakette yeni kör vakalar yazılır.
+
+### 12.6 Açık sorular (varsayılanlar köşeli parantezde)
+
+1. Eşikler (12.4 madde 2) uygun mu? [evet; ilk ölçümden sonra gözden geçirilir]
+2. Kırmızı takımı bağımsız bir model ailesi mi yürütsün? [evet: Neon veya Argon, Claude/Opus ajan modelleri değil]
+3. Aşama 0 hemen mi başlasın, yoksa Faz 5 ve Topi yetkili ile mi birleşsin? [Aşama 0 önce: canlıdaki sohbet şimdiden herkese açık]
