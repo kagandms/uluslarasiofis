@@ -11,6 +11,9 @@ const MAX_MESSAGE_LENGTH = 500;
 const HELLO_DURATION_MS = 2400;
 const REPLY_STATE_DURATION_MS = 4000;
 const PANEL_CLOSE_FALLBACK_MS = 260;
+const FOCUS_SCROLL_DELAY_MS = 250;
+const MOBILE_MEDIA_QUERY = '(max-width: 600px)';
+const MOBILE_OPEN_CLASS = 'chatbot-mobile-open';
 const activeControllers = new WeakMap();
 
 function normalizeLocale(locale) {
@@ -62,6 +65,13 @@ function resolveFetcher(document, customFetcher) {
 
 function prefersReducedMotion(document) {
     return Boolean(document?.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+}
+
+function isNarrowViewport(document) {
+    const view = document?.defaultView;
+    if (!view) return false;
+    if (view.matchMedia?.(MOBILE_MEDIA_QUERY)?.matches) return true;
+    return typeof view.innerWidth === 'number' && view.innerWidth > 0 && view.innerWidth <= 600;
 }
 
 function shouldAnimatePanel(document, animateOption) {
@@ -127,8 +137,10 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     let hasValidationError = false;
     let hasGreeted = false;
     let mascotResetTimer = null;
+    let focusScrollTimer = null;
     let openFrameId = null;
     let closeCleanup = null;
+    let attachedViewport = null;
     let conversationHistory = [];
     const localizedLogBindings = [];
 
@@ -271,6 +283,69 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             globalThis.clearTimeout(mascotResetTimer);
             mascotResetTimer = null;
         }
+    }
+
+    function clearFocusScrollTimer() {
+        if (focusScrollTimer !== null) {
+            globalThis.clearTimeout(focusScrollTimer);
+            focusScrollTimer = null;
+        }
+    }
+
+    function clearViewportProperties() {
+        panel.style.removeProperty('--chatbot-vvh');
+        panel.style.removeProperty('--chatbot-vvt');
+    }
+
+    function applyVisualViewportMetrics() {
+        if (destroyed || !isOpen) return;
+        const vv = document.defaultView?.visualViewport;
+        if (!vv || !isNarrowViewport(document)) {
+            clearViewportProperties();
+            return;
+        }
+        if (typeof vv.height === 'number' && Number.isFinite(vv.height) && vv.height > 0) {
+            panel.style.setProperty('--chatbot-vvh', `${vv.height}px`);
+        }
+        if (typeof vv.offsetTop === 'number' && Number.isFinite(vv.offsetTop)) {
+            panel.style.setProperty('--chatbot-vvt', `${Math.max(0, vv.offsetTop)}px`);
+        }
+    }
+
+    function detachViewportSync() {
+        if (!attachedViewport) return;
+        attachedViewport.removeEventListener?.('resize', applyVisualViewportMetrics);
+        attachedViewport.removeEventListener?.('scroll', applyVisualViewportMetrics);
+        attachedViewport = null;
+    }
+
+    function attachViewportSync() {
+        const vv = document.defaultView?.visualViewport;
+        if (!vv) {
+            clearViewportProperties();
+            return;
+        }
+        if (attachedViewport !== vv) {
+            detachViewportSync();
+            vv.addEventListener?.('resize', applyVisualViewportMetrics);
+            vv.addEventListener?.('scroll', applyVisualViewportMetrics);
+            attachedViewport = vv;
+        }
+        applyVisualViewportMetrics();
+    }
+
+    function handleInputFocus() {
+        if (destroyed || !isOpen) return;
+        clearFocusScrollTimer();
+        focusScrollTimer = globalThis.setTimeout(() => {
+            focusScrollTimer = null;
+            if (destroyed || !isOpen) return;
+            applyVisualViewportMetrics();
+            if (isNarrowViewport(document)) {
+                scrollLogToBottom();
+                composer.scrollIntoView?.({ block: 'end' });
+            }
+        }, FOCUS_SCROLL_DELAY_MS);
     }
 
     function setMascotState(state) {
@@ -465,12 +540,14 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         cancelPendingPanelAnimation();
         isOpen = true;
         widgetRoot.classList.add('is-panel-open');
+        document.documentElement?.classList?.add(MOBILE_OPEN_CLASS);
         launcherTagline.hidden = true;
         if (launcherMouse) launcherMouse.hidden = true;
         panel.classList.remove('is-closing');
         panel.hidden = false;
         launcherButton.setAttribute('aria-expanded', 'true');
         document.addEventListener('keydown', handleDocumentKeydown);
+        attachViewportSync();
 
         if (shouldAnimatePanel(document, animate)) {
             panel.classList.remove('is-open');
@@ -507,11 +584,15 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         isOpen = false;
         launcherButton.setAttribute('aria-expanded', 'false');
         document.removeEventListener('keydown', handleDocumentKeydown);
+        document.documentElement?.classList?.remove(MOBILE_OPEN_CLASS);
+        clearFocusScrollTimer();
+        detachViewportSync();
         clearMascotTimer();
         setMascotState(isSending ? 'thinking' : 'idle');
 
         const finishClose = () => {
             if (destroyed || isOpen) return;
+            clearViewportProperties();
             panel.classList.remove('is-open', 'is-closing');
             panel.hidden = true;
             widgetRoot.classList.remove('is-panel-open');
@@ -737,6 +818,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     }
 
     input.addEventListener('input', updateInputMeta);
+    input.addEventListener('focus', handleInputFocus);
 
     input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -765,7 +847,12 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         destroy() {
             destroyed = true;
             clearMascotTimer();
+            clearFocusScrollTimer();
             cancelPendingPanelAnimation();
+            detachViewportSync();
+            clearViewportProperties();
+            document.documentElement?.classList?.remove(MOBILE_OPEN_CLASS);
+            input.removeEventListener('focus', handleInputFocus);
             document.removeEventListener('keydown', handleDocumentKeydown);
             document.removeEventListener('public:locale-changed', handleLocaleChanged);
             mountTarget.replaceChildren();

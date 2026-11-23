@@ -940,3 +940,142 @@ test('animated panel open/close toggles is-open and is-closing and finishes on t
     assert.equal(tagline.hidden, false);
     assert.equal(mouse.hidden, false);
 });
+
+function createFakeVisualViewport({ height = 667, offsetTop = 0 } = {}) {
+    const listeners = {
+        resize: new Set(),
+        scroll: new Set()
+    };
+    return {
+        height,
+        offsetTop,
+        listeners,
+        addEventListener(type, fn) {
+            listeners[type]?.add(fn);
+        },
+        removeEventListener(type, fn) {
+            listeners[type]?.delete(fn);
+        },
+        dispatch(type) {
+            for (const fn of [...(listeners[type] || [])]) {
+                fn({ type, target: this });
+            }
+        }
+    };
+}
+
+test('mobile visualViewport resize and scroll sync panel custom properties and html scroll lock while open, then clean up on close', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+    const dom = new JSDOM(html, { url: 'https://portal.test/?bot=1' });
+    context.after(() => dom.window.close());
+
+    Object.defineProperty(dom.window, 'innerWidth', { configurable: true, writable: true, value: 390 });
+    const fakeViewport = createFakeVisualViewport({ height: 667, offsetTop: 0 });
+    Object.defineProperty(dom.window, 'visualViewport', { configurable: true, writable: true, value: fakeViewport });
+
+    const doc = dom.window.document;
+    const controller = initHomeChatbot({ locale: 'tr', root: doc });
+    context.after(() => controller.destroy());
+
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const panel = doc.getElementById('home-chatbot-panel');
+
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvh'), '');
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvt'), '');
+    assert.equal(doc.documentElement.classList.contains('chatbot-mobile-open'), false);
+    assert.equal(fakeViewport.listeners.resize.size, 0);
+    assert.equal(fakeViewport.listeners.scroll.size, 0);
+
+    launcher.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvh'), '667px');
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvt'), '0px');
+    assert.equal(doc.documentElement.classList.contains('chatbot-mobile-open'), true);
+    assert.equal(fakeViewport.listeners.resize.size, 1);
+    assert.equal(fakeViewport.listeners.scroll.size, 1);
+
+    fakeViewport.height = 412;
+    fakeViewport.offsetTop = 24;
+    fakeViewport.dispatch('resize');
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvh'), '412px');
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvt'), '24px');
+
+    fakeViewport.offsetTop = 48;
+    fakeViewport.dispatch('scroll');
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvt'), '48px');
+
+    panel.querySelector('.chatbot-close').click();
+    assert.equal(panel.hidden, true);
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvh'), '');
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvt'), '');
+    assert.equal(doc.documentElement.classList.contains('chatbot-mobile-open'), false);
+    assert.equal(fakeViewport.listeners.resize.size, 0);
+    assert.equal(fakeViewport.listeners.scroll.size, 0);
+});
+
+test('destroy removes visualViewport listeners and properties, focus scrolls composer on narrow screens, and missing visualViewport does not crash', async (context) => {
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    context.after(() => context.mock.timers.reset());
+
+    const html = await readWorkspaceFile('index.html');
+    const dom = new JSDOM(html, { url: 'https://portal.test/?bot=1' });
+    context.after(() => dom.window.close());
+
+    Object.defineProperty(dom.window, 'innerWidth', { configurable: true, writable: true, value: 390 });
+    const fakeViewport = createFakeVisualViewport({ height: 520, offsetTop: 10 });
+    Object.defineProperty(dom.window, 'visualViewport', { configurable: true, writable: true, value: fakeViewport });
+
+    const doc = dom.window.document;
+    const controller = initHomeChatbot({ locale: 'tr', root: doc });
+    const panel = doc.getElementById('home-chatbot-panel');
+    const composer = panel.querySelector('.chatbot-composer');
+    const input = doc.getElementById('chatbot-input');
+
+    controller.open();
+    context.mock.timers.tick(250);
+
+    const scrollIntoViewCalls = [];
+    composer.scrollIntoView = (options) => {
+        scrollIntoViewCalls.push(options);
+    };
+
+    input.dispatchEvent(new dom.window.Event('focus'));
+    context.mock.timers.tick(250);
+    assert.deepEqual(scrollIntoViewCalls, [{ block: 'end' }]);
+
+    assert.equal(fakeViewport.listeners.resize.size, 1);
+    assert.equal(fakeViewport.listeners.scroll.size, 1);
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvh'), '520px');
+    assert.equal(doc.documentElement.classList.contains('chatbot-mobile-open'), true);
+
+    controller.destroy();
+    assert.equal(fakeViewport.listeners.resize.size, 0);
+    assert.equal(fakeViewport.listeners.scroll.size, 0);
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvh'), '');
+    assert.equal(panel.style.getPropertyValue('--chatbot-vvt'), '');
+    assert.equal(doc.documentElement.classList.contains('chatbot-mobile-open'), false);
+
+    // Guard: missing window.visualViewport does not throw on open, focus, close, or destroy.
+    const noVvDom = new JSDOM(html, { url: 'https://portal.test/?bot=1' });
+    context.after(() => noVvDom.window.close());
+    Object.defineProperty(noVvDom.window, 'innerWidth', { configurable: true, writable: true, value: 390 });
+    Object.defineProperty(noVvDom.window, 'visualViewport', { configurable: true, writable: true, value: undefined });
+
+    const noVvDoc = noVvDom.window.document;
+    const noVvController = initHomeChatbot({ locale: 'tr', root: noVvDoc });
+    const noVvPanel = noVvDoc.getElementById('home-chatbot-panel');
+    const noVvInput = noVvDoc.getElementById('chatbot-input');
+
+    noVvController.open();
+    assert.equal(noVvPanel.hidden, false);
+    assert.equal(noVvPanel.style.getPropertyValue('--chatbot-vvh'), '');
+    assert.equal(noVvDoc.documentElement.classList.contains('chatbot-mobile-open'), true);
+
+    noVvInput.dispatchEvent(new noVvDom.window.Event('focus'));
+    context.mock.timers.tick(250);
+
+    noVvController.close();
+    assert.equal(noVvPanel.hidden, true);
+    assert.equal(noVvDoc.documentElement.classList.contains('chatbot-mobile-open'), false);
+    noVvController.destroy();
+});
