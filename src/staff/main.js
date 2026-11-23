@@ -25,6 +25,7 @@ import { initCloudflareUsageCard } from '../ui/cloudflare-usage-card.js';
 import { initWorkHours } from './work-hours.js';
 import { initializeYoksisDocumentAuditManager } from '../managers/yoksisDocumentAuditManager.js';
 import { mountInquiryManager } from './inquiryManager.js';
+import { initializeStaffAssistant } from './staffAssistant.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -124,6 +125,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
+    try { initializeStaffAssistant(); } catch (error) {
+        console.error('Staff assistant failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
 
     try { initDraftAutoSave(); } catch (e) { console.error('initDraftAutoSave error:', e); }
     try { setActiveStep(STEP_IDS.UPLOAD); } catch (e) { console.error('setActiveStep error:', e); }
