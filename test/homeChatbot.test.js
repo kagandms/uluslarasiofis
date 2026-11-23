@@ -1152,3 +1152,44 @@ test('destroy removes visualViewport listeners and properties, focus scrolls com
     assert.equal(noVvDoc.documentElement.classList.contains('chatbot-mobile-open'), false);
     noVvController.destroy();
 });
+
+test('assistant replies with turn_id render feedback buttons and carry session_id in memory without touching storage', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+    const requests = [];
+
+    const { dom, doc } = mountChatbotDom(context, html, {
+        locale: 'tr',
+        fetcher: async (url, options) => {
+            const parsed = JSON.parse(options.body);
+            requests.push({ url: String(url), body: parsed });
+            if (url === '/api/public/chat') {
+                return createJsonResponse({
+                    reply: `Yanıt ${requests.length}`,
+                    actions: [],
+                    session_id: '99999999-9999-4999-8999-999999999999',
+                    turn_id: `88888888-8888-4888-8888-88888888888${requests.length}`
+                }, 200);
+            }
+            return { ok: true, status: 204, async json() { throw new Error('no body'); } };
+        }
+    });
+
+    doc.getElementById('home-chatbot-launcher').click();
+    const panel = doc.getElementById('home-chatbot-panel');
+    const input = doc.getElementById('chatbot-input');
+    const form = panel.querySelector('.chatbot-composer');
+
+    input.value = 'İlk soru';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    input.value = 'İkinci soru';
+    form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    assert.equal('session_id' in requests[0].body, false);
+    assert.equal(requests[1].body.session_id, '99999999-9999-4999-8999-999999999999');
+    assert.equal(panel.querySelectorAll('.chatbot-feedback').length, 2);
+    assert.equal(dom.window.localStorage.length, 0);
+    assert.equal(dom.window.sessionStorage.length, 0);
+});
