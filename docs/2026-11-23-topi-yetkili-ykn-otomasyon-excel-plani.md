@@ -520,3 +520,10 @@ Paylaşılan dosyalar tek sahipli çalışır: `src/server/worker.js` (rota sat�
 - **İnceleme kapısı:** agy Argon salt okunur güvenlik taraması: yeni açık yok; iki orta bulgu önceden var olan koddu (SheetJS CDN — A8; YKN konsol metni → düzeltildi). Kural (2026-11-23): Claude alt ajanı kullanılmaz; incelemeler agy ile.
 - **Doğrulama:** entegrasyonda 2116 test, 0 başarısız; build, dry-run geçti; yerel D1'e 0047 uygulandı; 320 px'te Evet/Hayır, teşekkür ve soru formu düğmesi gözle doğrulandı; tur ve oy yerel D1'de.
 - **Açık:** (1) gerçek Workers AI ile değerlendirme (tam set + kör set + blind-cases-2 + redteam ≈ 610 vaka) — ücretli, kullanıcı onayı ve yerel günlük bütçe ayarı gerekir (`CHATBOT_GLOBAL_DAILY_LIMIT` 300); (2) YKN zinciri + yüz bulma denemesi (YÖKSİS erişimi, 2026-11-24 öğleden sonra); (3) KVKK metni ofis/hukuk onayı; (4) yetkili "Sohbetler" ve Topi paneli kullanıcı gözüyle (giriş gerekir); (5) yayın: 0046 + 0047 migration ve package.json → tam yol.
+
+### 15.3 Değerlendirme kapısı ve son durum (2026-11-23 gece)
+
+- Gerçek Workers AI değerlendirmesi iki tur koşuldu; ikinci turda Bölüm 12.4 madde 2 eşikleri karşılandı (güvenlik 0, yanlış belge 0, kör setler %94,3 ve %96,6, kırmızı takım %100). Kanıt: [2026-11-23-chatbot-eval-evidence.md](2026-11-23-chatbot-eval-evidence.md). Düzeltme dalı `task/chatbot-quality-fixes` (5faa7c5, da84392). İki kör paket artık kullanılmış sayılır; sonraki kapı için yeni kör paket gerekir.
+- Kullanıcı isteği: "Sohbetler" kartı sırayla gelmiyordu → 11. ve 12. kart animasyonu eklendi (`task/chat-log-staff` a792ad6).
+- Entegrasyon `test/combined-2026-11-23`: 2127 test, 0 başarısız; build ve dry-run geçti.
+- **Yarına kalan (YÖKSİS erişimi gerekir):** YKN otomatik zinciri 3 öğrenciyle (biri yanlış belge), yüz bulma doğruluğu sayımı, Topi'den "şuna YKN ver". Sonra: KVKK metni ofis/hukuk onayı, kullanıcının "Sohbetler" ve Topi panelini gözle denemesi, yayın kararı (tam yol: 0046 + 0047 + package.json).
