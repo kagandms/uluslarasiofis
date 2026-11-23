@@ -234,37 +234,74 @@ export function createApplicationReviewRepository(database, notes) {
             ]);
             return results.every((result) => result?.meta?.changes === 1);
         },
-        async requestCurrentDocumentResubmission({ applicationId, documentRecordId, revisionId, revisionNumber, expectedScanStatus, code, staffId, reason, now, requestId, auditId, noteId }) {
+        async requestCurrentDocumentResubmission({
+            applicationId, documentRecordId, revisionId, revisionNumber,
+            expectedRevisionStatus = 'submitted', expectedScanStatus,
+            code, staffId, reason, now, requestId, auditId, noteId
+        }) {
+            if (expectedRevisionStatus !== 'submitted' && expectedRevisionStatus !== 'approved') return false;
+            const fromApproved = expectedRevisionStatus === 'approved';
             const results = await database.batch([
-                database.prepare(`
-                    UPDATE document_revisions
-                    SET status = 'resubmission_required', reviewed_at = ?, reviewed_by_staff_id = ?
-                    WHERE id = ? AND document_record_id = ? AND revision_number = ?
-                      AND is_current = 1 AND status = 'submitted'
-                      AND EXISTS (
-                        SELECT 1 FROM document_records AS records
-                        JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
-                        JOIN applications ON applications.id = records.application_id
-                        JOIN document_revision_files AS files ON files.revision_id = document_revisions.id
-                        JOIN upload_intents AS intents ON intents.revision_file_id = files.id
-                        WHERE records.id = document_revisions.document_record_id
-                          AND records.application_id = ? AND records.review_status IN ('pending', 'under_review')
-                          AND applications.status IN ('under_review', 'resubmission_required')
-                          AND requirements.is_active = 1 AND files.upload_status = 'finalized'
-                          AND files.scan_status IN ('clean', 'unsafe', 'failed') AND files.scan_status = ?
-                          AND files.cleanup_status = 'none'
-                          AND intents.status = 'completed'
-                      )
-                `).bind(now, staffId, revisionId, documentRecordId, revisionNumber, applicationId, expectedScanStatus),
-                database.prepare(`
-                    UPDATE document_records SET review_status = 'resubmission_required', updated_at = ?
-                    WHERE id = ? AND application_id = ? AND review_status IN ('pending', 'under_review')
-                      AND changes() = 1 AND EXISTS (
-                        SELECT 1 FROM document_revisions
-                        WHERE id = ? AND document_record_id = document_records.id
-                          AND is_current = 1 AND status = 'resubmission_required'
-                      )
-                `).bind(now, documentRecordId, applicationId, revisionId),
+                fromApproved
+                    ? database.prepare(`
+                        UPDATE document_revisions
+                        SET status = 'resubmission_required', reviewed_at = ?, reviewed_by_staff_id = ?
+                        WHERE id = ? AND document_record_id = ? AND revision_number = ?
+                          AND is_current = 1 AND status = 'approved'
+                          AND EXISTS (
+                            SELECT 1 FROM document_records AS records
+                            JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                            JOIN applications ON applications.id = records.application_id
+                            JOIN document_revision_files AS files ON files.revision_id = document_revisions.id
+                            JOIN upload_intents AS intents ON intents.revision_file_id = files.id
+                            WHERE records.id = document_revisions.document_record_id
+                              AND records.application_id = ? AND records.review_status = 'approved'
+                              AND applications.status IN ('under_review', 'resubmission_required')
+                              AND requirements.is_active = 1 AND files.upload_status = 'finalized'
+                              AND files.scan_status = 'clean' AND files.scan_status = ?
+                              AND files.cleanup_status = 'none'
+                              AND intents.status = 'completed'
+                          )
+                    `).bind(now, staffId, revisionId, documentRecordId, revisionNumber, applicationId, expectedScanStatus)
+                    : database.prepare(`
+                        UPDATE document_revisions
+                        SET status = 'resubmission_required', reviewed_at = ?, reviewed_by_staff_id = ?
+                        WHERE id = ? AND document_record_id = ? AND revision_number = ?
+                          AND is_current = 1 AND status = 'submitted'
+                          AND EXISTS (
+                            SELECT 1 FROM document_records AS records
+                            JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+                            JOIN applications ON applications.id = records.application_id
+                            JOIN document_revision_files AS files ON files.revision_id = document_revisions.id
+                            JOIN upload_intents AS intents ON intents.revision_file_id = files.id
+                            WHERE records.id = document_revisions.document_record_id
+                              AND records.application_id = ? AND records.review_status IN ('pending', 'under_review')
+                              AND applications.status IN ('under_review', 'resubmission_required')
+                              AND requirements.is_active = 1 AND files.upload_status = 'finalized'
+                              AND files.scan_status IN ('clean', 'unsafe', 'failed') AND files.scan_status = ?
+                              AND files.cleanup_status = 'none'
+                              AND intents.status = 'completed'
+                          )
+                    `).bind(now, staffId, revisionId, documentRecordId, revisionNumber, applicationId, expectedScanStatus),
+                fromApproved
+                    ? database.prepare(`
+                        UPDATE document_records SET review_status = 'resubmission_required', updated_at = ?
+                        WHERE id = ? AND application_id = ? AND review_status = 'approved'
+                          AND changes() = 1 AND EXISTS (
+                            SELECT 1 FROM document_revisions
+                            WHERE id = ? AND document_record_id = document_records.id
+                              AND is_current = 1 AND status = 'resubmission_required'
+                          )
+                    `).bind(now, documentRecordId, applicationId, revisionId)
+                    : database.prepare(`
+                        UPDATE document_records SET review_status = 'resubmission_required', updated_at = ?
+                        WHERE id = ? AND application_id = ? AND review_status IN ('pending', 'under_review')
+                          AND changes() = 1 AND EXISTS (
+                            SELECT 1 FROM document_revisions
+                            WHERE id = ? AND document_record_id = document_records.id
+                              AND is_current = 1 AND status = 'resubmission_required'
+                          )
+                    `).bind(now, documentRecordId, applicationId, revisionId),
                 database.prepare(`
                     UPDATE applications SET status = 'resubmission_required', updated_at = ?, last_activity_at = ?
                     WHERE id = ? AND status IN ('under_review', 'resubmission_required') AND changes() = 1
@@ -279,8 +316,14 @@ export function createApplicationReviewRepository(database, notes) {
                     ) SELECT ?, 'staff.document_resubmission_requested', 'staff', ?, ?, ?, ?, ?
                     WHERE changes() = 1
                 `).bind(auditId, staffId, applicationId, documentRecordId, requestId,
-                    JSON.stringify({ documentCode: code, revisionNumber,
-                        documentStatus: 'resubmission_required', applicationStatus: 'resubmission_required', result: 'success' }))
+                    JSON.stringify({
+                        documentCode: code,
+                        revisionNumber,
+                        ...(fromApproved ? { previousDocumentStatus: 'approved' } : {}),
+                        documentStatus: 'resubmission_required',
+                        applicationStatus: 'resubmission_required',
+                        result: 'success'
+                    }))
             ]);
             return results.every((result) => result?.meta?.changes === 1);
         }

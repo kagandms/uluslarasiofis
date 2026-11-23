@@ -84,11 +84,15 @@ async function resolveResubmissionTarget({ repositories, applicationId, code, re
     if (!policy) throw new ApiError(404, 'DOCUMENT_NOT_AVAILABLE', 'Belge mevcut değil veya yenilemeye uygun değil.');
     const document = await repositories.applicationReviews.findCurrentDocumentForResubmission(applicationId, code);
     if (!document) throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve yenilemeye uygun değil.');
-    if (document.revision_number !== revisionNumber || document.revision_status !== 'submitted') {
+    const isSubmitted = document.revision_status === 'submitted';
+    const isApproved = document.revision_status === 'approved';
+    if (document.revision_number !== revisionNumber || (!isSubmitted && !isApproved)) {
         throw reviewConflict();
     }
-    if (!['pending', 'under_review'].includes(document.review_status)
-        || !policy.accepted_media_types.includes(document.media_type)) {
+    const isEligibleState = isSubmitted
+        ? ['pending', 'under_review'].includes(document.review_status)
+        : document.review_status === 'approved' && document.scan_status === 'clean';
+    if (!isEligibleState || !policy.accepted_media_types.includes(document.media_type)) {
         throw new ApiError(409, 'DOCUMENT_NOT_REVIEWABLE', 'Belge güncel ve yenilemeye uygun değil.');
     }
     return document;
@@ -176,8 +180,8 @@ export async function requestStaffDocumentResubmission({ request, environment, a
     const now = new Date().toISOString();
     const updated = await repositories.applicationReviews.requestCurrentDocumentResubmission({
         applicationId, documentRecordId: document.document_record_id, revisionId: document.revision_id,
-        revisionNumber, expectedScanStatus: document.scan_status, code, staffId: staff.id, reason, now, requestId,
-        auditId: crypto.randomUUID(), noteId: crypto.randomUUID()
+        revisionNumber, expectedRevisionStatus: document.revision_status, expectedScanStatus: document.scan_status,
+        code, staffId: staff.id, reason, now, requestId, auditId: crypto.randomUUID(), noteId: crypto.randomUUID()
     });
     if (!updated) throw reviewConflict();
     return { application_status: 'resubmission_required', document_status: 'resubmission_required', revision_number: revisionNumber };

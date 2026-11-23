@@ -499,3 +499,208 @@ test('staff detail UI shows a clear Turkish reason while replacement scan is pen
         'Yeni dosyanın güvenlik taraması bekleniyor; tarama bitince yeniden isteyebilirsiniz.'
     );
 });
+
+test('staff can request resubmission directly on an approved document and repeat the approve-then-rerequest cycle twice', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { studentNumber: 'STU-REREQ-APPROVED-2X' });
+    await seedInitialCleanDocument(database, applicationId, 'passport');
+    const staffCookie = await seedStaff(environment, database);
+    const ownerCookie = await seedOwnerSession(database, applicationId, 'rerequest-approved-owner-000000000000000');
+
+    for (let cycle = 1; cycle <= 2; cycle += 1) {
+        const approveResponse = await worker.fetch(buildRequest(`/api/staff/applications/${applicationId}/documents/passport/approve`, {
+            method: 'POST',
+            cookie: staffCookie,
+            body: { expected_revision_number: cycle }
+        }), environment);
+        assert.equal(approveResponse.status, 200, `Cycle ${cycle} approve should return 200.`);
+
+        const approvedDetailResponse = await worker.fetch(buildRequest(`/api/staff/applications/${applicationId}`, {
+            cookie: staffCookie
+        }), environment);
+        assert.equal(approvedDetailResponse.status, 200);
+        const approvedDetail = await approvedDetailResponse.json();
+        const approvedPassport = approvedDetail.documents.find((item) => item.code === 'passport');
+        assert.equal(approvedPassport.revision_number, cycle);
+        assert.equal(approvedPassport.revision_status, 'approved');
+        assert.equal(approvedPassport.review_status, 'approved');
+        assert.equal(approvedPassport.scan_status, 'clean');
+        assert.equal(approvedPassport.can_unapprove, true);
+        assert.equal(approvedPassport.can_request_resubmission, true);
+
+        const reason = `${cycle}. onay sonrası pasaport sayfası eksik fark edildi.`;
+        const rerequestResponse = await worker.fetch(buildRequest(`/api/staff/applications/${applicationId}/documents/passport/request-resubmission`, {
+            method: 'POST',
+            cookie: staffCookie,
+            body: { expected_revision_number: cycle, reason }
+        }), environment);
+        assert.equal(rerequestResponse.status, 200, `Cycle ${cycle} request-resubmission on approved doc should return 200.`);
+        const rerequestPayload = await rerequestResponse.json();
+        assert.equal(rerequestPayload.application_status, 'resubmission_required');
+        assert.equal(rerequestPayload.document_status, 'resubmission_required');
+        assert.equal(rerequestPayload.revision_number, cycle);
+
+        const appRow = database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first();
+        assert.equal(appRow.status, 'resubmission_required');
+        const revisionRow = database.prepare(`
+            SELECT revisions.status, revisions.reviewed_at, revisions.reviewed_by_staff_id, records.review_status
+            FROM document_revisions AS revisions
+            JOIN document_records AS records ON records.id = revisions.document_record_id
+            WHERE records.application_id = ? AND revisions.is_current = 1
+        `).bind(applicationId).first();
+        assert.equal(revisionRow.status, 'resubmission_required');
+        assert.equal(revisionRow.review_status, 'resubmission_required');
+        assert.equal(revisionRow.reviewed_by_staff_id, 'reviewer-1');
+        assert.ok(revisionRow.reviewed_at);
+
+        const noteRow = database.prepare(`
+            SELECT body, visibility, author_type, author_staff_id
+            FROM application_notes
+            WHERE application_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        `).bind(applicationId).first();
+        assert.deepEqual({ ...noteRow }, {
+            body: reason,
+            visibility: 'student',
+            author_type: 'staff',
+            author_staff_id: 'reviewer-1'
+        });
+
+        const auditRow = database.prepare(`
+            SELECT event_type, safe_metadata_json
+            FROM audit_events
+            WHERE application_id = ? AND event_type = 'staff.document_resubmission_requested'
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        `).bind(applicationId).first();
+        assert.ok(auditRow);
+        const metadata = JSON.parse(auditRow.safe_metadata_json);
+        assert.equal(metadata.documentCode, 'passport');
+        assert.equal(metadata.revisionNumber, cycle);
+        assert.equal(metadata.previousDocumentStatus, 'approved');
+        assert.equal(metadata.documentStatus, 'resubmission_required');
+        assert.equal(metadata.applicationStatus, 'resubmission_required');
+        assert.equal(metadata.result, 'success');
+        assert.doesNotMatch(auditRow.safe_metadata_json, /eksik fark edildi/i);
+
+        const { fileId, finalized } = await uploadReplacementAsStudent(
+            environment,
+            database,
+            ownerCookie,
+            'passport',
+            `passport-approved-cycle-${cycle + 1}.pdf`,
+            24 + cycle
+        );
+        assert.equal(finalized.document.revision_number, cycle + 1);
+        await scanQueuedFileClean(environment, fileId);
+    }
+});
+
+test('request-resubmission on an approved document with wrong expected_revision_number returns 409 with no state change', async () => {
+    const { database, environment } = createEnvironment();
+    const applicationId = await seedApplication(database, { studentNumber: 'STU-REREQ-CONFLICT' });
+    const { documentRecordId, revisionId } = await seedInitialCleanDocument(database, applicationId, 'passport');
+    const staffCookie = await seedStaff(environment, database);
+
+    const approveResponse = await worker.fetch(buildRequest(`/api/staff/applications/${applicationId}/documents/passport/approve`, {
+        method: 'POST',
+        cookie: staffCookie,
+        body: { expected_revision_number: 1 }
+    }), environment);
+    assert.equal(approveResponse.status, 200);
+
+    const conflictResponse = await worker.fetch(buildRequest(`/api/staff/applications/${applicationId}/documents/passport/request-resubmission`, {
+        method: 'POST',
+        cookie: staffCookie,
+        body: { expected_revision_number: 2, reason: 'Yanlış revizyon numarası ile istek.' }
+    }), environment);
+    assert.equal(conflictResponse.status, 409);
+    const conflictPayload = await conflictResponse.json();
+    assert.equal(conflictPayload.error.code, 'DOCUMENT_REVIEW_CONFLICT');
+
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(applicationId).first().status, 'under_review');
+    assert.equal(database.prepare('SELECT status FROM document_revisions WHERE id = ?').bind(revisionId).first().status, 'approved');
+    assert.equal(database.prepare('SELECT review_status FROM document_records WHERE id = ?').bind(documentRecordId).first().review_status, 'approved');
+    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_notes WHERE application_id = ?').bind(applicationId).first().count, 0);
+    assert.equal(
+        database.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE application_id = ? AND event_type = 'staff.document_resubmission_requested'")
+            .bind(applicationId).first().count,
+        0
+    );
+});
+
+test('staff detail UI renders Yeniden Yükleme İste button next to Onayı kaldır for an approved viewable document', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const submittedRequests = [];
+    const queueItem = {
+        id: 'app-approved-rereq-ui',
+        student_number: 'STU-UI-3',
+        passport_number: 'P999003',
+        first_name: 'Selin',
+        last_name: 'Arslan',
+        application_type: 'initial',
+        status: 'under_review',
+        submitted_at: '2026-11-20T10:00:00.000Z',
+        updated_at: '2026-11-23T10:00:00.000Z'
+    };
+    const api = {
+        async queryApplications() {
+            return { items: [queueItem], pagination: { page: 1, page_size: 25, total_items: 1, total_pages: 1 } };
+        },
+        async readApplicationDetail() {
+            return {
+                application: queueItem,
+                allowed_status_transitions: [],
+                documents: [{
+                    code: 'passport',
+                    label_key: 'documentPassport',
+                    required: true,
+                    revision_number: 2,
+                    review_status: 'approved',
+                    revision_status: 'approved',
+                    upload_status: 'finalized',
+                    scan_status: 'clean',
+                    cleanup_status: null,
+                    filename: 'passport-v2.pdf',
+                    access_available: true,
+                    can_approve: false,
+                    can_unapprove: true,
+                    can_request_resubmission: true
+                }]
+            };
+        },
+        async requestDocumentResubmission(...args) {
+            submittedRequests.push(args);
+        }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const actionsContainer = root.querySelector('.staff-application-document-card .staff-application-document-actions');
+    assert.ok(actionsContainer);
+    const actionButtons = [...actionsContainer.querySelectorAll('button')];
+    assert.deepEqual(
+        actionButtons.map((button) => [button.dataset.action, button.textContent]),
+        [
+            ['unapprove-document', 'Onayı kaldır'],
+            ['request-document-resubmission', 'Yeniden Yükleme İste'],
+            ['preview-document', 'Önizle']
+        ]
+    );
+
+    const requestButton = root.querySelector('[data-action="request-document-resubmission"]');
+    requestButton.click();
+    const form = root.querySelector('.staff-resubmission-form');
+    form.querySelector('textarea').value = 'Onay sonrası eksik damga tespit edildi.';
+    form.dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(submittedRequests, [['app-approved-rereq-ui', 'passport', 2, 'Onay sonrası eksik damga tespit edildi.']]);
+});
