@@ -214,7 +214,7 @@ test('getSharedMediapipeFaceDetector returns a single cached instance', () => {
     assert.equal(typeof first.close, 'function');
 });
 
-test('source contract: vite.config.js serves/emits MediaPipe assets and _headers caches /mediapipe-support/*', () => {
+test('source contract: vite.config.js serves/emits MediaPipe assets and _headers does not mention mediapipe', () => {
     const viteConfig = readFileSync(resolve(projectRoot, 'vite.config.js'), 'utf8');
     assert.match(viteConfig, /MEDIAPIPE_SUPPORT_URL/);
     assert.match(viteConfig, /vision_wasm_internal\.js/);
@@ -225,9 +225,10 @@ test('source contract: vite.config.js serves/emits MediaPipe assets and _headers
     assert.match(viteConfig, /application\/octet-stream/);
 
     const headers = readFileSync(resolve(projectRoot, 'public/_headers'), 'utf8');
-    assert.match(
+    assert.doesNotMatch(
         headers,
-        /\/mediapipe-support\/\*\s*\n\s*Cache-Control:\s*public,\s*max-age=31536000,\s*immutable/
+        /mediapipe/i,
+        'public/_headers is pinned by scripts/ci/worker-upload.mjs and must not mention mediapipe'
     );
 
     const passportFaceCropSource = readFileSync(
