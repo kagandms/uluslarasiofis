@@ -19,14 +19,43 @@ const BLOB_REVOKE_DELAY_MS = 60_000;
 const UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor.';
 const INVALID_ACTION_MESSAGE = 'İşlem doğrulanamadığı için uygulanmadı.';
 
+const APPLICATION_STATUS_LABELS = Object.freeze({
+    draft: 'Taslak',
+    submitted: 'Gönderildi',
+    under_review: 'İncelemede',
+    resubmission_required: 'Yeniden yükleme gerekli',
+    approved_for_processing: 'İşleme alınmak üzere onaylandı',
+    sent_to_migration: 'Göç İdaresine gönderildi',
+    migration_approved: 'Göç İdaresi onayladı',
+    completed: 'Tamamlandı',
+    cancelled: 'İptal edildi',
+    rejected: 'Reddedildi'
+});
+
 const YOKSIS_STATUS_LABELS = Object.freeze({
-    successful: 'Başarılı',
+    successful: 'İşlem tamamlandı',
     pending: 'Beklemede',
     missing_documents: 'Eksik evrak',
     rejected: 'Reddedildi',
     unreadable: 'Okunamadı',
     other: 'Diğer'
 });
+
+const UNKNOWN_STATUS_LABEL = 'Bilinmeyen durum';
+
+function resolveApplicationStatusLabel(status) {
+    if (typeof status === 'string' && Object.hasOwn(APPLICATION_STATUS_LABELS, status)) {
+        return APPLICATION_STATUS_LABELS[status];
+    }
+    return UNKNOWN_STATUS_LABEL;
+}
+
+function resolveYoksisStatusLabel(statusCategory) {
+    if (typeof statusCategory === 'string' && Object.hasOwn(YOKSIS_STATUS_LABELS, statusCategory)) {
+        return YOKSIS_STATUS_LABELS[statusCategory];
+    }
+    return UNKNOWN_STATUS_LABEL;
+}
 
 const YKN_LEVEL_TO_TOPI_STATE = Object.freeze({
     info: 'checking',
@@ -85,7 +114,9 @@ function buildResultsElement(doc, results) {
 
             const meta = doc.createElement('div');
             meta.className = 'staff-assistant-result-meta';
-            meta.textContent = [item.studentNumber, item.status].filter(Boolean).join(' · ');
+            meta.textContent = [item.studentNumber, resolveApplicationStatusLabel(item.status)]
+                .filter(Boolean)
+                .join(' · ');
 
             li.append(primary, meta);
             list.append(li);
@@ -99,7 +130,7 @@ function buildResultsElement(doc, results) {
             header.className = 'staff-assistant-result-primary';
             header.textContent = [item.applicationNumber, item.fullName].filter(Boolean).join(' · ');
 
-            const statusLabel = YOKSIS_STATUS_LABELS[item.statusCategory] || item.statusCategory;
+            const statusLabel = resolveYoksisStatusLabel(item.statusCategory);
             const meta = doc.createElement('div');
             meta.className = 'staff-assistant-result-meta';
             meta.textContent = [statusLabel, item.applicationStatus].filter(Boolean).join(' · ');
@@ -390,10 +421,17 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
                 });
                 if (destroyed) return;
                 if (response.ok) {
+                    const cleanLabel = String(action.label ?? '').trim().replace(/\.+$/, '');
                     const status = doc.createElement('span');
                     status.className = 'staff-assistant-confirm-status is-success';
-                    status.textContent = 'Kaydedildi.';
+                    status.textContent = `Kaydedildi: ${cleanLabel}. Çalışma Saatleri ekranı güncellendi.`;
                     buttons.replaceWith(status);
+                    const CustomEventCtor = view?.CustomEvent || globalThis.CustomEvent;
+                    if (CustomEventCtor && typeof view?.dispatchEvent === 'function') {
+                        view.dispatchEvent(new CustomEventCtor('staff-work-hours:changed', {
+                            detail: { person: action.person, minutes: action.minutes }
+                        }));
+                    }
                     setMascotState('understood');
                     return;
                 }

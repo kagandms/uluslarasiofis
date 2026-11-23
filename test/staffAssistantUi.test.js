@@ -549,3 +549,230 @@ test('503 and network errors show friendly Turkish unavailable message', async (
         assert.match(el.textContent, /Asistan şu anda kullanılamıyor\./);
     }
 });
+
+test('workHours.propose dispatches staff-work-hours:changed and shows detailed success text only after response.ok', async (context) => {
+    const { window, doc } = createStaffDom(context, { authenticated: true });
+    const changedEvents = [];
+    window.addEventListener('staff-work-hours:changed', (event) => {
+        changedEvents.push(event.detail);
+    });
+
+    let saveAttempt = 0;
+    const fetcher = async (url) => {
+        if (url === '/api/staff/assistant') {
+            return createJsonResponse({
+                reply: 'Kaydetmek için onaylayın.',
+                state: 'checking',
+                action: {
+                    type: 'workHours.propose',
+                    person: 'kagan_samet',
+                    minutes: 390,
+                    label: '6,5 saat · Kağan Samet · bugün'
+                }
+            });
+        }
+        saveAttempt += 1;
+        if (saveAttempt === 1) {
+            return createJsonResponse({ error: { message: 'Sunucu hatası' } }, 500);
+        }
+        if (saveAttempt === 2) {
+            throw new Error('network-failure');
+        }
+        return createJsonResponse({ ok: true }, 200);
+    };
+
+    const controller = initializeStaffAssistant({ root: doc, fetcher });
+    context.after(() => controller.destroy());
+    controller.open();
+
+    const input = doc.getElementById('staff-assistant-input');
+    input.value = 'Kağan 6,5 saat';
+    input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    const saveBtn = doc.querySelector('.staff-assistant-confirm-save');
+    assert.ok(saveBtn);
+
+    // 500 response: must not dispatch event and must re-enable save button.
+    saveBtn.click();
+    await flushPromises();
+    assert.equal(changedEvents.length, 0);
+    assert.equal(saveBtn.disabled, false);
+
+    // Network failure: must not dispatch event and must re-enable save button.
+    saveBtn.click();
+    await flushPromises();
+    assert.equal(changedEvents.length, 0);
+    assert.equal(saveBtn.disabled, false);
+
+    // 200 response: dispatches staff-work-hours:changed and displays detailed Turkish confirmation.
+    saveBtn.click();
+    await flushPromises();
+    assert.deepEqual(changedEvents, [{ person: 'kagan_samet', minutes: 390 }]);
+    const statusEl = doc.querySelector('.staff-assistant-confirm-status.is-success');
+    assert.ok(statusEl);
+    assert.equal(
+        statusEl.textContent,
+        'Kaydedildi: 6,5 saat · Kağan Samet · bugün. Çalışma Saatleri ekranı güncellendi.'
+    );
+});
+
+test('application and yoksisAudit results render Turkish status labels and never show raw status codes', async (context) => {
+    const { window, doc } = createStaffDom(context, { authenticated: true });
+
+    const makeAppItem = (idx, status) => ({
+        id: `app-${idx}`,
+        referenceNumber: `REF-${idx}`,
+        studentNumber: `123${idx}`,
+        firstName: 'Öğrenci',
+        lastName: `No${idx}`,
+        passportNumber: `P0000${idx}`,
+        status,
+        submittedAt: '2026-11-23T10:00:00Z'
+    });
+
+    const makeYoksisItem = (idx, statusCategory) => ({
+        applicationNumber: `2026-00-000000${idx}`,
+        studentNumber: `260000000${idx}`,
+        fullName: `Kişi ${idx}`,
+        applicationStatus: `Özet ${idx}`,
+        statusCategory,
+        missingDocuments: [],
+        missingDeadline: null,
+        unit: 'Mühendislik',
+        scannedAt: '2026-11-23T10:00:00Z',
+        isStale: false
+    });
+
+    const payloads = [
+        {
+            reply: 'Başvurular 1.',
+            state: 'understood',
+            results: {
+                kind: 'applications',
+                total: 11,
+                items: [
+                    makeAppItem(1, 'draft'),
+                    makeAppItem(2, 'submitted'),
+                    makeAppItem(3, 'under_review'),
+                    makeAppItem(4, 'resubmission_required'),
+                    makeAppItem(5, 'approved_for_processing')
+                ]
+            }
+        },
+        {
+            reply: 'Başvurular 2.',
+            state: 'understood',
+            results: {
+                kind: 'applications',
+                total: 11,
+                items: [
+                    makeAppItem(6, 'sent_to_migration'),
+                    makeAppItem(7, 'migration_approved'),
+                    makeAppItem(8, 'completed'),
+                    makeAppItem(9, 'cancelled'),
+                    makeAppItem(10, 'rejected')
+                ]
+            }
+        },
+        {
+            reply: 'Başvurular 3.',
+            state: 'understood',
+            results: {
+                kind: 'applications',
+                total: 1,
+                items: [makeAppItem(11, 'unknown_raw_status_code')]
+            }
+        },
+        {
+            reply: 'YÖKSİS 1.',
+            state: 'understood',
+            results: {
+                kind: 'yoksisAudit',
+                total: 7,
+                lastImportAt: '2026-11-23 13:07',
+                items: [
+                    makeYoksisItem(1, 'successful'),
+                    makeYoksisItem(2, 'pending'),
+                    makeYoksisItem(3, 'missing_documents'),
+                    makeYoksisItem(4, 'rejected'),
+                    makeYoksisItem(5, 'unreadable')
+                ]
+            }
+        },
+        {
+            reply: 'YÖKSİS 2.',
+            state: 'understood',
+            results: {
+                kind: 'yoksisAudit',
+                total: 2,
+                lastImportAt: '2026-11-23 13:07',
+                items: [
+                    makeYoksisItem(6, 'other'),
+                    makeYoksisItem(7, 'unknown_yoksis_category')
+                ]
+            }
+        }
+    ];
+
+    let index = 0;
+    const fetcher = async () => createJsonResponse(payloads[index++]);
+
+    const controller = initializeStaffAssistant({ root: doc, fetcher });
+    context.after(() => controller.destroy());
+    controller.open();
+
+    const input = doc.getElementById('staff-assistant-input');
+    for (let i = 0; i < payloads.length; i += 1) {
+        input.value = `Sorgu ${i + 1}`;
+        input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await flushPromises();
+    }
+
+    const logText = doc.querySelector('[role="log"]').textContent;
+
+    const expectedLabels = [
+        'Taslak',
+        'Gönderildi',
+        'İncelemede',
+        'Yeniden yükleme gerekli',
+        'İşleme alınmak üzere onaylandı',
+        'Göç İdaresine gönderildi',
+        'Göç İdaresi onayladı',
+        'Tamamlandı',
+        'İptal edildi',
+        'Reddedildi',
+        'Bilinmeyen durum',
+        'İşlem tamamlandı',
+        'Beklemede',
+        'Eksik evrak',
+        'Okunamadı',
+        'Diğer'
+    ];
+    for (const label of expectedLabels) {
+        assert.ok(logText.includes(label), `Expected Turkish status label "${label}" to be rendered`);
+    }
+
+    const forbiddenRawCodes = [
+        'draft',
+        'submitted',
+        'under_review',
+        'resubmission_required',
+        'approved_for_processing',
+        'sent_to_migration',
+        'migration_approved',
+        'completed',
+        'cancelled',
+        'rejected',
+        'unknown_raw_status_code',
+        'successful',
+        'pending',
+        'missing_documents',
+        'unreadable',
+        'other',
+        'unknown_yoksis_category'
+    ];
+    for (const rawCode of forbiddenRawCodes) {
+        assert.equal(logText.includes(rawCode), false, `Raw status code "${rawCode}" must not be rendered`);
+    }
+});
