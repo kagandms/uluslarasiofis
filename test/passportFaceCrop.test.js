@@ -161,3 +161,96 @@ test('detectFaceCrop returns unavailable when detector or image loader throws', 
     });
     assert.deepEqual(loaderError, { error: 'unavailable' });
 });
+
+test('detectFaceCrop prefers global FaceDetector over fallback MediaPipe detector when available', async () => {
+    const originalFaceDetector = globalThis.FaceDetector;
+    let globalDetectCalls = 0;
+    let fallbackCalls = 0;
+
+    globalThis.FaceDetector = class FakeGlobalFaceDetector {
+        async detect() {
+            globalDetectCalls += 1;
+            return [{ boundingBox: { x: 200, y: 300, width: 150, height: 180 } }];
+        }
+    };
+
+    try {
+        const result = await detectFaceCrop(FAKE_DATA_URL, 35 / 45, {
+            loadImage: createFakeLoader(1000, 1400),
+            loadFallbackDetector: async () => {
+                fallbackCalls += 1;
+                return createFakeDetector([
+                    { boundingBox: { x: 10, y: 10, width: 50, height: 50 } }
+                ]);
+            }
+        });
+
+        assert.equal('error' in result, false);
+        assert.equal(globalDetectCalls, 1);
+        assert.equal(fallbackCalls, 0);
+    } finally {
+        if (originalFaceDetector === undefined) {
+            delete globalThis.FaceDetector;
+        } else {
+            globalThis.FaceDetector = originalFaceDetector;
+        }
+    }
+});
+
+test('detectFaceCrop falls back to shared MediaPipe detector when global FaceDetector is absent', async () => {
+    const originalFaceDetector = globalThis.FaceDetector;
+    let fallbackCalls = 0;
+    delete globalThis.FaceDetector;
+
+    try {
+        const result = await detectFaceCrop(FAKE_DATA_URL, 35 / 45, {
+            loadImage: createFakeLoader(1000, 1400),
+            loadFallbackDetector: async () => {
+                fallbackCalls += 1;
+                return createFakeDetector([
+                    { boundingBox: { x: 200, y: 300, width: 150, height: 180 }, score: 0.96 }
+                ]);
+            }
+        });
+
+        assert.equal('error' in result, false);
+        assert.equal(fallbackCalls, 1);
+        assert.equal(Number.isInteger(result.x), true);
+        assert.equal(Number.isInteger(result.y), true);
+        assert.equal(Number.isInteger(result.width), true);
+        assert.equal(Number.isInteger(result.height), true);
+    } finally {
+        if (originalFaceDetector !== undefined) {
+            globalThis.FaceDetector = originalFaceDetector;
+        }
+    }
+});
+
+test('detectFaceCrop returns unavailable when fallback MediaPipe detector fails to load or initialize', async () => {
+    const originalFaceDetector = globalThis.FaceDetector;
+    delete globalThis.FaceDetector;
+
+    try {
+        const loadFailure = await detectFaceCrop(FAKE_DATA_URL, 35 / 45, {
+            loadImage: createFakeLoader(1000, 1400),
+            loadFallbackDetector: async () => {
+                throw new Error('mediapipe import failed');
+            }
+        });
+        assert.deepEqual(loadFailure, { error: 'unavailable' });
+
+        const initFailure = await detectFaceCrop(FAKE_DATA_URL, 35 / 45, {
+            loadImage: createFakeLoader(1000, 1400),
+            loadFallbackDetector: async () => ({
+                async detect() {
+                    throw new Error('wasm init failed');
+                }
+            })
+        });
+        assert.deepEqual(initFailure, { error: 'unavailable' });
+    } finally {
+        if (originalFaceDetector !== undefined) {
+            globalThis.FaceDetector = originalFaceDetector;
+        }
+    }
+});

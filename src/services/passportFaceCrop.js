@@ -41,14 +41,22 @@ function defaultLoadImage(imageDataUrl) {
     });
 }
 
-function resolveDetector(options) {
+async function defaultLoadFallbackDetector() {
+    const { getSharedMediapipeFaceDetector } = await import('./mediapipeFaceDetector.js');
+    return getSharedMediapipeFaceDetector();
+}
+
+async function resolveDetector(options) {
     if (options && Object.prototype.hasOwnProperty.call(options, 'detector')) {
         return options.detector || null;
     }
     if (typeof globalThis.FaceDetector === 'function') {
         return new globalThis.FaceDetector({ fastMode: false, maxDetectedFaces: 3 });
     }
-    return null;
+    const loadFallbackDetector = typeof options?.loadFallbackDetector === 'function'
+        ? options.loadFallbackDetector
+        : defaultLoadFallbackDetector;
+    return await loadFallbackDetector();
 }
 
 function computeCropBox(faceBox, imgWidth, imgHeight, aspectRatio) {
@@ -103,7 +111,7 @@ function computeCropBox(faceBox, imgWidth, imgHeight, aspectRatio) {
  *
  * @param {string} imageDataUrl - Pasaport sayfası görüntü data URL'i.
  * @param {number} aspectRatio - Hedef en/boy oranı (genişlik / yükseklik).
- * @param {{ detector?: { detect: (source: unknown) => Promise<Array<{ boundingBox: { x: number, y: number, width: number, height: number } }>> } | null, loadImage?: (dataUrl: string) => Promise<{ width: number, height: number, source: unknown }> }} [options={}] - Test amaçlı bağımlılık enjeksiyonu.
+ * @param {{ detector?: { detect: (source: unknown) => Promise<Array<{ boundingBox: { x: number, y: number, width: number, height: number } }>> } | null, loadImage?: (dataUrl: string) => Promise<{ width: number, height: number, source: unknown }>, loadFallbackDetector?: () => Promise<{ detect: (source: unknown) => Promise<Array<{ boundingBox: { x: number, y: number, width: number, height: number } }>> } | null> }} [options={}] - Test amaçlı bağımlılık enjeksiyonu.
  * @returns {Promise<{ x: number, y: number, width: number, height: number } | { error: 'no-face' | 'multiple-faces' | 'unavailable' }>} Kırpma kutusu veya hata kodu.
  */
 export async function detectFaceCrop(imageDataUrl, aspectRatio, options = {}) {
@@ -118,7 +126,7 @@ export async function detectFaceCrop(imageDataUrl, aspectRatio, options = {}) {
     }
 
     try {
-        const detector = resolveDetector(options);
+        const detector = await resolveDetector(options);
         if (!detector || typeof detector.detect !== 'function') {
             return { error: 'unavailable' };
         }
