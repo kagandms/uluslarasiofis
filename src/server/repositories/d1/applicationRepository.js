@@ -47,6 +47,24 @@ function isReferenceConflict(error) {
     return /unique constraint failed: (applications\.)?reference_number/i.test(String(error?.message));
 }
 
+function isStudentNumberConflict(error) {
+    return /unique constraint failed: (students\.)?normalized_student_number/i.test(String(error?.message));
+}
+
+const STAFF_EDITABLE_APPLICATION_COLUMNS = new Set([
+    'first_name',
+    'last_name',
+    'student_email',
+    'student_phone',
+    'passport_number',
+    'nationality',
+    'date_of_birth',
+    'residence_application_date',
+    'transition_foreign_id',
+    'transition_card_serial',
+    'transition_card_number'
+]);
+
 /**
  * Creates the application repository for one D1 binding.
  * @param {D1Database} database Cloudflare D1 binding.
@@ -739,6 +757,109 @@ export function createApplicationRepository(database) {
                 });
             }
             return remaps;
+        },
+        async updateStaffEditableFields({
+            applicationId,
+            expectedLockVersion,
+            expectedStatus,
+            studentNumber = null,
+            applicationChanges = {},
+            changedFields = [],
+            staffId,
+            now,
+            requestId,
+            auditId
+        }) {
+            const changeEntries = Object.entries(applicationChanges)
+                .filter(([column]) => STAFF_EDITABLE_APPLICATION_COLUMNS.has(column));
+            if (changeEntries.length !== Object.keys(applicationChanges).length) {
+                throw new TypeError('Unexpected column in staff editable field update.');
+            }
+            if (studentNumber === null && changeEntries.length === 0) {
+                return this.findById(applicationId);
+            }
+
+            let normalizedStudentNumber = null;
+            if (studentNumber !== null) {
+                normalizedStudentNumber = normalizeStudentNumber(studentNumber);
+                const currentApplicationRow = await database.prepare(
+                    'SELECT student_id FROM applications WHERE id = ?'
+                ).bind(applicationId).first();
+                const existingStudent = await database.prepare(
+                    'SELECT id FROM students WHERE normalized_student_number = ?'
+                ).bind(normalizedStudentNumber).first();
+                if (currentApplicationRow && existingStudent && existingStudent.id !== currentApplicationRow.student_id) {
+                    throw new ApplicationConflictError('STUDENT_NUMBER_IN_USE');
+                }
+            }
+
+            const assignments = changeEntries.map(([column]) => `${column} = ?`);
+            assignments.push('lock_version = lock_version + 1', 'updated_at = ?', 'last_activity_at = ?');
+            const values = [...changeEntries.map(([, value]) => value), now, now];
+
+            const statements = [
+                database.prepare(`
+                    UPDATE applications
+                    SET ${assignments.join(', ')}
+                    WHERE id = ?
+                      AND lock_version = ?
+                      AND status = ?
+                      AND status NOT IN ('draft', 'completed', 'cancelled', 'rejected')
+                      AND NOT EXISTS (
+                          SELECT 1 FROM application_deletions
+                          WHERE application_id = applications.id
+                      )
+                `).bind(...values, applicationId, expectedLockVersion, expectedStatus)
+            ];
+
+            if (studentNumber !== null) {
+                statements.push(
+                    database.prepare(`
+                        UPDATE students
+                        SET student_number = ?, normalized_student_number = ?
+                        WHERE id = (SELECT student_id FROM applications WHERE id = ?)
+                          AND changes() = 1
+                    `).bind(studentNumber, normalizedStudentNumber, applicationId)
+                );
+            }
+
+            statements.push(
+                database.prepare(`
+                    INSERT INTO audit_events (
+                        id, event_type, actor_type, actor_staff_id, application_id,
+                        request_id, safe_metadata_json, created_at
+                    )
+                    SELECT ?, 'staff.application_fields_corrected', 'staff', ?, ?, ?, ?, ?
+                    WHERE changes() = 1
+                `).bind(
+                    auditId,
+                    staffId,
+                    applicationId,
+                    requestId,
+                    JSON.stringify({ changedFields: changedFields.join(',') }),
+                    now
+                )
+            );
+
+            let results;
+            try {
+                results = await database.batch(statements);
+            } catch (error) {
+                if (isStudentNumberConflict(error)) {
+                    throw new ApplicationConflictError('STUDENT_NUMBER_IN_USE');
+                }
+                throw error;
+            }
+
+            if (results[0]?.meta?.changes !== 1) return null;
+            if (studentNumber !== null && results[1]?.meta?.changes !== 1) {
+                throw new Error('Student number update did not complete.');
+            }
+            const auditResultIndex = statements.length - 1;
+            if (results[auditResultIndex]?.meta?.changes !== 1) {
+                throw new Error('Staff application field correction audit did not complete.');
+            }
+            return this.findById(applicationId);
         },
         async listExpiredDrafts(cutoff, limit = 100) {
             const boundedLimit = Math.max(1, Math.min(500, Math.trunc(limit)));

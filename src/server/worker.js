@@ -19,7 +19,7 @@ import { readPrivateDocument } from './routes/documentRoutes.js';
 import { createCurrentResubmissionUploadIntent, finalizeCurrentResubmissionUpload, readCurrentResubmissionEligibility } from './routes/resubmissionUploadRoutes.js';
 import { createStaffDocumentPreview, createStaffApplicationArchiveManifest, downloadStaffApplicationDocument,
     streamStaffApplicationArchiveFile } from './routes/staffDocumentAccessRoutes.js';
-import { queryStaffApplications, readStaffApplicationDetail } from './routes/staffApplicationRoutes.js';
+import { queryStaffApplications, readStaffApplicationDetail, updateStaffApplicationFields } from './routes/staffApplicationRoutes.js';
 import { createStaffApplicationGocnetAttempt, recordStaffApplicationGocnetEvent } from './routes/staffApplicationGocnetRoutes.js';
 import { handleStaffApplicationSpreadsheet } from './routes/staffApplicationSpreadsheetRoutes.js';
 import { approveStaffApplicationDocument, unapproveStaffApplicationDocument, requestStaffDocumentResubmission, transitionStaffApplicationStatus } from './routes/staffReviewRoutes.js';
@@ -283,6 +283,9 @@ async function routeApi(request, environment, requestId, cache) {
             applicationId = decodeURIComponent(staffApplicationMatch[1]);
         } catch {
             throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+        }
+        if (request.method === 'PATCH') {
+            return updateStaffApplicationFields(request, environment, applicationId, requestId);
         }
         return readStaffApplicationDetail(request, environment, applicationId);
     }

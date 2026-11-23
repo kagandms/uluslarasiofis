@@ -1,11 +1,16 @@
 import { DOCUMENT_ANSWER_FIELDS } from '../../shared/document-conditions.js';
-import { ApiError } from '../domain/errors.js';
+import { ApiError, ApplicationConflictError } from '../domain/errors.js';
 import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { evaluateApplicationTransition, listApplicationStatusTransitions } from '../domain/applicationStateMachine.js';
+import {
+    EDITABLE_APPLICATION_STATUSES,
+    planStaffApplicationFieldChanges,
+    validateStaffApplicationFieldEditBody
+} from '../domain/staffApplicationFieldEdit.js';
 import { requireStaff } from '../auth/staffAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { readJsonBody } from '../http/requestBody.js';
-import { requireMethod, requireSameOrigin } from './shared.js';
+import { createRepositories, requireMethod, requireSameOrigin } from './shared.js';
 
 const STAFF_ROLES = Object.freeze(['reviewer', 'admin']);
 const APPLICATION_STATUS_FILTERS = Object.freeze({
@@ -154,6 +159,7 @@ function createApplicationDetailDto(application) {
     return {
         id: application.id,
         reference_number: application.reference_number ?? null,
+        lock_version: application.lock_version ?? 1,
         student_number: application.student_number,
         status: application.status,
         application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
@@ -323,5 +329,96 @@ export async function readStaffApplicationDetail(request, environment, applicati
         application: createApplicationDetailDto(application),
         allowed_status_transitions: readAllowedStatusTransitions(application, storedRequirements),
         documents: createDocumentDetailDtos(application, requirementsWithMessages)
+    };
+}
+
+const EDITABLE_STATUS_SET = new Set(EDITABLE_APPLICATION_STATUSES);
+
+async function requireEditableStaffApplication(environment, repositories, applicationId) {
+    const application = await repositories.applications.findById(applicationId);
+    if (!application) {
+        throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    }
+    const deletion = await environment.DB.prepare('SELECT state FROM application_deletions WHERE application_id = ?')
+        .bind(applicationId).first();
+    if (deletion) {
+        throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
+    }
+    if (!EDITABLE_STATUS_SET.has(application.status)) {
+        throw new ApiError(409, 'APPLICATION_NOT_EDITABLE', 'Bu başvuru şu anki durumunda düzenlenemez.');
+    }
+    return application;
+}
+
+/**
+ * Yetkili personelin gönderilmiş bir online başvurudaki öğrenci/başvuran alanlarını düzeltmesini sağlar.
+ * @param {Request} request Aynı kökenli, personel oturumlu PATCH isteği.
+ * @param {object} environment D1 bağlamını içeren Worker ortamı.
+ * @param {string} applicationId Rotadan alınan başvuru kimliği.
+ * @param {string} requestId Denetim kaydı için istek izleme kimliği.
+ * @returns {Promise<{application: object, changed_fields: string[]}>} Güncellenmiş başvuru DTO'su ve değişen alan listesi.
+ * @throws {ApiError} Yöntem, köken, yetki, doğrulama, durum, politika veya eşzamanlılık hatalarında fırlatılır.
+ */
+export async function updateStaffApplicationFields(request, environment, applicationId, requestId) {
+    requireMethod(request, 'PATCH');
+    requireSameOrigin(request);
+    const staff = await requireStaff(request, environment, STAFF_ROLES);
+    const { lockVersion, validatedFields } = validateStaffApplicationFieldEditBody(await readJsonBody(request));
+    const repositories = createRepositories(environment);
+    const application = await requireEditableStaffApplication(environment, repositories, applicationId);
+
+    if (application.lock_version !== lockVersion) {
+        throw new ApiError(
+            409,
+            'APPLICATION_UPDATE_CONFLICT',
+            'Başvuru başka biri tarafından güncellendi. Sayfayı yenileyip tekrar deneyin.'
+        );
+    }
+
+    const { changedFields, studentNumber, applicationChanges } = planStaffApplicationFieldChanges({
+        application,
+        validatedFields
+    });
+
+    if (changedFields.length === 0) {
+        return {
+            application: createApplicationDetailDto(application),
+            changed_fields: []
+        };
+    }
+
+    let updated;
+    try {
+        updated = await repositories.applications.updateStaffEditableFields({
+            applicationId,
+            expectedLockVersion: lockVersion,
+            expectedStatus: application.status,
+            studentNumber,
+            applicationChanges,
+            changedFields,
+            staffId: staff.id,
+            now: new Date().toISOString(),
+            requestId,
+            auditId: crypto.randomUUID()
+        });
+    } catch (error) {
+        if (error instanceof ApplicationConflictError && error.code === 'STUDENT_NUMBER_IN_USE') {
+            throw new ApiError(409, 'STUDENT_NUMBER_IN_USE', 'Bu öğrenci numarası başka bir kayıtta kullanılıyor.');
+        }
+        throw error;
+    }
+
+    if (!updated) {
+        await requireEditableStaffApplication(environment, repositories, applicationId);
+        throw new ApiError(
+            409,
+            'APPLICATION_UPDATE_CONFLICT',
+            'Başvuru başka biri tarafından güncellendi. Sayfayı yenileyip tekrar deneyin.'
+        );
+    }
+
+    return {
+        application: createApplicationDetailDto(updated),
+        changed_fields: changedFields
     };
 }
