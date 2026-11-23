@@ -11,7 +11,10 @@ const NOTICE_MESSAGES = Object.freeze({
             ['Kullanım amacı', 'Başvurunuzu tamamlamak ve değerlendirmek, durumunu göstermek, eksik veya yeniden istenen belgeleri size bildirmek ve yüklemelerinizi almak.'],
             ['Saklama ve koruma', 'Veriler başvuru süreci ve mevzuatın gerektirdiği süre boyunca saklanır; yetkisiz erişime karşı korunur.'],
             ['Haklarınız ve iletişim', 'KVKK kapsamındaki taleplerinizi kisiselverilerim@topkapi.edu.tr adresine iletebilirsiniz.']
-        ], acknowledge: 'Aydınlatma metnini okudum, anladım.', continue: 'Devam et', fullNotice: 'Üniversitenin resmi KVKK metnini aç', close: 'Pencereyi kapat',
+        ],
+        // DRAFT: needs office approval
+        chatLogNotice: 'Asistanla yaptığınız sohbetler hizmeti geliştirmek için kaydedilir ve Uluslararası Ofis personeli tarafından okunabilir. Lütfen sohbete kimlik, pasaport veya telefon numarası yazmayın.',
+        acknowledge: 'Aydınlatma metnini okudum, anladım.', continue: 'Devam et', fullNotice: 'Üniversitenin resmi KVKK metnini aç', close: 'Pencereyi kapat',
         languageLabel: 'Dil seçimi'
     },
     en: {
@@ -22,7 +25,10 @@ const NOTICE_MESSAGES = Object.freeze({
             ['Purpose', 'To complete and review your application, show its status, notify you about missing or requested replacement documents, and receive your uploads.'],
             ['Retention and protection', 'Data is kept during the application process and for the period required by law, and protected from unauthorized access.'],
             ['Your rights and contact', 'You can send data protection requests to kisiselverilerim@topkapi.edu.tr.']
-        ], acknowledge: 'I have read and understood this notice.', continue: 'Continue', fullNotice: 'Open the university’s official data protection notice', close: 'Close notice',
+        ],
+        // DRAFT: needs office approval
+        chatLogNotice: 'Your chats with the assistant are stored to improve the service and may be read by International Office staff. Please do not enter ID, passport, or phone numbers in the chat.',
+        acknowledge: 'I have read and understood this notice.', continue: 'Continue', fullNotice: 'Open the university’s official data protection notice', close: 'Close notice',
         languageLabel: 'Language'
     },
     ru: {
@@ -33,7 +39,10 @@ const NOTICE_MESSAGES = Object.freeze({
             ['Цель обработки', 'Подача и рассмотрение заявления, отображение его статуса, уведомления о недостающих или повторно запрошенных документах и получение загруженных вами файлов.'],
             ['Хранение и защита', 'Данные хранятся во время рассмотрения заявления и в течение срока, установленного законом; они защищаются от несанкционированного доступа.'],
             ['Ваши права и связь', 'Обращения по защите данных можно направить на kisiselverilerim@topkapi.edu.tr.']
-        ], acknowledge: 'Я прочитал(а) и понял(а) это уведомление.', continue: 'Продолжить', fullNotice: 'Открыть официальное уведомление университета', close: 'Закрыть уведомление',
+        ],
+        // DRAFT: needs office approval
+        chatLogNotice: 'Ваши переписки с ассистентом сохраняются для улучшения сервиса и могут просматриваться сотрудниками Международного офиса. Пожалуйста, не указывайте в чате номера удостоверения личности, паспорта или телефона.',
+        acknowledge: 'Я прочитал(а) и понял(а) это уведомление.', continue: 'Продолжить', fullNotice: 'Открыть официальное уведомление университета', close: 'Закрыть уведомление',
         languageLabel: 'Язык'
     },
     tk: {
@@ -44,7 +53,10 @@ const NOTICE_MESSAGES = Object.freeze({
             ['Ulanylyş maksady', 'Arzany tamamlamak we gözden geçirmek, ýagdaýyny görkezmek, ýetmeýän ýa-da täzeden soralan resminamalar barada habar bermek hem-de ýüklän faýllaryňyzy kabul etmek.'],
             ['Saklamak we goramak', 'Maglumatlar arza işiniň dowamynda we kanunda bellenen möhletde saklanýar, rugsatsyz girişden goralýar.'],
             ['Hukuklaryňyz we habarlaşmak', 'Maglumatlary goramak baradaky ýüz tutmalary kisiselverilerim@topkapi.edu.tr salgysyna iberip bilersiňiz.']
-        ], acknowledge: 'Bildirişi okadym we düşündim.', continue: 'Dowam et', fullNotice: 'Uniwersitetiň resmi maglumat goragy bildirişini aç', close: 'Bildirişi ýap',
+        ],
+        // DRAFT: needs office approval
+        chatLogNotice: 'Kömekçi bilen eden söhbetleriňiz hyzmaty kämilleşdirmek üçin ýazdyrylýar we Halkara Ofisiň işgärleri tarapyndan okalyp bilner. Söhbete şahsyýet, pasport ýa-da telefon belgisini ýazmaň.',
+        acknowledge: 'Bildirişi okadym we düşündim.', continue: 'Dowam et', fullNotice: 'Uniwersitetiň resmi maglumat goragy bildirişini aç', close: 'Bildirişi ýap',
         languageLabel: 'Dil'
     },
     ar: {
@@ -55,7 +67,10 @@ const NOTICE_MESSAGES = Object.freeze({
             ['الغرض من الاستخدام', 'استكمال طلبك ومراجعته، وعرض حالته، وإبلاغك بالمستندات الناقصة أو المطلوبة مرة أخرى، واستلام الملفات التي ترفعها.'],
             ['الاحتفاظ والحماية', 'نحتفظ بالبيانات أثناء معالجة الطلب وللمدة التي يحددها القانون، ونحميها من الوصول غير المصرح به.'],
             ['حقوقك والتواصل', 'يمكنك إرسال طلبات حماية البيانات إلى kisiselverilerim@topkapi.edu.tr.']
-        ], acknowledge: 'قرأت هذا الإشعار وفهمته.', continue: 'متابعة', fullNotice: 'افتح إشعار حماية البيانات الرسمي للجامعة', close: 'إغلاق الإشعار',
+        ],
+        // DRAFT: needs office approval
+        chatLogNotice: 'تُحفظ محادثاتك مع المساعد لتحسين الخدمة، ويمكن لموظفي المكتب الدولي الاطلاع عليها. يُرجى عدم كتابة رقم الهوية أو جواز السفر أو رقم الهاتف في المحادثة.',
+        acknowledge: 'قرأت هذا الإشعار وفهمته.', continue: 'متابعة', fullNotice: 'افتح إشعار حماية البيانات الرسمي للجامعة', close: 'إغلاق الإشعار',
         languageLabel: 'اللغة'
     }
 });
@@ -95,11 +110,12 @@ function buildDialog(document) {
     content.setAttribute('aria-live', 'polite');
     const intro = createElement(document, 'p', 'privacy-notice-intro', NOTICE_MESSAGES.tr.intro);
     const sections = createElement(document, 'div', 'privacy-notice-sections');
+    const chatLogNotice = createElement(document, 'p', 'privacy-notice-chat-log', NOTICE_MESSAGES.tr.chatLogNotice);
     const fullNoticeLink = createElement(document, 'a', 'privacy-notice-full-link', NOTICE_MESSAGES.tr.fullNotice);
     fullNoticeLink.href = OFFICIAL_NOTICE_URL;
     fullNoticeLink.target = '_blank';
     fullNoticeLink.rel = 'noopener noreferrer';
-    content.append(intro, sections, fullNoticeLink);
+    content.append(intro, sections, chatLogNotice, fullNoticeLink);
 
     const footer = createElement(document, 'footer', 'privacy-notice-footer');
     const label = createElement(document, 'label', 'privacy-notice-acknowledge');
@@ -114,7 +130,7 @@ function buildDialog(document) {
     header.append(title, languagePicker);
     dialog.append(header, content, footer);
 
-    return { dialog, title, languagePicker, intro, sections, fullNoticeLink, checkbox, acknowledgeText, continueButton };
+    return { dialog, title, languagePicker, intro, sections, chatLogNotice, fullNoticeLink, checkbox, acknowledgeText, continueButton };
 }
 
 function setDialogLocale(elements, locale) {
@@ -125,6 +141,7 @@ function setDialogLocale(elements, locale) {
     elements.languagePicker.setAttribute('aria-label', messages.languageLabel);
     elements.title.textContent = messages.title;
     elements.intro.textContent = messages.intro;
+    elements.chatLogNotice.textContent = messages.chatLogNotice;
     elements.fullNoticeLink.textContent = messages.fullNotice;
     elements.acknowledgeText.textContent = messages.acknowledge;
     elements.continueButton.textContent = messages.continue;
