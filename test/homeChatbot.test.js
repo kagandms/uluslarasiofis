@@ -6,7 +6,8 @@ import { JSDOM } from 'jsdom';
 import {
     CHATBOT_PILOT_QUERY_GATE as GATE_FROM_HOME,
     initHomeChatbotGate,
-    initHomeQuestions
+    initHomeQuestions,
+    isChatbotPilotEnabled
 } from '../src/public/home.js';
 import { CHATBOT_PILOT_QUERY_GATE, initHomeChatbot } from '../src/public/homeChatbot.js';
 import { CHATBOT_MESSAGES } from '../src/public/i18n/chatbot-messages.js';
@@ -66,7 +67,7 @@ test('home markup includes chatbot.css and #home-chatbot-root mount element', as
     }
 });
 
-test('pilot gate hides widget and does not import homeChatbot.js without ?bot=1', async (context) => {
+test('chatbot gate hides widget and skips lazy import only when ?bot=0 or #home-chatbot-root is missing', async (context) => {
     assert.equal(GATE_FROM_HOME, 'bot');
     assert.equal(CHATBOT_PILOT_QUERY_GATE, 'bot');
 
@@ -80,7 +81,16 @@ test('pilot gate hides widget and does not import homeChatbot.js without ?bot=1'
     assert.equal(/homeChatbot\.js/.test(mainSource), false, 'main.js must not statically import homeChatbot.js');
     assert.match(homeSource, /import\(['"]\.\/homeChatbot\.js['"]\)/, 'home.js must lazy-import homeChatbot.js');
 
-    for (const url of ['https://portal.test/', 'https://portal.test/?bot=0', 'https://portal.test/?bot=true']) {
+    assert.equal(isChatbotPilotEnabled(''), true);
+    assert.equal(isChatbotPilotEnabled('?bot=1'), true);
+    assert.equal(isChatbotPilotEnabled('?lang=en'), true);
+    assert.equal(isChatbotPilotEnabled('?bot=true'), true);
+    assert.equal(isChatbotPilotEnabled('?%E0%A4%A'), true);
+    assert.equal(isChatbotPilotEnabled(Symbol('malformed')), true);
+    assert.equal(isChatbotPilotEnabled('?bot=0'), false);
+    assert.equal(isChatbotPilotEnabled('?lang=en&bot=0'), false);
+
+    for (const url of ['https://portal.test/?bot=0', 'https://portal.test/?lang=en&bot=0']) {
         const dom = new JSDOM(html, { url });
         const doc = dom.window.document;
         context.after(() => dom.window.close());
@@ -97,6 +107,69 @@ test('pilot gate hides widget and does not import homeChatbot.js without ?bot=1'
         assert.equal(result, null);
         assert.equal(loaderCalls, 0);
         assert.equal(doc.getElementById('home-chatbot-root').children.length, 0);
+    }
+
+    const noRootDom = new JSDOM(html, { url: 'https://portal.test/' });
+    const noRootDoc = noRootDom.window.document;
+    context.after(() => noRootDom.window.close());
+    noRootDoc.getElementById('home-chatbot-root').remove();
+
+    let noRootLoaderCalls = 0;
+    const noRootResult = await initHomeChatbotGate('tr', {
+        root: noRootDoc,
+        loader: async () => {
+            noRootLoaderCalls += 1;
+            return import('../src/public/homeChatbot.js');
+        }
+    });
+    assert.equal(noRootResult, null);
+    assert.equal(noRootLoaderCalls, 0);
+});
+
+test('chatbot gate lazy-imports and renders launcher by default and on unrelated or malformed queries', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+
+    const cases = [
+        { url: 'https://portal.test/' },
+        { url: 'https://portal.test/?lang=en' },
+        { url: 'https://portal.test/?bot=true' },
+        { url: 'https://portal.test/?%E0%A4%A' },
+        { url: 'https://portal.test/', locationSearch: Symbol('malformed') }
+    ];
+
+    for (const testCase of cases) {
+        const dom = new JSDOM(html, { url: testCase.url });
+        const doc = dom.window.document;
+        context.after(() => dom.window.close());
+
+        let loaderCalls = 0;
+        const controller = await initHomeChatbotGate('tr', {
+            root: doc,
+            locationSearch: testCase.locationSearch,
+            loader: async () => {
+                loaderCalls += 1;
+                return import('../src/public/homeChatbot.js');
+            }
+        });
+        assert.ok(controller);
+        context.after(() => controller.destroy());
+
+        assert.equal(loaderCalls, 1);
+        assert.ok(doc.getElementById('home-chatbot-launcher'));
+        const panel = doc.getElementById('home-chatbot-panel');
+        assert.ok(panel);
+        assert.equal(panel.hidden, true);
+
+        const second = await initHomeChatbotGate('tr', {
+            root: doc,
+            locationSearch: testCase.locationSearch,
+            loader: async () => {
+                loaderCalls += 1;
+                return import('../src/public/homeChatbot.js');
+            }
+        });
+        assert.equal(second, null);
+        assert.equal(loaderCalls, 1);
     }
 });
 
