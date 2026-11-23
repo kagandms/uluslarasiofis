@@ -48,7 +48,7 @@ export function createStaffAssistantRepository(database) {
                     SELECT id, uploaded_at
                     FROM yoksis_audit_imports
                     WHERE finalized_at IS NOT NULL
-                    ORDER BY uploaded_at DESC
+                    ORDER BY finalized_at DESC, rowid DESC
                     LIMIT 1
                 `).first();
                 return row ? { id: row.id, uploadedAt: row.uploaded_at ?? null } : null;

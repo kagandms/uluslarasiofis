@@ -324,22 +324,41 @@ test('lookup_yoksis_audit reads audit records safely when yoksis_audit_imports t
     assert.equal(payload.results?.items[0].missingDocuments[0].name, 'Pasaport');
 });
 
-test('lookup_yoksis_audit computes isStale only for excel records not seen in latest finalized import', async () => {
-    const { database, fakeAi, environment } = await createFixture();
+function ensureYoksisImportSchema(database) {
     database.exec(`
-        CREATE TABLE yoksis_audit_imports (
-            id TEXT PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS yoksis_audit_imports (
+            id TEXT PRIMARY KEY NOT NULL,
             uploaded_at TEXT NOT NULL,
-            uploaded_by_staff_id TEXT NOT NULL,
+            uploaded_by_staff_id TEXT NOT NULL REFERENCES staff_users(id),
             exported_at TEXT NULL,
             row_count INTEGER NOT NULL DEFAULT 0,
             finalized_at TEXT NULL
         );
-        ALTER TABLE yoksis_document_audit_records ADD COLUMN source TEXT NOT NULL DEFAULT 'scan';
-        ALTER TABLE yoksis_document_audit_records ADD COLUMN last_seen_import_id TEXT NULL;
-        ALTER TABLE yoksis_document_audit_records ADD COLUMN unit TEXT NOT NULL DEFAULT '';
-        ALTER TABLE yoksis_document_audit_records ADD COLUMN missing_deadline TEXT NULL;
     `);
+
+    const existingColumns = new Set(
+        database.prepare('PRAGMA table_info(yoksis_document_audit_records)').all().results.map((col) => col.name)
+    );
+    const extraColumns = [
+        ['source', "TEXT NOT NULL DEFAULT 'scan'"],
+        ['last_seen_import_id', 'TEXT NULL'],
+        ['unit', "TEXT NOT NULL DEFAULT ''"],
+        ['program', "TEXT NOT NULL DEFAULT ''"],
+        ['missing_deadline', 'TEXT NULL'],
+        ['goc_last_query_at', 'TEXT NULL'],
+        ['last_transaction_type', "TEXT NOT NULL DEFAULT ''"],
+        ['transaction_count', 'INTEGER NOT NULL DEFAULT 1']
+    ];
+    for (const [name, definition] of extraColumns) {
+        if (!existingColumns.has(name)) {
+            database.exec(`ALTER TABLE yoksis_document_audit_records ADD COLUMN ${name} ${definition};`);
+        }
+    }
+}
+
+test('lookup_yoksis_audit computes isStale only for excel records not seen in latest finalized import', async () => {
+    const { database, fakeAi, environment } = await createFixture();
+    ensureYoksisImportSchema(database);
 
     await database.prepare(`
         INSERT INTO yoksis_audit_imports (id, uploaded_at, uploaded_by_staff_id, row_count, finalized_at)
@@ -387,6 +406,49 @@ test('lookup_yoksis_audit computes isStale only for excel records not seen in la
     assert.equal(byAppNo.get('2026-01-0000010')?.missingDeadline, '2026-12-01');
     assert.equal(byAppNo.get('2026-01-0000011')?.isStale, false);
     assert.equal(byAppNo.get('2026-01-0000012')?.isStale, false);
+});
+
+test('lookup_yoksis_audit orders latest finalized import by finalized_at DESC, rowid DESC', async () => {
+    const { database, fakeAi, environment } = await createFixture();
+    ensureYoksisImportSchema(database);
+
+    await database.prepare(`
+        INSERT INTO yoksis_audit_imports (id, uploaded_at, uploaded_by_staff_id, row_count, finalized_at)
+        VALUES
+            ('imp-older-upload', '2026-11-22T09:00:00.000Z', 'staff-1', 1, '2026-11-23T12:00:00.000Z'),
+            ('imp-newer-upload', '2026-11-23T10:00:00.000Z', 'staff-1', 1, '2026-11-23T10:05:00.000Z')
+    `).run();
+
+    await database.prepare(`
+        INSERT INTO yoksis_document_audit_records (
+            application_number, student_number, first_name, last_name, passport_number, phone,
+            application_status, status_category, result_status, documents_json, search_text,
+            scanned_at, updated_by_staff_id, source, last_seen_import_id, unit, missing_deadline
+        ) VALUES
+            (
+                '2026-01-0000020', '20264444444', 'Ece', 'Yıldız', '', '',
+                'İşlem Bekliyor', 'pending', 'verified', '[]', 'ece yildiz 20264444444',
+                '2026-11-23T12:00:00.000Z', 'staff-1', 'excel', 'imp-older-upload', 'Tıp', NULL
+            ),
+            (
+                '2026-01-0000021', '20265555555', 'Ece', 'Aksoy', '', '',
+                'İşlem Bekliyor', 'pending', 'verified', '[]', 'ece aksoy 20265555555',
+                '2026-11-23T10:05:00.000Z', 'staff-1', 'excel', 'imp-newer-upload', 'Hukuk', NULL
+            )
+    `).run();
+
+    const response = await worker.fetch(createAssistantRequest({ message: 'Ece eksik evrak durumu' }), environment, {});
+    const payload = validateStaffAssistantResponse(await response.json());
+
+    assert.equal(response.status, 200);
+    assert.equal(fakeAi.callCount, 0);
+    assert.equal(payload.results?.kind, 'yoksisAudit');
+    assert.equal(payload.results?.total, 2);
+    assert.equal(payload.results?.lastImportAt, '2026-11-22T09:00:00.000Z');
+
+    const byAppNo = new Map(payload.results?.items.map((item) => [item.applicationNumber, item]));
+    assert.equal(byAppNo.get('2026-01-0000020')?.isStale, false);
+    assert.equal(byAppNo.get('2026-01-0000021')?.isStale, true);
 });
 
 test('staffAssistantTools.js contains no raw SQL or D1 prepare calls', () => {
