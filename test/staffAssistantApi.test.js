@@ -176,11 +176,29 @@ test('red-line commands are refused with state confused and no action', async ()
     });
 
     const redLineMessages = [
+        'sil',
         'başvuruyu sil',
+        'bu öğrenciyi siler misin',
+        'bu başvuruyu silebilir misin',
+        'bu kayıt silinsin',
+        'bu öğrenciyi sildir',
+        'bu öğrenciyi kaldırır mısın',
+        'belgeyi kaldırabilir misin',
         'bu kaydı arşivle',
-        "Apply'a talep gönder",
+        'başvuruyu arşivler misin',
+        'başvuruyu arşive al',
+        'başvuruyu arşive taşır mısın',
+        'başvuruyu iptal eder misin',
         'durumu onayla',
-        "YÖKSİS'e kaydet"
+        'durumu onaylar mısın',
+        'başvuru onaylansın',
+        'başvuruyu reddet',
+        "Apply'a talep gönder",
+        "apply'a talep gönderebilir misin",
+        "Apply'a gönder",
+        "YÖKSİS'e kaydet",
+        "YÖKSİS'e kaydeder misin",
+        'yöksiste kaydet'
     ];
 
     for (const message of redLineMessages) {
@@ -469,6 +487,16 @@ test('propose_work_hours validates 30-min steps, 0..1440 range, today-only rule,
         person: 'kagan_samet',
         minutes: 390,
         label: '6,5 saat · Kağan Samet · bugün'
+    });
+
+    const saveWordResp = await worker.fetch(createAssistantRequest({ message: "Asaf'a bugün 6 saat kaydet" }), environment, {});
+    const saveWordPayload = validateStaffAssistantResponse(await saveWordResp.json());
+    assert.equal(saveWordResp.status, 200);
+    assert.deepEqual(saveWordPayload.action, {
+        type: 'workHours.propose',
+        person: 'asaf',
+        minutes: 360,
+        label: '6 saat · Asaf · bugün'
     });
 
     const badStepResp = await worker.fetch(createAssistantRequest({ message: 'Asaf için bugün 45 dk' }), environment, {});

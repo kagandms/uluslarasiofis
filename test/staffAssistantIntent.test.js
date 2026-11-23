@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+    isRedLineStaffMessage,
     parseCount,
     parseHoursText,
     parseStaffIntent,
@@ -92,21 +93,69 @@ test('parseStaffIntent matches deterministic Turkish commands for supported tool
     const disenrollmentForm = parseStaffIntent('2 tane kayıt silme formu çıkar');
     assert.equal(disenrollmentForm?.tool, 'propose_documents_print');
     assert.equal(disenrollmentForm?.args.copies, 2);
+
+    const workHoursSaveIntent = parseStaffIntent("Asaf'a bugün 6 saat kaydet");
+    assert.equal(workHoursSaveIntent?.tool, 'propose_work_hours');
+    assert.equal(workHoursSaveIntent?.args.person, 'asaf');
+    assert.equal(workHoursSaveIntent?.args.hours, 6);
+    assert.equal(workHoursSaveIntent?.args.dateText, undefined);
+
+    const workHoursShortSave = parseStaffIntent("Asaf'a 6 saat kaydet");
+    assert.equal(workHoursShortSave?.tool, 'propose_work_hours');
+    assert.equal(workHoursShortSave?.args.person, 'asaf');
+    assert.equal(workHoursShortSave?.args.hours, 6);
+
+    const archiveNav = parseStaffIntent('Arşive git');
+    assert.deepEqual(archiveNav, { tool: 'navigate', args: { view: 'archive' } });
+
+    assert.equal(isRedLineStaffMessage('silinmiş evrak var mı'), false);
+    assert.equal(isRedLineStaffMessage("Asaf'a bugün 6 saat kaydet"), false);
+    assert.equal(isRedLineStaffMessage("AB123456 pasaportunu ykn'ye ver"), false);
 });
 
-test('parseStaffIntent returns null for red-line and destructive requests', () => {
+test('isRedLineStaffMessage and parseStaffIntent refuse Turkish inflected red-line and destructive requests', () => {
     for (const redLineMessage of [
         'sil',
         'başvuruyu sil',
+        'bu öğrenciyi siler misin',
+        'bu kaydı silsene',
+        'bu başvuruyu silebilir misin',
+        'bu kayıt silinsin',
+        'bu öğrenciyi silin',
+        'bu kaydı silmeyi dene',
+        'bu öğrenciyi sildir',
+        'bu öğrenciyi kaldır',
+        'bu başvuruyu kaldırır mısın',
+        'belgeyi kaldırabilir misin',
         'bu kaydı arşivle',
-        'talep gönder',
-        "Apply'a talep gönder",
+        'başvuruyu arşivler misin',
+        'başvuruyu arşive al',
+        'başvuruyu arşive taşır mısın',
+        'başvuruyu iptal et',
+        'başvuruyu iptal eder misin',
         'durumu onayla',
+        'durumu onaylar mısın',
         'başvuruyu onayla',
+        'başvuru onaylansın',
+        'başvuruyu reddet',
+        'başvuruyu reddeder misin',
+        'talep gönder',
+        'talep gönderir misin',
+        "Apply'a talep gönder",
+        "apply'a talep gönderebilir misin",
+        "Apply'a gönder",
         "YÖKSİS'e kaydet",
+        "YÖKSİS'e kaydeder misin",
+        'yöksiste kaydet',
+        'durumu kaydet',
         'AB123456 ykn ver ve talep gönder',
         "AB123456 için YKN çalıştırıp YÖKSİS'e kaydet"
     ]) {
+        assert.equal(
+            isRedLineStaffMessage(redLineMessage),
+            true,
+            `Expected red-line true for message: ${redLineMessage}`
+        );
         assert.equal(
             parseStaffIntent(redLineMessage),
             null,
