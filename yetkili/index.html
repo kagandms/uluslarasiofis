@@ -249,20 +249,45 @@
                     <div class="yoksis-audit-heading">
                         <p class="home-eyebrow">YKN aktarımından ayrı · yalnızca okuma</p>
                         <h3 id="yoksis-audit-title" tabindex="-1">YÖKSİS Eksik Evrak Kontrolü</h3>
-                        <p>Açık YÖKSİS sekmesindeki kayıtlar sırayla seçilir; başvuru ve öğrenci numarası doğrulandıktan sonra durum ve eksik evrak satırları okunur.</p>
+                        <p>YÖKSİS İkamet İşlemleri Excel dışa aktarımını (.xls / .xlsx) yükleyerek ortak eksik evrak listesini güncelleyin.</p>
                     </div>
                     <div id="staff-yoksis-audit" class="yoksis-audit-panel">
-                        <div class="yoksis-audit-warning" role="note">
-                            <strong>YÖKSİS formu değişebilir.</strong> Tarama sırasında kayıt seçimi yapılır. Evrak yükleme, silme veya YÖKSİS işlemi kaydetme yapılmaz. Okunan sonuçlar yetkili personelin ortak listesine kaydedilir; pasaport numarası YÖKSİS kaydında görünüyorsa alınır.
+                        <div class="yoksis-audit-excel" style="display: grid; gap: 0.75rem; margin-bottom: 1.25rem;">
+                            <p id="audit-import-latest" aria-live="polite" style="margin: 0; color: var(--staff-home-card-secondary); font-size: 0.92rem;">Son yükleme bilgisi kontrol ediliyor…</p>
+                            <div class="yoksis-audit-controls" style="align-items: center;">
+                                <label for="audit-excel-file" class="sr-only">YÖKSİS Excel dosyası (.xls veya .xlsx)</label>
+                                <input id="audit-excel-file" type="file" accept=".xls,.xlsx" style="max-width: 100%; min-width: 0; flex: 1 1 14rem;">
+                                <button id="audit-excel-upload" class="btn btn-primary" type="button">Excel yükle</button>
+                                <button id="audit-excel-resume" class="btn btn-outline" type="button" hidden>Kaldığı yerden devam</button>
+                            </div>
+                            <div id="audit-excel-stale-warning" class="yoksis-audit-warning" role="alert" hidden>
+                                <strong>Bu dosya dünden kalma görünüyor.</strong> Daha güncel bir YÖKSİS dışa aktarımı indirmeniz önerilir.
+                            </div>
+                            <p id="audit-excel-progress" class="yoksis-audit-progress" role="status" aria-live="polite" style="margin: 0;"></p>
+                            <p id="audit-excel-summary" aria-live="polite" hidden style="margin: 0; font-weight: 600;"></p>
+                            <div id="audit-excel-rejected-wrap" class="yoksis-audit-table-wrap" hidden>
+                                <table class="yoksis-audit-table" aria-label="Reddedilen Excel satırları">
+                                    <thead><tr><th>Satır No</th><th>Neden</th></tr></thead>
+                                    <tbody id="audit-excel-rejected-body"></tbody>
+                                </table>
+                            </div>
                         </div>
-                        <label class="yoksis-audit-confirm"><input id="audit-confirm" type="checkbox"> Form seçiminin değişebileceğini anladım.</label>
-                        <div class="yoksis-audit-controls">
-                            <button id="audit-start" class="btn btn-primary" type="button">YÖKSİS listesini tara</button>
-                            <button id="audit-retry-unreadable" class="btn btn-outline" type="button" disabled>Okunamayanları yeniden tara</button>
-                            <button id="audit-stop" class="btn btn-outline" type="button" hidden>Durdur</button>
-                        </div>
-                        <p id="audit-status" role="status" aria-live="polite">Tarama için yetkili YÖKSİS sekmesi ve kayıt listesi gerekir.</p>
-                        <p id="audit-progress" class="yoksis-audit-progress" aria-live="polite"></p>
+                        <details class="yoksis-audit-fallback" style="margin-bottom: 1rem; padding: 0.75rem 1rem; border: 1px solid var(--card-border); border-radius: 12px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: var(--staff-home-card-secondary);">Yedek: eklenti ile tek tek tarama</summary>
+                            <div style="margin-top: 0.85rem;">
+                                <div class="yoksis-audit-warning" role="note">
+                                    <strong>YÖKSİS formu değişebilir.</strong> Tarama sırasında kayıt seçimi yapılır. Evrak yükleme, silme veya YÖKSİS işlemi kaydetme yapılmaz. Okunan sonuçlar yetkili personelin ortak listesine kaydedilir; pasaport numarası YÖKSİS kaydında görünüyorsa alınır.
+                                </div>
+                                <label class="yoksis-audit-confirm"><input id="audit-confirm" type="checkbox"> Form seçiminin değişebileceğini anladım.</label>
+                                <div class="yoksis-audit-controls">
+                                    <button id="audit-start" class="btn btn-outline" type="button">Yedek: tek tek tara</button>
+                                    <button id="audit-retry-unreadable" class="btn btn-outline" type="button" disabled>Okunamayanları yeniden tara</button>
+                                    <button id="audit-stop" class="btn btn-outline" type="button" hidden>Durdur</button>
+                                </div>
+                                <p id="audit-status" role="status" aria-live="polite">Tarama için yetkili YÖKSİS sekmesi ve kayıt listesi gerekir.</p>
+                                <p id="audit-progress" class="yoksis-audit-progress" aria-live="polite"></p>
+                            </div>
+                        </details>
                         <div class="yoksis-audit-search">
                             <div class="yoksis-audit-search-field">
                                 <label for="audit-search">Ad, öğrenci numarası veya pasaport numarası</label>

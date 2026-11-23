@@ -1,3 +1,13 @@
+import {
+    formatDeadlineWithRemaining,
+    formatLatestImportLine,
+    isExportedAtStale,
+    parseExportedAtFromFileName,
+    parseYoksisExcel,
+    readPendingImport,
+    uploadYoksisImport
+} from '../staff/yoksisExcelImport.js';
+
 const AUDIT_EVENT_ACTIONS = new Set([
     'YOKSIS_DOCUMENT_AUDIT_PROGRESS',
     'YOKSIS_DOCUMENT_AUDIT_RECORD',
@@ -64,7 +74,41 @@ function classifyApplicationStatus(status) {
     return 'other';
 }
 
-function appendRecord(root, data, categoryOverride = '') {
+function readFileBuffer(file, window) {
+    if (typeof file.arrayBuffer === 'function') {
+        return file.arrayBuffer();
+    }
+    return new Promise((resolve, reject) => {
+        const reader = new window.FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Excel dosyası okunamadı.'));
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function renderRejectedRows(root, rejected) {
+    const wrap = root.querySelector('#audit-excel-rejected-wrap');
+    const tbody = root.querySelector('#audit-excel-rejected-body');
+    if (!wrap || !tbody) return;
+    tbody.replaceChildren();
+    if (!Array.isArray(rejected) || rejected.length === 0) {
+        wrap.hidden = true;
+        return;
+    }
+    const document = root.ownerDocument;
+    for (const item of rejected) {
+        const row = document.createElement('tr');
+        const rowCell = document.createElement('td');
+        rowCell.textContent = String(item.rowNumber ?? '');
+        const reasonCell = document.createElement('td');
+        reasonCell.textContent = String(item.reason ?? '');
+        row.append(rowCell, reasonCell);
+        tbody.append(row);
+    }
+    wrap.hidden = false;
+}
+
+function appendRecord(root, data, categoryOverride = '', importMeta = null) {
     const document = root.ownerDocument;
     const row = document.createElement('tr');
     const verified = data.result?.status === 'verified';
@@ -84,6 +128,42 @@ function appendRecord(root, data, categoryOverride = '') {
         const cell = document.createElement('td');
         cell.textContent = String(value);
         row.append(cell);
+    }
+    if (importMeta && typeof importMeta === 'object') {
+        const unitProgram = [importMeta.unit, importMeta.program].filter(Boolean).join(' · ');
+        if (unitProgram) {
+            const meta = document.createElement('div');
+            meta.className = 'yoksis-audit-meta';
+            meta.style.fontSize = '0.8rem';
+            meta.style.color = 'var(--staff-home-card-secondary)';
+            meta.style.marginTop = '0.2rem';
+            meta.textContent = unitProgram;
+            row.cells[1].append(meta);
+        }
+        const deadlineText = formatDeadlineWithRemaining(importMeta.missingDeadline);
+        if (deadlineText) {
+            const deadline = document.createElement('div');
+            deadline.className = 'yoksis-audit-deadline';
+            deadline.style.fontSize = '0.82rem';
+            deadline.style.fontWeight = '600';
+            deadline.style.marginTop = '0.25rem';
+            deadline.textContent = `Son tarih: ${deadlineText}`;
+            row.cells[6].append(deadline);
+        }
+        if (importMeta.isStale) {
+            const badge = document.createElement('span');
+            badge.className = 'yoksis-audit-stale-badge';
+            badge.style.display = 'inline-block';
+            badge.style.marginTop = '0.25rem';
+            badge.style.padding = '0.15rem 0.45rem';
+            badge.style.borderRadius = '999px';
+            badge.style.fontSize = '0.74rem';
+            badge.style.fontWeight = '700';
+            badge.style.background = '#fff4df';
+            badge.style.color = '#8a5a00';
+            badge.textContent = 'Son yüklemede yok';
+            row.cells[7].append(document.createTextNode(' '), badge);
+        }
     }
     row.dataset.auditResult = verified ? 'verified' : 'unreadable';
     row.dataset.auditClassification = classification;
@@ -108,7 +188,7 @@ function appendSharedRecord(root, record) {
             applicationStatus: record.application_status,
             documents: record.documents
         }
-    }, record.status_category);
+    }, record.status_category, record.import || null);
 }
 
 function readPendingBatches(window) {
@@ -132,8 +212,23 @@ export function initializeYoksisDocumentAuditManager(root) {
     const results = root.querySelector('#audit-results');
     if (!window || !startButton || !stopButton || !confirmation || !results) return;
 
+    const excelFileInput = root.querySelector('#audit-excel-file');
+    const excelUploadButton = root.querySelector('#audit-excel-upload');
+    const excelResumeButton = root.querySelector('#audit-excel-resume');
+    const excelLatest = root.querySelector('#audit-import-latest');
+    const excelStaleWarning = root.querySelector('#audit-excel-stale-warning');
+    const excelSummary = root.querySelector('#audit-excel-summary');
+
     const pending = new Map();
-    const state = { scanId: '', requestId: '', targetTabId: null, busy: false, retryBusy: false, unreadableCount: null };
+    const state = {
+        scanId: '',
+        requestId: '',
+        targetTabId: null,
+        busy: false,
+        retryBusy: false,
+        excelBusy: false,
+        unreadableCount: null
+    };
     const query = { status: 'all', page: 1, pageSize: PAGE_SIZE, total: 0, sequence: 0 };
     const pendingBatches = readPendingBatches(window);
     let currentBatch = [];
@@ -150,6 +245,9 @@ export function initializeYoksisDocumentAuditManager(root) {
                 ? `Okunamayanları yeniden tara (${state.unreadableCount})`
                 : 'Okunamayanları yeniden tara';
         }
+        if (excelUploadButton) excelUploadButton.disabled = state.excelBusy;
+        if (excelResumeButton) excelResumeButton.disabled = state.excelBusy;
+        if (excelFileInput) excelFileInput.disabled = state.excelBusy;
     }
 
     async function requestExtension(action, payload = {}, timeoutMs = 10_000) {
@@ -520,9 +618,186 @@ export function initializeYoksisDocumentAuditManager(root) {
         }
     });
 
+    async function loadLatestImport() {
+        if (!excelLatest || typeof window.fetch !== 'function') return;
+        try {
+            const response = await window.fetch(`${SHARED_API}/import/latest`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            if (!response.ok) {
+                excelLatest.textContent = 'Son yükleme bilgisi alınamadı.';
+                return;
+            }
+            const payload = await response.json();
+            excelLatest.textContent = formatLatestImportLine(payload);
+        } catch {
+            excelLatest.textContent = 'Son yükleme bilgisi alınamadı.';
+        }
+    }
+
+    function syncPendingImportUi() {
+        if (!excelResumeButton) return;
+        const pendingImport = readPendingImport(window.sessionStorage);
+        excelResumeButton.hidden = !pendingImport;
+        if (pendingImport) {
+            const remainingCount = pendingImport.batches.reduce((sum, batch) => sum + batch.length, 0);
+            const progressEl = root.querySelector('#audit-excel-progress');
+            if (progressEl && !progressEl.textContent) {
+                progressEl.textContent = `Yarım kalan aktarım bulundu (${remainingCount} kayıt bekliyor). Kaldığı yerden devam edebilirsiniz.`;
+            }
+        }
+    }
+
+    function updateStaleFileWarning(exportedAt) {
+        if (!excelStaleWarning) return;
+        excelStaleWarning.hidden = !isExportedAtStale(exportedAt);
+    }
+
+    function handleExcelFileChange() {
+        const file = excelFileInput?.files?.[0];
+        if (!file) {
+            updateStaleFileWarning(null);
+            return;
+        }
+        updateStaleFileWarning(parseExportedAtFromFileName(file.name));
+    }
+
+    async function handleExcelUpload() {
+        if (state.excelBusy) return;
+        const file = excelFileInput?.files?.[0];
+        if (!file) {
+            setText(root, '#audit-excel-progress', 'Lütfen önce bir Excel dosyası (.xls veya .xlsx) seçin.');
+            return;
+        }
+        state.excelBusy = true;
+        updateControls();
+        setText(root, '#audit-excel-progress', 'Excel dosyası okunuyor…');
+        if (excelSummary) excelSummary.hidden = true;
+        renderRejectedRows(root, []);
+
+        try {
+            const buffer = await readFileBuffer(file, window);
+            const parsed = parseYoksisExcel(buffer, file.name, {
+                XLSX: window.XLSX,
+                size: file.size
+            });
+            updateStaleFileWarning(parsed.exportedAt);
+
+            if (parsed.missingHeaders.length > 0) {
+                setText(
+                    root,
+                    '#audit-excel-progress',
+                    `YÖKSİS dışa aktarma biçimi değişmiş olabilir. Eksik başlıklar: ${parsed.missingHeaders.join(', ')}`
+                );
+                return;
+            }
+
+            if (excelSummary) {
+                excelSummary.textContent = `${parsed.totalRows} satır, ${parsed.rows.length} başvuru (${parsed.mergedCount} tekrar birleştirildi), ${parsed.rejected.length} reddedildi`;
+                excelSummary.hidden = false;
+            }
+            renderRejectedRows(root, parsed.rejected);
+
+            if (parsed.rows.length === 0) {
+                setText(root, '#audit-excel-progress', 'Yüklenecek geçerli satır bulunamadı.');
+                return;
+            }
+
+            const result = await uploadYoksisImport({
+                rows: parsed.rows,
+                exportedAt: parsed.exportedAt,
+                fetcher: window.fetch.bind(window),
+                storage: window.sessionStorage,
+                onProgress: ({ completedBatches, totalBatches, storedCount }) => {
+                    setText(
+                        root,
+                        '#audit-excel-progress',
+                        `${completedBatches} / ${totalBatches} paket yüklendi (${storedCount} kayıt)…`
+                    );
+                }
+            });
+
+            if (!result.ok) {
+                setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${result.error || 'Bilinmeyen hata.'}`);
+                syncPendingImportUi();
+                return;
+            }
+
+            if (result.rejected.length > 0) {
+                const serverRows = result.rejected.map((item) => ({
+                    rowNumber: item.index + 2,
+                    reason: item.reason
+                }));
+                renderRejectedRows(root, [...parsed.rejected, ...serverRows]);
+            }
+            setText(root, '#audit-excel-progress', `Excel aktarımı tamamlandı (${result.storedCount} kayıt kaydedildi).`);
+            if (excelResumeButton) excelResumeButton.hidden = true;
+            await loadLatestImport();
+            await loadSharedRecords();
+        } catch (error) {
+            setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${error.message || 'Bilinmeyen hata.'}`);
+            syncPendingImportUi();
+        } finally {
+            state.excelBusy = false;
+            updateControls();
+        }
+    }
+
+    async function handleExcelResume() {
+        if (state.excelBusy) return;
+        const pendingImport = readPendingImport(window.sessionStorage);
+        if (!pendingImport) {
+            if (excelResumeButton) excelResumeButton.hidden = true;
+            return;
+        }
+        state.excelBusy = true;
+        updateControls();
+        setText(root, '#audit-excel-progress', 'Yarım kalan aktarım kaldığı yerden sürdürülüyor…');
+
+        try {
+            const result = await uploadYoksisImport({
+                batches: pendingImport.batches,
+                exportedAt: pendingImport.exportedAt,
+                fetcher: window.fetch.bind(window),
+                importId: pendingImport.importId,
+                storage: window.sessionStorage,
+                startBatchIndex: pendingImport.completedBatches,
+                totalBatches: pendingImport.totalBatches,
+                initialStoredCount: pendingImport.storedCount,
+                onProgress: ({ completedBatches, totalBatches, storedCount }) => {
+                    setText(
+                        root,
+                        '#audit-excel-progress',
+                        `${completedBatches} / ${totalBatches} paket yüklendi (${storedCount} kayıt)…`
+                    );
+                }
+            });
+            if (!result.ok) {
+                setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${result.error || 'Bilinmeyen hata.'}`);
+                syncPendingImportUi();
+                return;
+            }
+            setText(root, '#audit-excel-progress', `Excel aktarımı tamamlandı (${result.storedCount} kayıt kaydedildi).`);
+            if (excelResumeButton) excelResumeButton.hidden = true;
+            await loadLatestImport();
+            await loadSharedRecords();
+        } catch (error) {
+            setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${error.message || 'Bilinmeyen hata.'}`);
+            syncPendingImportUi();
+        } finally {
+            state.excelBusy = false;
+            updateControls();
+        }
+    }
+
     startButton.addEventListener('click', () => { void startScan(); });
     retryButton?.addEventListener('click', () => { void retryUnreadable(); });
     stopButton.addEventListener('click', () => { void stopScan(); });
+    excelFileInput?.addEventListener('change', () => { handleExcelFileChange(); });
+    excelUploadButton?.addEventListener('click', () => { void handleExcelUpload(); });
+    excelResumeButton?.addEventListener('click', () => { void handleExcelResume(); });
     root.querySelector('#audit-search-submit')?.addEventListener('click', () => {
         query.page = 1;
         void loadSharedRecords();
@@ -553,5 +828,7 @@ export function initializeYoksisDocumentAuditManager(root) {
         void loadSharedRecords();
     });
     updateControls();
+    syncPendingImportUi();
+    if (excelLatest) void loadLatestImport();
     void refreshSharedRecords(true);
 }
