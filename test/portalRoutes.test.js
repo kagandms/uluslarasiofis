@@ -164,7 +164,7 @@ test('home header includes the localized staff login title and note inside the s
 
 test('public locale selection applies Arabic RTL direction and persists the selected locale', async () => {
     const publicHtml = await readRepositoryFile('index.html');
-    const dom = new JSDOM(publicHtml, { url: 'https://portal.example.test/' });
+    const dom = new JSDOM(publicHtml, { url: 'https://portal.example.test/?bot=0' });
     const restoreDocument = setGlobal('document', dom.window.document);
     const restoreLocalStorage = setGlobal('localStorage', dom.window.localStorage);
 

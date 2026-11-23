@@ -57,20 +57,20 @@ export function renderPublicDocumentOverview(root, locale) {
 export const CHATBOT_PILOT_QUERY_GATE = 'bot';
 
 /**
- * Returns true only when the pilot query parameter `?bot=1` is present.
+ * Returns true by default and false only when the `?bot=0` emergency off switch is present.
  * @param {string} [search] URL query string (defaults to current window search).
  * @returns {boolean}
  */
 export function isChatbotPilotEnabled(search = globalThis.window?.location?.search ?? '') {
     try {
-        return new URLSearchParams(search).get(CHATBOT_PILOT_QUERY_GATE) === '1';
+        return new URLSearchParams(search).get(CHATBOT_PILOT_QUERY_GATE) !== '0';
     } catch {
-        return false;
+        return true;
     }
 }
 
 /**
- * Lazily imports and mounts the pilot chatbot widget only when `?bot=1` is active.
+ * Lazily imports and mounts the home chatbot widget unless disabled via `?bot=0` or missing `#home-chatbot-root`.
  * @param {string} [locale] Active public locale.
  * @param {{root?: Document, locationSearch?: string, loader?: () => Promise<typeof import('./homeChatbot.js')>, fetcher?: typeof fetch}} [options]
  * @returns {Promise<ReturnType<typeof import('./homeChatbot.js').initHomeChatbot>|null>}
