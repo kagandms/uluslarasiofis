@@ -1,7 +1,7 @@
 import { CHATBOT_MESSAGES } from './i18n/chatbot-messages.js';
 import { INQUIRY_MESSAGES } from './i18n/inquiry-messages.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
-import { createTopi, createTopiMouse, ensureTopiStyles, setTopiState } from './topiMascot.js';
+import { createTopi, createTopiPlaytime, ensureTopiStyles, setTopiState } from './topiMascot.js';
 
 export const CHATBOT_PILOT_QUERY_GATE = 'bot';
 
@@ -163,11 +163,17 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     const launcherTopi = createTopi(document, { state: 'idle', size: 48 });
     const launcherText = document.createElement('span');
     launcherText.className = 'chatbot-launcher-text';
-    const launcherMouse = reducedMotion ? null : createTopiMouse(document, { size: 22 });
-    if (launcherMouse) {
-        launcherButton.append(launcherTopi, launcherText, launcherMouse);
+    const launcherPlaytime = createTopiPlaytime(document, { reducedMotion, size: 22 });
+    if (launcherPlaytime.element) {
+        launcherButton.append(launcherTopi, launcherText, launcherPlaytime.element);
     } else {
         launcherButton.append(launcherTopi, launcherText);
+    }
+    function setPlaytimeHidden(hidden) {
+        if (!launcherPlaytime.element) return;
+        launcherPlaytime.element.hidden = hidden;
+        const activeToy = launcherPlaytime.element.firstElementChild;
+        if (activeToy) activeToy.hidden = hidden;
     }
     launcherDock.append(launcherTagline, launcherButton);
 
@@ -542,7 +548,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         widgetRoot.classList.add('is-panel-open');
         document.documentElement?.classList?.add(MOBILE_OPEN_CLASS);
         launcherTagline.hidden = true;
-        if (launcherMouse) launcherMouse.hidden = true;
+        setPlaytimeHidden(true);
         panel.classList.remove('is-closing');
         panel.hidden = false;
         launcherButton.setAttribute('aria-expanded', 'true');
@@ -597,7 +603,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             panel.hidden = true;
             widgetRoot.classList.remove('is-panel-open');
             launcherTagline.hidden = false;
-            if (launcherMouse) launcherMouse.hidden = false;
+            setPlaytimeHidden(false);
         };
 
         if (shouldAnimatePanel(document, animate)) {
@@ -855,6 +861,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             input.removeEventListener('focus', handleInputFocus);
             document.removeEventListener('keydown', handleDocumentKeydown);
             document.removeEventListener('public:locale-changed', handleLocaleChanged);
+            launcherPlaytime.destroy();
             mountTarget.replaceChildren();
             delete mountTarget.dataset.chatbotInitialized;
             activeControllers.delete(mountTarget);
