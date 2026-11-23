@@ -72,6 +72,10 @@ test('extension validates GöçNet reads and bounds writes to the selected tab a
     assert.equal(security.isValidPortalMessage(read), true);
     assert.equal(security.isValidPortalMessage({ ...read, applicationNumber: 'bad' }), false);
     assert.equal(security.isValidPortalMessage(save), true);
+    assert.equal(security.isValidPortalMessage({ ...save, phoneNational: '7000000000' }), true);
+    assert.equal(security.isValidPortalMessage({ ...save, phoneNational: '7000001' }), true);
+    assert.equal(security.isValidPortalMessage({ ...save, phoneNational: '700000' }), false);
+    assert.equal(security.isValidPortalMessage({ ...save, phoneNational: '70000000001' }), false);
     assert.equal(security.isValidPortalMessage({ ...save, phoneNational: '123' }), false);
     assert.equal(security.isValidPortalMessage(upload), true);
     assert.equal(security.isValidPortalMessage({ ...upload, pdfBase64: 'x'.repeat(12_582_913) }), false);
@@ -154,4 +158,70 @@ test('passport OCR uses the staff session cookie and accepts requests only from 
     assert.doesNotMatch(bridge, /localStorage\.getItem|sessionStorage\.getItem/);
     assert.match(background, /isAllowedApplyUrl\(sender\?\.tab\?\.url/);
     assert.match(background, /imageBase64\.length\s*<=\s*15_000_000/);
+});
+
+test('extension background validates setGocnetPhone commands for 7 to 10 digits only', async () => {
+    const backgroundSource = await readFile(resolve(extensionRoot, 'background.js'), 'utf8');
+    const messageListeners = [];
+    const executedCommands = [];
+    const context = vm.createContext({
+        URL, Date, Set, Map, Object, Number, String, Array, Promise, console,
+        setTimeout, clearTimeout, setInterval, clearInterval,
+        chrome: {
+            runtime: {
+                onStartup: { addListener() {} },
+                onInstalled: { addListener() {} },
+                onMessage: { addListener(listener) { messageListeners.push(listener); } },
+                getManifest: () => ({ content_scripts: [] })
+            },
+            tabs: { onUpdated: { addListener() {} } },
+            scripting: {
+                async executeScript(injection) {
+                    if (injection.args) {
+                        executedCommands.push(injection.args[0]);
+                        return [{ result: { success: true, verified: true } }];
+                    }
+                    return [];
+                }
+            }
+        }
+    });
+    context.globalThis = context;
+    vm.runInContext(portalSecuritySource, context);
+    vm.runInContext(storageLifecycleSource, context);
+    vm.runInContext(backgroundSource, context);
+    const listener = messageListeners[0];
+    assert.equal(typeof listener, 'function');
+
+    const sender = { tab: { id: 10, url: 'https://yoksis.yok.gov.tr/menu/menu.zul' }, frameId: 0 };
+    const dispatch = (phoneNational) => new Promise((resolveResponse) => {
+        let settled = false;
+        let response;
+        let returned = false;
+        const asyncKeepOpen = listener(
+            { action: 'YOKSIS_ZK_COMMAND', command: { action: 'setGocnetPhone', phoneNational, requestId: 'phone-req-1' } },
+            sender,
+            (value) => {
+                settled = true;
+                response = value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+                if (returned) resolveResponse({ asyncKeepOpen, response });
+            }
+        );
+        returned = true;
+        if (settled || !asyncKeepOpen) resolveResponse({ asyncKeepOpen, response });
+    });
+
+    const valid = await dispatch('7000000000');
+    assert.equal(valid.asyncKeepOpen, true);
+    assert.deepEqual(valid.response, { success: true, verified: true });
+    assert.equal(executedCommands.length, 1);
+
+    const shortReject = await dispatch('700000');
+    assert.equal(shortReject.asyncKeepOpen, false);
+    assert.equal(shortReject.response.success, false);
+
+    const longReject = await dispatch('70000000001');
+    assert.equal(longReject.asyncKeepOpen, false);
+    assert.equal(longReject.response.success, false);
+    assert.equal(executedCommands.length, 1);
 });

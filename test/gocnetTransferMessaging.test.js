@@ -7,13 +7,35 @@ import { test } from 'node:test';
 const controllerSource = new vm.Script(readFileSync(new URL('../ykn_eklenti-main/gocnet-transfer-controller.js', import.meta.url), 'utf8'));
 const queryFixture = readFileSync(new URL('./fixtures/gocnet-transfer/query-form.html', import.meta.url), 'utf8');
 
-function createHarness({ auditBusy = false } = {}) {
+function createHarness({ auditBusy = false, sendMessage } = {}) {
     const dom = new JSDOM(queryFixture, { url: 'https://yoksis.yok.gov.tr/menu/menu.zul', runScripts: 'outside-only' });
     const listeners = [];
-    dom.window.chrome = { runtime: { id: 'test-extension', onMessage: { addListener(listener) { listeners.push(listener); } } } };
+    dom.window.chrome = {
+        runtime: {
+            id: 'test-extension',
+            onMessage: { addListener(listener) { listeners.push(listener); } },
+            ...(sendMessage ? { sendMessage } : {})
+        }
+    };
     if (auditBusy) dom.window.YoksisDocumentAuditController = { isActive: () => true };
     controllerSource.runInContext(dom.getInternalVMContext());
     return { dom, listener: listeners[0] };
+}
+
+function sendQueryMessage(listener, message) {
+    return new Promise((resolve) => {
+        let responded = false;
+        let response;
+        let hasReturned = false;
+        let keepOpen = false;
+        keepOpen = listener(message, { id: 'test-extension' }, (value) => {
+            responded = true;
+            response = value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+            if (hasReturned) resolve({ keepOpen, response });
+        });
+        hasReturned = true;
+        if (responded || !keepOpen) resolve({ keepOpen, response });
+    });
 }
 
 test('YÖKSİS message handler returns only an explicit no-match result', async () => {
@@ -37,7 +59,7 @@ test('acknowledges only the exact active-learning success dialog and keeps trans
     let acknowledged = 0;
     dom.window.document.querySelector('button').addEventListener('click', () => {
         dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog"><h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
-            <p>Başvuru sorgulama başarılı.</p><p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form otomatik dolduruldu.</p>
+            <p>Başvuru sorgulama başarılı.</p><p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
             <button>Tamam</button></div>`);
         dom.window.document.querySelector('[role="dialog"] button').addEventListener('click', () => {
             acknowledged += 1;
@@ -67,6 +89,227 @@ test('YÖKSİS query handler rejects foreign senders, malformed messages, and co
     assert.equal(harness.listener(request, { id: 'test-extension' }, (value) => { response = value; }), false);
     assert.equal(answered, false);
     assert.equal(response?.state, 'unknown');
+    assert.equal(response?.reason, 'document_audit_active');
     assert.equal(harness.dom.window.document.querySelector('input').value, '');
     harness.dom.window.close();
+});
+
+test('YÖKSİS query handler returns controller_busy reason while another query is running', async () => {
+    let releaseFirst;
+    const pendingCommand = new Promise((resolve) => { releaseFirst = resolve; });
+    const { dom, listener } = createHarness({ sendMessage: async () => pendingCommand });
+    const firstPromise = sendQueryMessage(listener, {
+        action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'busy-1', portalTabId: 4,
+        attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+    });
+    const busyResult = await sendQueryMessage(listener, {
+        action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'busy-2', portalTabId: 4,
+        attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+    });
+    assert.equal(busyResult.keepOpen, false);
+    assert.deepEqual(busyResult.response, { requestId: 'busy-2', state: 'unknown', reason: 'controller_busy' });
+    releaseFirst({ success: false, error: 'form_controls_missing (inputs: 0, buttons: 0)' });
+    const firstResult = await firstPromise;
+    assert.equal(firstResult.response?.state, 'unknown');
+    assert.equal(firstResult.response?.reason, 'form_controls_missing (inputs: 0, buttons: 0)');
+    dom.window.close();
+});
+
+test('YÖKSİS query handler never leaks a stale history reason into a subsequent form answer', async () => {
+    let nextFormResponse = { success: true, freshResponse: true };
+    const { dom, listener } = createHarness({
+        sendMessage: async (message) => {
+            if (message?.command?.action === 'queryGocnetRecords') {
+                return { success: false, error: 'history_section_missing (belge: 1)' };
+            }
+            if (message?.command?.action === 'queryGocnetForm') {
+                if (nextFormResponse.insertDialog) {
+                    dom.window.document.querySelector('input').value = message.command.applicationNumber;
+                    dom.window.document.body.insertAdjacentHTML('beforeend', nextFormResponse.insertDialog);
+                }
+                return nextFormResponse.result;
+            }
+            return { success: false };
+        }
+    });
+
+    const historyResult = await sendQueryMessage(listener, {
+        action: 'YOKSIS_GOCNET_QUERY', phase: 'history', requestId: 'hist-1', portalTabId: 4,
+        attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+    });
+    assert.deepEqual(historyResult.response, {
+        requestId: 'hist-1', state: 'unknown', reason: 'history_section_missing (belge: 1)'
+    });
+
+    nextFormResponse = {
+        result: { success: true, freshResponse: true },
+        insertDialog: '<div role="dialog"><h2>Sorgu Hatası</h2><p>Başvuru sorgulama başarısız!</p><p>Hata Kodu: Veri Bulunamadı</p><p>Detay: Kayıt bulunamadı</p></div>'
+    };
+    const noMatchResult = await sendQueryMessage(listener, {
+        action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-no-match', portalTabId: 4,
+        attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+    });
+    assert.deepEqual(noMatchResult.response, { requestId: 'form-no-match', state: 'no_match' });
+
+    dom.window.document.querySelector('[role="dialog"]').remove();
+    nextFormResponse = { result: { success: true, freshResponse: false } };
+    const staleFormResult = await sendQueryMessage(listener, {
+        action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-stale', portalTabId: 4,
+        attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+    });
+    assert.deepEqual(staleFormResult.response, {
+        requestId: 'form-stale', state: 'unknown', reason: 'form_command_stale'
+    });
+
+    nextFormResponse = {
+        result: { success: true, freshResponse: true },
+        insertDialog: `<div role="dialog"><h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
+            <p>Başvuru sorgulama başarılı.</p><p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p></div>`
+    };
+    const ackFailedResult = await sendQueryMessage(listener, {
+        action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-ack-fail', portalTabId: 4,
+        attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+    });
+    assert.deepEqual(ackFailedResult.response, {
+        requestId: 'form-ack-fail', state: 'unknown', reason: 'form_ack_failed'
+    });
+    dom.window.close();
+});
+
+test('YÖKSİS form query uses 120 s waiter timeout, settles recognized dialog after form_click_no_response, and reports form_value_no_response', async () => {
+    const waitTimeouts = [];
+    const timers = [];
+    let acknowledged = 0;
+    const { dom, listener } = createHarness({
+        sendMessage: async (message) => {
+            if (message?.command?.requestId === 'form-click-late-ok') {
+                dom.window.document.querySelector('input').value = message.command.applicationNumber;
+                timers.push(setTimeout(() => {
+                    dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
+                        <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
+                        <p>Başvuru sorgulama başarılı.</p>
+                        <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
+                        <button>Tamam</button></div>`);
+                    dom.window.document.querySelector('[role="dialog"] button').addEventListener('click', () => {
+                        acknowledged += 1;
+                        dom.window.document.querySelector('[role="dialog"]').remove();
+                    });
+                }, 15));
+                return { success: false, error: 'form_click_no_response' };
+            }
+            return { success: false, error: 'form_value_no_response' };
+        }
+    });
+    const originalSetTimeout = dom.window.setTimeout.bind(dom.window);
+    dom.window.setTimeout = (fn, delay, ...args) => {
+        waitTimeouts.push(delay);
+        return originalSetTimeout(fn, delay, ...args);
+    };
+    try {
+        const lateDialogResult = await sendQueryMessage(listener, {
+            action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-click-late-ok', portalTabId: 4,
+            attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+        });
+        assert.equal(waitTimeouts.includes(120_000), true);
+        assert.deepEqual(lateDialogResult.response, { requestId: 'form-click-late-ok', state: 'student_data_filled' });
+        assert.equal(acknowledged, 1);
+
+        const valueTimeoutResult = await sendQueryMessage(listener, {
+            action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'form-val-fail', portalTabId: 4,
+            attemptId: '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa', applicationNumber: '2099-12-99999999'
+        });
+        assert.deepEqual(valueTimeoutResult.response, {
+            requestId: 'form-val-fail', state: 'unknown', reason: 'form_value_no_response'
+        });
+    } finally {
+        for (const timer of timers) clearTimeout(timer);
+        dom.window.close();
+    }
+});
+
+test('YÖKSİS GöçNet save handler and record saver accept 7 to 10 digits including non-5 numbers and reject 6 or 11 digits', async () => {
+    const dom = new JSDOM(`<main>
+        <section>
+            <h2>1. E-İkamet Başvuru Sorgulama</h2>
+            <label>E-İkamet Başvuru No: <input type="text" value=""></label>
+            <button type="button" data-action="query">Başvuru Sorgula</button>
+        </section>
+        <table><tbody>
+            <tr><td><span class="z-label">Öğrenci No (*)</span></td><td>99000000001</td></tr>
+            <tr><td><span class="z-label">Seyahat Belge No</span></td><td>P123456</td></tr>
+            <tr><td><span class="z-label">Adı</span></td><td>TEST</td></tr>
+            <tr><td><span class="z-label">Soyadı</span></td><td>STUDENT</td></tr>
+            <tr><td><span class="z-label">Eğitim Kademesi (*)</span></td><td>Lisans</td></tr>
+            <tr><td><span class="z-label">Okul Kayıt Tarihi (*)</span></td><td>01.09.2026</td></tr>
+            <tr><td><span class="z-label">Tahmini Bitiş Tar. (*)</span></td><td>30.06.2030</td></tr>
+            <tr><td><span class="z-label">Mevcut GöçNet İşlem Kayıt No</span></td><td id="record-id"></td></tr>
+        </tbody></table>
+        <label><input type="radio" checked>1 = Yeni Kayıt</label>
+        <input type="text" placeholder="5XXXXXXXXX" maxlength="10" value="">
+        <button type="button" data-action="save">İşlemi Başlat / Kaydet</button>
+    </main>`, { url: 'https://yoksis.yok.gov.tr/menu/menu.zul', runScripts: 'outside-only' });
+    const listeners = [];
+    dom.window.chrome = {
+        runtime: {
+            id: 'test-extension',
+            onMessage: { addListener(listener) { listeners.push(listener); } }
+        }
+    };
+    controllerSource.runInContext(dom.getInternalVMContext());
+    const listener = listeners[0];
+    const attemptId = '3e2c0615-f60a-4f11-bb87-eccbfce1c5aa';
+    const applicationNumber = '2099-12-99999999';
+    let saveClicks = 0;
+
+    dom.window.document.querySelector('[data-action="query"]').addEventListener('click', () => {
+        dom.window.document.body.insertAdjacentHTML('beforeend', `<div role="dialog">
+            <h2>Sorgulama Başarılı (YÖKSİS Verileri Dolduruldu)</h2>
+            <p>Başvuru sorgulama başarılı.</p>
+            <p>YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</p>
+            <button>Tamam</button></div>`);
+        dom.window.document.querySelector('[role="dialog"] button').addEventListener('click', () => {
+            dom.window.document.querySelector('[role="dialog"]').remove();
+        });
+    });
+    dom.window.document.querySelector('[data-action="save"]').addEventListener('click', () => {
+        saveClicks += 1;
+        dom.window.document.getElementById('record-id').textContent = '70001';
+        dom.window.document.body.insertAdjacentHTML('beforeend', `<div class="z-messagebox-window">
+            <div class="z-window-header">Başarılı</div>
+            <div class="z-messagebox">İşlem kaydı GöçNet sistemine ve yerel veritabanına başarıyla kaydedildi. İşlem Kayıt No: 70001</div>
+            <button class="z-messagebox-button">Tamam</button>
+        </div>`);
+    });
+
+    try {
+        const queryResult = await sendQueryMessage(listener, {
+            action: 'YOKSIS_GOCNET_QUERY', phase: 'form', requestId: 'save-prep-query', portalTabId: 4,
+            attemptId, applicationNumber
+        });
+        assert.equal(queryResult.response?.state, 'student_data_filled');
+
+        const baseSave = {
+            action: 'YOKSIS_GOCNET_SAVE', portalTabId: 4, attemptId, applicationNumber,
+            studentNumber: '99000000001', passportNumber: 'P123456', firstName: 'TEST', lastName: 'STUDENT'
+        };
+        const phoneInput = dom.window.document.querySelector('input[placeholder="5XXXXXXXXX"]');
+
+        const rejectedShortMsg = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-short', phoneNational: '700000' });
+        assert.equal(rejectedShortMsg.keepOpen, false);
+
+        const rejectedLongMsg = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-long', phoneNational: '70000000001' });
+        assert.equal(rejectedLongMsg.keepOpen, false);
+
+        phoneInput.value = '700000';
+        const rejectedDomMismatch = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-dom-mismatch', phoneNational: '7000000000' });
+        assert.deepEqual(rejectedDomMismatch.response, { requestId: 'save-dom-mismatch', state: 'unknown' });
+        assert.equal(saveClicks, 0);
+
+        phoneInput.value = '7000000000';
+        const saved = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-valid', phoneNational: '7000000000' });
+        assert.deepEqual(saved.response, { requestId: 'save-valid', state: 'saved', recordId: '70001' });
+        assert.equal(saveClicks, 1);
+    } finally {
+        dom.window.close();
+    }
 });
