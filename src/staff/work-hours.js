@@ -75,7 +75,7 @@ export function initWorkHours() {
     dateInput.value = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     dateInput.max = dateInput.value;
     dateInput.addEventListener('change', () => loadDate(root, dateInput.value));
-    window.addEventListener('staff-work-hours:changed', () => loadDate(root, dateInput.value));
+    (document.defaultView || globalThis).addEventListener?.('staff-work-hours:changed', () => loadDate(root, dateInput.value));
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) void refreshReminder(document);
     });
