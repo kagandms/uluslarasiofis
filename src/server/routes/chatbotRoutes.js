@@ -17,9 +17,15 @@ import {
     executeChatbotTool
 } from '../domain/chatbotTools.js';
 import { listPublicDocumentOverview } from '../domain/documentPolicy.js';
+import {
+    generateChatLogId,
+    normalizeOptionalSessionId,
+    prepareChatTurnRecord
+} from '../domain/chatLog.js';
 import { ApiError } from '../domain/errors.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { routeResult } from '../http/routeResult.js';
+import { createChatLogRepository } from '../repositories/d1/chatLogRepository.js';
 import {
     APPLICATION_TRACKING_RATE_LIMIT,
     CHATBOT_GLOBAL_DAILY_LIMIT,
@@ -41,7 +47,7 @@ const CHATBOT_REQUEST_DEADLINE_MS = 15_000;
 const CHATBOT_MAX_REPLY_CHARS = 1200;
 
 const CHATBOT_ALLOWED_ROLES = Object.freeze(['user', 'assistant']);
-const CHATBOT_ROOT_KEYS = Object.freeze(['messages', 'language']);
+const CHATBOT_ROOT_KEYS = Object.freeze(['messages', 'language', 'session_id']);
 const CHATBOT_MESSAGE_KEYS = Object.freeze(['role', 'content']);
 
 // Çok satırlı mesajlarda yalnızca \n satır sonuna izin verilir; diğer kontrol karakterleri reddedilir.
@@ -476,7 +482,8 @@ function validateChatInput(body) {
     }
     return {
         messages: normalizedMessages,
-        language: body.language
+        language: body.language,
+        sessionId: normalizeOptionalSessionId(body.session_id)
     };
 }
 
@@ -963,20 +970,90 @@ function stripUntrustedHistoryTurns(messages) {
     return sanitized;
 }
 
+async function persistPublicChatTurn({
+    environment,
+    executionContext,
+    requestedSessionId,
+    language,
+    userText,
+    assistantText,
+    outcome,
+    tools,
+    latencyMs
+}) {
+    if (!environment?.DB) {
+        return { sessionId: null, turnId: null, writeStatus: 'skipped' };
+    }
+    const turnId = generateChatLogId();
+    const record = prepareChatTurnRecord({
+        sessionId: requestedSessionId,
+        turnId,
+        language,
+        userText,
+        assistantText,
+        outcome,
+        tools,
+        latencyMs
+    });
+    const repository = createChatLogRepository(environment.DB);
+    const writeTask = () => repository.appendTurn({
+        sessionId: record.sessionId,
+        newSessionId: record.sessionId,
+        turnId: record.turnId,
+        language: record.language,
+        userText: record.userText,
+        assistantText: record.assistantText,
+        outcome: record.outcome,
+        tools: record.tools,
+        latencyMs: record.latencyMs,
+        nowIso: record.nowIso
+    });
+
+    const waitUntil = typeof executionContext?.waitUntil === 'function'
+        ? executionContext.waitUntil.bind(executionContext)
+        : (typeof environment?.waitUntil === 'function' ? environment.waitUntil.bind(environment) : null);
+
+    if (waitUntil) {
+        waitUntil(
+            Promise.resolve()
+                .then(writeTask)
+                .catch(() => {})
+        );
+        return {
+            sessionId: record.sessionId,
+            turnId: record.turnId,
+            writeStatus: 'ok'
+        };
+    }
+
+    try {
+        const stored = await writeTask();
+        return {
+            sessionId: stored.sessionId,
+            turnId: stored.turnId,
+            writeStatus: 'ok'
+        };
+    } catch {
+        return { sessionId: null, turnId: null, writeStatus: 'failed' };
+    }
+}
+
 /**
- * Durumsuz ana sayfa sohbet uç noktası (`POST /api/public/chat`).
- * Kontrol sırası: yöntem -> aynı köken -> 8 KB boyut sınırı -> hız sınırları -> doğrulama -> başvuru numarasıyla durum sorgusu -> deterministik belge/eksik bilgi yanıtı -> günlük bütçe -> model/araç döngüsü.
- * Kişisel veri, başvuru numarası, durum içeriği, mesaj içeriği, araç argümanları ve model çıktısı hiçbir zaman günlüğe yazılmaz veya saklanmaz.
+ * Ana sayfa sohbet uç noktası (`POST /api/public/chat`).
+ * Kontrol sırası: yöntem -> aynı köken -> 8 KB boyut sınırı -> hız sınırları -> doğrulama -> başvuru numarasıyla durum sorgusu -> deterministik belge/eksik bilgi yanıtı -> günlük bütçe -> model/araç döngüsü -> en iyi çaba sohbet kaydı.
+ * Kişisel veri, başvuru numarası, durum içeriği, mesaj içeriği, araç argümanları ve model çıktısı hiçbir zaman konsol günlüğüne yazılmaz.
  * @param {Request} request Worker isteği.
  * @param {object} environment Worker bağlamları (`DB`, `AI`, isteğe bağlı `CHATBOT_MODEL`).
  * @param {string} requestId İstek izleme kimliği.
- * @returns {Promise<object>} `{ reply, actions }` gövdeli rota sonucu.
+ * @param {object|null} [executionContext] İsteğe bağlı Worker yürütme bağlamı (`waitUntil`).
+ * @returns {Promise<object>} `{ reply, actions, session_id, turn_id }` gövdeli rota sonucu.
  * @throws {ApiError} Yöntem, köken, boyut, hız sınırı, doğrulama veya hizmet hatasında uygun HTTP hatası fırlatır.
  */
-export async function handlePublicChat(request, environment, requestId) {
+export async function handlePublicChat(request, environment, requestId, executionContext = null) {
     const startedAt = Date.now();
     const executedToolNames = [];
     let outcome = 'error';
+    let chatLogWrite = 'skipped';
 
     try {
         requireMethod(request, 'POST');
@@ -995,6 +1072,7 @@ export async function handlePublicChat(request, environment, requestId) {
         const userTurns = sanitizedMessages
             .filter((message) => message.role === 'user')
             .map((message) => message.content);
+        const replyResult = await (async () => {
         const referencedApplications = extractScopedUserReferences(sanitizedMessages, lastUserMessage);
         if (referencedApplications.length > 1) {
             outcome = 'status_multiple_references';
@@ -1412,6 +1490,29 @@ export async function handlePublicChat(request, environment, requestId) {
             }
             throw error;
         }
+        })();
+
+        const replyBody = replyResult?.body && typeof replyResult.body === 'object' ? replyResult.body : null;
+        if (!replyBody || typeof replyBody.reply !== 'string') {
+            return replyResult;
+        }
+        const { sessionId, turnId, writeStatus } = await persistPublicChatTurn({
+            environment,
+            executionContext,
+            requestedSessionId: validated.sessionId,
+            language: validated.language,
+            userText: lastUserMessage,
+            assistantText: replyBody.reply,
+            outcome,
+            tools: executedToolNames,
+            latencyMs: Date.now() - startedAt
+        });
+        chatLogWrite = writeStatus;
+        return routeResult({
+            ...replyBody,
+            session_id: sessionId,
+            turn_id: turnId
+        }, { status: replyResult.status, cookie: replyResult.cookie });
     } catch (error) {
         outcome = outcomeForError(error);
         throw error;
@@ -1420,7 +1521,8 @@ export async function handlePublicChat(request, environment, requestId) {
             requestId,
             outcome,
             tools: executedToolNames,
-            latencyMs: Date.now() - startedAt
+            latencyMs: Date.now() - startedAt,
+            chatLogWrite
         });
     }
 }

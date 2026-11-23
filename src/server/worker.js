@@ -51,6 +51,7 @@ import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAudi
 import { handleStaffRecordNotes } from './routes/staffRecordNoteRoutes.js';
 import { createPublicInquiry } from './routes/inquiryRoutes.js';
 import { handlePublicChat } from './routes/chatbotRoutes.js';
+import { handlePublicChatFeedback } from './routes/chatFeedbackRoutes.js';
 import { handleStaffInquiries } from './routes/staffInquiryRoutes.js';
 
 function apiErrorFromUnknown(error) {
@@ -316,6 +317,7 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/public/applications/tracking-lookup') return lookupApplicationTracking(request, environment);
     if (pathname === '/api/public/inquiries') return createPublicInquiry(request, environment, requestId);
     if (pathname === '/api/public/chat') return handlePublicChat(request, environment, requestId);
+    if (pathname === '/api/public/chat/feedback') return handlePublicChatFeedback(request, environment, requestId);
     if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
     if (pathname === '/api/public/applications/current/declaration') return acceptCurrentApplicationDeclaration(request, environment, requestId);
     if (pathname === '/api/public/applications/current/contact-acknowledgement') {
