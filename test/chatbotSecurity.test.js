@@ -759,9 +759,19 @@ test('sensitive topics (threat, self-harm, legal/medical guarantee, deportation 
     ];
 
     const promiseWords = ['garanti', 'guarantee', 'kesin onay', 'гаранти', 'Kepillik', 'أضمن'];
+    const officeMentionByLanguage = {
+        tr: 'Uluslararası Öğrenci Ofis',
+        en: 'International Student Office',
+        ru: 'Международный студенческий офис',
+        tk: 'Halkara talyplar ofis',
+        ar: 'مكتب الطلاب الدوليين'
+    };
 
     for (let index = 0; index < CHATBOT_LANGUAGES.length; index += 1) {
         const language = CHATBOT_LANGUAGES[index];
+        const safeTexts = await getServerSafeTexts(language);
+        const guaranteeOrLegalRefusal = getChatbotFixedText('guaranteeOrLegalRefusal', language);
+        safeTexts.add(guaranteeOrLegalRefusal);
 
         const urgentEnv = createEnvironment(new Error('Acil durum yönlendirmesinde model çağrılmamalı.'));
         const urgentRes = await worker.fetch(
@@ -776,7 +786,9 @@ test('sensitive topics (threat, self-harm, legal/medical guarantee, deportation 
         assert.equal(urgentRes.status, 200);
         assert.equal(urgentEnv.fakeAi.callCount, 0);
         assert.deepEqual(urgentPayload.actions, [{ type: 'inquiry' }]);
+        assert.ok(safeTexts.has(urgentPayload.reply));
         assertNoLeakage(urgentPayload.reply, promiseWords);
+        assert.ok(urgentPayload.reply.includes(officeMentionByLanguage[language]));
 
         for (let topicIndex = 0; topicIndex < sensitivePrompts.length; topicIndex += 1) {
             const handoffEnv = createEnvironment([
@@ -796,10 +808,17 @@ test('sensitive topics (threat, self-harm, legal/medical guarantee, deportation 
             );
             const handoffPayload = await handoffRes.json();
             assert.equal(handoffRes.status, 200);
-            assert.equal(handoffEnv.fakeAi.callCount, 1);
+            assert.ok(handoffEnv.fakeAi.callCount === 0 || handoffEnv.fakeAi.callCount === 1);
             assert.deepEqual(handoffPayload.actions, [{ type: 'inquiry' }]);
+            assert.ok(safeTexts.has(handoffPayload.reply));
             assert.equal(handoffPayload.reply.includes('Kesin onaylanır'), false);
-            assert.equal(handoffPayload.reply.includes('garanti'), false);
+            assert.equal(handoffPayload.reply.includes('garanti veriyorum'), false);
+            assert.equal(handoffPayload.reply.toLowerCase().includes('kesin'), false);
+            assert.equal(handoffPayload.reply.toLowerCase().includes('definitely'), false);
+            if (handoffPayload.reply !== guaranteeOrLegalRefusal) {
+                assertNoLeakage(handoffPayload.reply, promiseWords);
+            }
+            assert.ok(handoffPayload.reply.includes(officeMentionByLanguage[language]));
             assert.ok(handoffPayload.reply.trim().length > 0);
         }
     }
