@@ -1,8 +1,65 @@
+const CHAT_SESSION_PAGE_SIZE = 25;
+const CHAT_SESSION_PREVIEW_MAX_CHARS = 120;
+
+function truncatePreview(text) {
+    if (typeof text !== 'string' || !text) return '';
+    const chars = [...text];
+    if (chars.length <= CHAT_SESSION_PREVIEW_MAX_CHARS) return text;
+    return `${chars.slice(0, CHAT_SESSION_PREVIEW_MAX_CHARS - 1).join('')}…`;
+}
+
+function parseToolsJson(raw) {
+    if (typeof raw !== 'string' || !raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
 /**
- * Ana sayfa sohbet günlüğü (`chat_sessions`, `chat_turns`) için D1 yazma işlemlerini oluşturur.
- * Yalnız yazma tarafını içerir: oturum oluşturma, tur ekleme ve geri bildirim kaydetme.
+ * Oturum listesi sayfalama imlecini `(last_at, id)` çiftinden kodlar.
+ * @param {string} lastAt Son etkinlik zaman damgası.
+ * @param {string} id Oturum kimliği.
+ * @returns {string} URL-güvenli taban-64 imleç.
+ */
+export function encodeChatSessionCursor(lastAt, id) {
+    return btoa(`${encodeURIComponent(lastAt)}|${encodeURIComponent(id)}`)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+}
+
+/**
+ * Oturum listesi sayfalama imlecini doğrular ve çözer.
+ * @param {unknown} cursor Ham imleç dizesi.
+ * @returns {{lastAt: string, id: string}|null} Geçerliyse `{ lastAt, id }`, aksi halde null.
+ */
+export function decodeChatSessionCursor(cursor) {
+    if (typeof cursor !== 'string') return null;
+    const trimmed = cursor.trim();
+    if (!trimmed || trimmed.length > 256 || !/^[A-Za-z0-9_-]+$/.test(trimmed)) return null;
+    try {
+        const base64 = trimmed.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+        const decoded = atob(padded);
+        const parts = decoded.split('|');
+        if (parts.length !== 2) return null;
+        const lastAt = decodeURIComponent(parts[0]);
+        const id = decodeURIComponent(parts[1]);
+        if (!lastAt || !id || lastAt.length > 64 || id.length > 64) return null;
+        return { lastAt, id };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Ana sayfa sohbet günlüğü (`chat_sessions`, `chat_turns`) için D1 kalıcılık işlemlerini oluşturur.
+ * Yazma (oturum, tur, geri bildirim) ve yetkili okuma/silme işlemlerini içerir.
  * @param {D1Database} database Cloudflare D1 bağlamı.
- * @returns {object} Sohbet günlüğü yazma deposu.
+ * @returns {object} Sohbet günlüğü deposu.
  */
 export function createChatLogRepository(database) {
     if (!database) throw new TypeError('A D1 database binding is required.');
@@ -103,6 +160,223 @@ export function createChatLogRepository(database) {
                 WHERE id = ?
             `).bind(value, nowIso, turnId).run();
             return result?.meta?.changes === 1;
+        },
+
+        /**
+         * Sohbet oturumlarını en yeniden eskiye imleçli sayfalama ve süzgeçle listeler.
+         * @param {{filter?: 'all'|'down'|'handoff'|'refused'|'fallback', cursor?: {lastAt: string, id: string}|null, limit?: number}} [options] Liste seçenekleri.
+         * @returns {Promise<{items: Array<{id: string, language: string, created_at: string, last_at: string, turn_count: number, has_down_vote: boolean, first_user_text: string}>, nextCursor: string|null}>} Sayfa sonucu.
+         */
+        async listSessions({ filter = 'all', cursor = null, limit = CHAT_SESSION_PAGE_SIZE } = {}) {
+            const safeLimit = Math.max(
+                1,
+                Math.min(CHAT_SESSION_PAGE_SIZE, Number.isSafeInteger(limit) ? limit : CHAT_SESSION_PAGE_SIZE)
+            );
+            const whereClauses = [];
+            const bindings = [];
+
+            if (filter === 'down') {
+                whereClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.feedback = 'down')");
+            } else if (filter === 'handoff') {
+                whereClauses.push(`EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND (t.outcome = 'handoff' OR t.tools LIKE '%"handoff_to_office"%'))`);
+            } else if (filter === 'refused') {
+                whereClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.outcome = 'refusal')");
+            } else if (filter === 'fallback') {
+                whereClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.outcome = 'fallback')");
+            }
+
+            if (cursor && typeof cursor.lastAt === 'string' && typeof cursor.id === 'string') {
+                whereClauses.push('(s.last_at < ? OR (s.last_at = ? AND s.id < ?))');
+                bindings.push(cursor.lastAt, cursor.lastAt, cursor.id);
+            }
+
+            const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+            bindings.push(safeLimit + 1);
+
+            const result = await database.prepare(`
+                SELECT
+                    s.id,
+                    s.language,
+                    s.created_at,
+                    s.last_at,
+                    s.turn_count,
+                    EXISTS (
+                        SELECT 1 FROM chat_turns td
+                        WHERE td.session_id = s.id AND td.feedback = 'down'
+                    ) AS has_down_vote,
+                    (
+                        SELECT tf.user_text FROM chat_turns tf
+                        WHERE tf.session_id = s.id
+                        ORDER BY tf.seq ASC
+                        LIMIT 1
+                    ) AS first_user_text
+                FROM chat_sessions AS s
+                ${whereSql}
+                ORDER BY s.last_at DESC, s.id DESC
+                LIMIT ?
+            `).bind(...bindings).all();
+
+            const rows = result.results ?? [];
+            const hasMore = rows.length > safeLimit;
+            const pageRows = hasMore ? rows.slice(0, safeLimit) : rows;
+            const items = pageRows.map((row) => ({
+                id: row.id,
+                language: row.language,
+                created_at: row.created_at,
+                last_at: row.last_at,
+                turn_count: Number(row.turn_count) || 0,
+                has_down_vote: Boolean(row.has_down_vote),
+                first_user_text: truncatePreview(row.first_user_text)
+            }));
+            const lastItem = items[items.length - 1];
+            const nextCursor = hasMore && lastItem ? encodeChatSessionCursor(lastItem.last_at, lastItem.id) : null;
+            return { items, nextCursor };
+        },
+
+        /**
+         * Tek bir sohbet oturumunu ve sıraya dizilmiş tüm turlarını okur.
+         * @param {string} sessionId Oturum kimliği.
+         * @returns {Promise<{session: {id: string, language: string, created_at: string, last_at: string, turn_count: number}, turns: Array<{id: string, seq: number, user_text: string, assistant_text: string, outcome: string, tools: string[], feedback: string|null, created_at: string}>}|null>} Oturum ve turlar veya null.
+         */
+        async getSessionWithTurns(sessionId) {
+            const session = await database.prepare(`
+                SELECT id, language, created_at, last_at, turn_count
+                FROM chat_sessions
+                WHERE id = ?
+                LIMIT 1
+            `).bind(sessionId).first();
+            if (!session) return null;
+
+            const turnsResult = await database.prepare(`
+                SELECT id, seq, user_text, assistant_text, outcome, tools, feedback, created_at
+                FROM chat_turns
+                WHERE session_id = ?
+                ORDER BY seq ASC
+            `).bind(sessionId).all();
+
+            return {
+                session: {
+                    id: session.id,
+                    language: session.language,
+                    created_at: session.created_at,
+                    last_at: session.last_at,
+                    turn_count: Number(session.turn_count) || 0
+                },
+                turns: (turnsResult.results ?? []).map((row) => ({
+                    id: row.id,
+                    seq: Number(row.seq) || 0,
+                    user_text: row.user_text,
+                    assistant_text: row.assistant_text,
+                    outcome: row.outcome,
+                    tools: parseToolsJson(row.tools),
+                    feedback: row.feedback ?? null,
+                    created_at: row.created_at
+                }))
+            };
+        },
+
+        /**
+         * Tek bir sohbet oturumunu (turları CASCADE ile birlikte) kalıcı olarak siler.
+         * Personel kimliği verildiyse sohbet metni içermeyen denetim kaydı da yazar.
+         * @param {{id: string, staffId?: string|null, nowIso?: string, requestId?: string, auditId?: string}} input Silme girdileri.
+         * @returns {Promise<boolean>} Oturum silindiyse true, bulunamadıysa false.
+         */
+        async deleteSessionById({
+            id,
+            staffId = null,
+            nowIso = new Date().toISOString(),
+            requestId = `req_${crypto.randomUUID()}`,
+            auditId = crypto.randomUUID()
+        }) {
+            if (!staffId) {
+                const result = await database.prepare(`
+                    DELETE FROM chat_sessions
+                    WHERE id = ?
+                `).bind(id).run();
+                return result?.meta?.changes === 1;
+            }
+            const safeMetadataJson = JSON.stringify({ sessionId: id, result: 'success' });
+            const results = await database.batch([
+                database.prepare(`
+                    DELETE FROM chat_sessions
+                    WHERE id = ?
+                `).bind(id),
+                database.prepare(`
+                    INSERT INTO audit_events (
+                        id, event_type, actor_type, actor_staff_id, application_id,
+                        request_id, safe_metadata_json, created_at
+                    )
+                    SELECT ?, 'staff.chat_session_deleted', 'staff', ?, NULL, ?, ?, ?
+                    WHERE changes() = 1
+                `).bind(auditId, staffId, requestId, safeMetadataJson, nowIso)
+            ]);
+            return results[0]?.meta?.changes === 1;
+        },
+
+        /**
+         * Belirtilen kesim zamanından daha eski tüm sohbet oturumlarını (turlarıyla birlikte) siler.
+         * @param {{cutoffIso: string, olderThanDays?: number|null, staffId?: string|null, nowIso?: string, requestId?: string, auditId?: string}} input Toplu silme girdileri.
+         * @returns {Promise<number>} Silinen oturum sayısı.
+         */
+        async deleteSessionsOlderThan({
+            cutoffIso,
+            olderThanDays = null,
+            staffId = null,
+            nowIso = new Date().toISOString(),
+            requestId = `req_${crypto.randomUUID()}`,
+            auditId = crypto.randomUUID()
+        }) {
+            const result = await database.prepare(`
+                DELETE FROM chat_sessions
+                WHERE datetime(last_at) < datetime(?)
+            `).bind(cutoffIso).run();
+            const deleted = Number(result?.meta?.changes) || 0;
+            if (staffId && deleted > 0) {
+                const safeMetadataJson = JSON.stringify({
+                    olderThanDays,
+                    deletedCount: deleted,
+                    result: 'success'
+                });
+                await database.prepare(`
+                    INSERT INTO audit_events (
+                        id, event_type, actor_type, actor_staff_id, application_id,
+                        request_id, safe_metadata_json, created_at
+                    ) VALUES (?, 'staff.chat_sessions_purged', 'staff', ?, NULL, ?, ?, ?)
+                `).bind(auditId, staffId, requestId, safeMetadataJson, nowIso).run();
+            }
+            return deleted;
+        },
+
+        /**
+         * Verilen bugün ve son 7 gün başlangıç sınırlarına göre yanıt ve oy sayılarını hesaplar.
+         * @param {{todayStartIso: string, last7StartIso: string}} input UTC ISO zaman sınırları.
+         * @returns {Promise<{today: {answers: number, up: number, down: number}, last7: {answers: number, up: number, down: number}}>} İstatistik sayıları.
+         */
+        async getStats({ todayStartIso, last7StartIso }) {
+            const row = await database.prepare(`
+                SELECT
+                    SUM(CASE WHEN datetime(created_at) >= datetime(?) THEN 1 ELSE 0 END) AS today_answers,
+                    SUM(CASE WHEN datetime(created_at) >= datetime(?) AND feedback = 'up' THEN 1 ELSE 0 END) AS today_up,
+                    SUM(CASE WHEN datetime(created_at) >= datetime(?) AND feedback = 'down' THEN 1 ELSE 0 END) AS today_down,
+                    COUNT(*) AS last7_answers,
+                    SUM(CASE WHEN feedback = 'up' THEN 1 ELSE 0 END) AS last7_up,
+                    SUM(CASE WHEN feedback = 'down' THEN 1 ELSE 0 END) AS last7_down
+                FROM chat_turns
+                WHERE datetime(created_at) >= datetime(?)
+            `).bind(todayStartIso, todayStartIso, todayStartIso, last7StartIso).first();
+
+            return {
+                today: {
+                    answers: Number(row?.today_answers) || 0,
+                    up: Number(row?.today_up) || 0,
+                    down: Number(row?.today_down) || 0
+                },
+                last7: {
+                    answers: Number(row?.last7_answers) || 0,
+                    up: Number(row?.last7_up) || 0,
+                    down: Number(row?.last7_down) || 0
+                }
+            };
         }
     });
 }

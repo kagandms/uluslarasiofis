@@ -53,6 +53,7 @@ import { createPublicInquiry } from './routes/inquiryRoutes.js';
 import { handlePublicChat } from './routes/chatbotRoutes.js';
 import { handlePublicChatFeedback } from './routes/chatFeedbackRoutes.js';
 import { handleStaffInquiries } from './routes/staffInquiryRoutes.js';
+import { handleStaffChatLogs } from './routes/staffChatLogRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -216,6 +217,13 @@ async function routeApi(request, environment, requestId, cache) {
     }
     if (pathname === '/api/staff/inquiries' || pathname.startsWith('/api/staff/inquiries/')) {
         return handleStaffInquiries(request, environment, requestId);
+    }
+    if (
+        pathname === '/api/staff/chat-stats'
+        || pathname === '/api/staff/chat-sessions'
+        || pathname.startsWith('/api/staff/chat-sessions/')
+    ) {
+        return handleStaffChatLogs(request, environment, requestId);
     }
     const gocnetEventMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/gocnet-attempts\/([^/]+)\/events$/);
     if (gocnetEventMatch) {
