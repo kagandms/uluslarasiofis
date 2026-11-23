@@ -791,6 +791,15 @@ function createDocumentSection(document, applicationId, documents, state, handle
         }
         if (item.access_available !== true && item.can_request_resubmission === true) {
             card.append(createDocumentAccessActions(document, item, { applicationId, handlers, isPending: Boolean(state.actionPending) }));
+        } else if (item.scan_status === 'pending' && item.can_request_resubmission !== true
+            && item.revision_number != null && item.revision_status === 'submitted'
+            && ['under_review', 'resubmission_required'].includes(state.detail?.application?.status)) {
+            card.append(createText(
+                document,
+                'p',
+                'staff-application-document-scan-pending-note',
+                'Yeni dosyanın güvenlik taraması bekleniyor; tarama bitince yeniden isteyebilirsiniz.'
+            ));
         }
         if (item.student_message) {
             card.append(createText(document, 'p', 'staff-application-student-message', `Öğrenciye iletilen neden: ${item.student_message}`));
