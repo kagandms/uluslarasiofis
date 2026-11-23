@@ -10,16 +10,40 @@ const LANGUAGE_NAMES = Object.freeze({
     ar: 'Arabic (العربية)'
 });
 
+const REFUSAL_TEXTS = Object.freeze({
+    tr: 'Yalnızca bu portal ve Türkiye’deki öğrenci ikamet izni başvuru süreciyle ilgili soruları yanıtlayabilirim. Diğer konular veya özel durumunuz için ana sayfadaki soru formunu kullanarak Uluslararası Öğrenci Ofisine ulaşabilirsiniz.',
+    en: 'I can only answer questions about this portal and the Turkish student residence permit application process. For other topics or your specific situation, please contact the International Student Office using the question form on the home page.',
+    ru: 'Я могу отвечать только на вопросы об этом портале и процессе оформления студенческого ВНЖ в Турции. По другим вопросам или по вашей индивидуальной ситуации обратитесь в Международный студенческий офис через форму вопросов на главной странице.',
+    tk: 'Men diňe bu portal we Türkiýedäki talyp ýaşaýyş rugsady arza tapgyry baradaky soraglara jogap berip bilýärin. Beýleki mowzuklar ýa-da aýratyn ýagdaýyňyz üçin baş sahypadaky sorag formasy arkaly Halkara talyplar ofisine ýüz tutup bilersiňiz.',
+    ar: 'يمكنني الإجابة فقط عن الأسئلة المتعلقة بهذه البوابة وإجراءات تصريح إقامة الطالب في تركيا. للموضوعات الأخرى أو لحالتك الخاصة، يرجى التواصل مع مكتب الطلاب الدوليين عبر نموذج الأسئلة في الصفحة الرئيسية.'
+});
+
+const OTHER_PERSON_STATUS_NOTE_TEXTS = Object.freeze({
+    tr: 'Her öğrenci yalnızca kendi ITU-XXXX-XXXX başvuru numarasıyla /basvurum/ sayfasından kendi başvuru durumunu kontrol edebilir.',
+    en: 'Each student can check only their own application status using their own ITU-XXXX-XXXX reference number on /basvurum/.',
+    ru: 'Каждый студент может проверить статус только своей заявки по собственному номеру ITU-XXXX-XXXX на странице /basvurum/.',
+    tk: 'Her talyp diňe öz ITU-XXXX-XXXX arza belgisi bilen /basvurum/ sahypasyndan öz arzasynyň ýagdaýyny barlap biler.',
+    ar: 'يمكن لكل طالب التحقق من حالة طلبه فقط باستخدام رقم ITU-XXXX-XXXX الخاص به عبر صفحة /basvurum/.'
+});
+
 /**
- * Fixed localized responses for off-topic/injection refusals, model fallbacks, daily budget limits, and deterministic document lists.
+ * Fixed localized responses for off-topic/injection refusals, third-party status refusals, guarantee/legal refusals, model fallbacks, daily budget limits, and deterministic document lists.
  */
 export const CHATBOT_FIXED_TEXTS = Object.freeze({
-    refusal: Object.freeze({
-        tr: 'Yalnızca bu portal ve Türkiye’deki öğrenci ikamet izni başvuru süreciyle ilgili soruları yanıtlayabilirim. Diğer konular veya özel durumunuz için ana sayfadaki soru formunu kullanarak Uluslararası Öğrenci Ofisine ulaşabilirsiniz.',
-        en: 'I can only answer questions about this portal and the Turkish student residence permit application process. For other topics or your specific situation, please contact the International Student Office using the question form on the home page.',
-        ru: 'Я могу отвечать только на вопросы об этом портале и процессе оформления студенческого ВНЖ в Турции. По другим вопросам или по вашей индивидуальной ситуации обратитесь в Международный студенческий офис через форму вопросов на главной странице.',
-        tk: 'Men diňe bu portal we Türkiýedäki talyp ýaşaýyş rugsady arza tapgyry baradaky soraglara jogap berip bilýärin. Beýleki mowzuklar ýa-da aýratyn ýagdaýyňyz üçin baş sahypadaky sorag formasy arkaly Halkara talyplar ofisine ýüz tutup bilersiňiz.',
-        ar: 'يمكنني الإجابة فقط عن الأسئلة المتعلقة بهذه البوابة وإجراءات تصريح إقامة الطالب في تركيا. للموضوعات الأخرى أو لحالتك الخاصة، يرجى التواصل مع مكتب الطلاب الدوليين عبر نموذج الأسئلة في الصفحة الرئيسية.'
+    refusal: REFUSAL_TEXTS,
+    otherPersonStatusRefusal: Object.freeze({
+        tr: `${REFUSAL_TEXTS.tr} ${OTHER_PERSON_STATUS_NOTE_TEXTS.tr}`,
+        en: `${REFUSAL_TEXTS.en} ${OTHER_PERSON_STATUS_NOTE_TEXTS.en}`,
+        ru: `${REFUSAL_TEXTS.ru} ${OTHER_PERSON_STATUS_NOTE_TEXTS.ru}`,
+        tk: `${REFUSAL_TEXTS.tk} ${OTHER_PERSON_STATUS_NOTE_TEXTS.tk}`,
+        ar: `${REFUSAL_TEXTS.ar} ${OTHER_PERSON_STATUS_NOTE_TEXTS.ar}`
+    }),
+    guaranteeOrLegalRefusal: Object.freeze({
+        tr: 'İkamet izni onayını garanti edemem, hukuki danışmanlık veremem ve itiraz veya resmî dilekçe hazırlayamam. İkamet izni kararı yalnızca Göç İdaresine aittir; durumunuzla ilgili bilgi için ana sayfadaki soru formunu kullanarak Uluslararası Öğrenci Ofisine ulaşabilirsiniz.',
+        en: 'I cannot guarantee residence permit approval, provide legal advice, or draft appeals or legal petitions. Residence permit decisions belong solely to the Migration Authority (Göç İdaresi); for guidance on your situation, please contact the International Student Office using the question form on the home page.',
+        ru: 'Я не могу гарантировать одобрение ВНЖ, давать юридические консультации или составлять апелляции и официальные заявления. Решение по ВНЖ принимает исключительно Миграционное управление (Göç İdaresi); по вашей ситуации обратитесь в Международный студенческий офис через форму вопросов на главной странице.',
+        tk: 'Ýaşaýyş rugsadynyň tassyklanjakdygyny kepillendirip, hukuk maslahatyny berip ýa-da şikaýat we resmi arza taýýarlap bilmerin. Ýaşaýyş rugsady boýunça karar diňe Migrasiýa edarasyna (Göç İdaresi) degişlidir; ýagdaýyňyz barada maglumat üçin baş sahypadaky sorag formasy arkaly Halkara talyplar ofisine ýüz tutup bilersiňiz.',
+        ar: 'لا أستطيع ضمان الموافقة على تصريح الإقامة أو تقديم استشارة قانونية أو كتابة طلبات استئناف أو عرائض رسمية. قرار تصريح الإقامة يعود حصراً لإدارة الهجرة (Göç İdaresi)؛ وللاستفسار حول وضعك يرجى التواصل مع مكتب الطلاب الدوليين عبر نموذج الأسئلة في الصفحة الرئيسية.'
     }),
     fallback: Object.freeze({
         tr: 'Bu soruyu tam anlayamadım. Şunlarda yardımcı olabilirim: gerekli belgeler, başvuru adımları, başvuru durumu (ITU numaranızla), belge yükleme ve yeniden yükleme, ofis saatleri. Dilerseniz aşağıdaki soru formuyla ofise de yazabilirsiniz.',
@@ -63,13 +87,7 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         tk: 'Size dogry resminama sanawyny bermek üçin şulary ýazyp bilersiňizmi: ',
         ar: 'لأتمكن من إعطائك قائمة المستندات الصحيحة، يرجى كتابة: '
     }),
-    otherPersonStatusNote: Object.freeze({
-        tr: 'Her öğrenci yalnızca kendi ITU-XXXX-XXXX başvuru numarasıyla /basvurum/ sayfasından kendi başvuru durumunu kontrol edebilir.',
-        en: 'Each student can check only their own application status using their own ITU-XXXX-XXXX reference number on /basvurum/.',
-        ru: 'Каждый студент может проверить статус только своей заявки по собственному номеру ITU-XXXX-XXXX на странице /basvurum/.',
-        tk: 'Her talyp diňe öz ITU-XXXX-XXXX arza belgisi bilen /basvurum/ sahypasyndan öz arzasynyň ýagdaýyny barlap biler.',
-        ar: 'يمكن لكل طالب التحقق من حالة طلبه فقط باستخدام رقم ITU-XXXX-XXXX الخاص به عبر صفحة /basvurum/.'
-    }),
+    otherPersonStatusNote: OTHER_PERSON_STATUS_NOTE_TEXTS,
     fingerprintNeeded: Object.freeze({
         tr: 'Göç İdaresi sisteminde parmak izi kaydınız yoksa başvurunuza devam etmeden önce parmak izi işleminizi tamamlamanız gerekir. Lütfen üniversitedeki Uluslararası Öğrenci Ofisine uğrayın; parmak izi işleminiz için sizi yönlendirecektir. İşlem tamamlandıktan sonra gerekli belge listesini bu sohbetten tekrar sorabilirsiniz.',
         en: 'If your fingerprints are not registered in the Migration Authority system, you must complete your fingerprint procedure before continuing with your application. Please visit the International Student Office at the university; they will guide you on your fingerprint procedure. Once the procedure is completed, you can ask for the required document list again in this chat.',
@@ -323,8 +341,8 @@ function resolveLanguage(language) {
 }
 
 /**
- * Returns a fixed localized chatbot message for refusal, fallback, daily-limit, document-list, missing-facts, missing-reference status, third-party status refusal, or fingerprint-needed responses.
- * @param {'refusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'|'otherPersonStatusNote'|'fingerprintNeeded'} kind Fixed text category.
+ * Returns a fixed localized chatbot message for refusal, third-party status refusal, guarantee/legal refusal, fallback, daily-limit, document-list, missing-facts, missing-reference status, or fingerprint-needed responses.
+ * @param {'refusal'|'otherPersonStatusRefusal'|'guaranteeOrLegalRefusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'|'otherPersonStatusNote'|'fingerprintNeeded'} kind Fixed text category.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string} Localized fixed response text.
  */
