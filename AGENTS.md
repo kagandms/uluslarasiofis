@@ -1,7 +1,7 @@
 # Production development and release policy
 
 - Use one active project folder on `production`. On this Mac, it is
-  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105` (task worktrees
+  `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-production` (task worktrees
   live beside it); other machines use their actual authorized repository folder.
 - Small, scoped fixes may be committed directly to `production`. A new feature, or any change that
   will take more than one session, uses a short-lived branch named for the task, created in its own

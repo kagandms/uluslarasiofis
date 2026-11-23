@@ -1,7 +1,7 @@
 ## Production development and release
 
 Use one active project folder on the `production` branch. On this Mac it is
-`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`; other machines use
+`/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-production`; other machines use
 their actual authorized repository root (cloud checkout: `/workspace/uluslarasiofis`). Develop on
 `production`; create another branch or worktree only when the user explicitly requests it. Sessions
 sharing the active folder work sequentially and never write to it concurrently.
