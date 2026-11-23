@@ -475,3 +475,25 @@ Paylaşılan dosyalar tek sahipli çalışır: `src/server/worker.js` (rota sat�
 
 - 5A ve 5B, Faz 1–4 dosyalarıyla çakışmaz (5A: `topiMascot.js`/`homeChatbot.js`/`chatbot.css`; 5B: belge inceleme dosyaları). Dalga 2 ile aynı anda en çok 3 agent kuralı korunur.
 - Birleştirme sırası: 5A → 4B (aynı widget dosyaları). 5B bağımsız, hızlı yol adayıdır (migration yoksa).
+
+## 14. Devir notu — 2026-11-23 akşamı kalınan yer (kullanıcı "duralım" dedi)
+
+- **Tarih:** 2026-11-23. **Kaynak:** bu oturumdaki agy çalıştırmaları ve Claude incelemesi. **Durum:** ara durum; hiçbir dal `production`'a merge/push edilmedi, yayın yok.
+- **Worktree'ler** (hepsi `/Users/kagansmtdms/Downloads/Проекты/` altında, `node_modules` ana klasöre symlink): `uo-staff-topi-api`, `uo-ykn-auto-pure`, `uo-yoksis-excel-api`, `uo-yoksis-excel-ui`, `uo-ykn-auto-flow`, `uo-document-rerequest-fix`, `uo-staff-topi-ui`.
+- **agy istemleri ve çalıştırıcı:** `/Users/kagansmtdms/Downloads/Проекты/uo-handover-2026-11-23/` (`common.txt` + `t-*.txt`; `run.sh <worktree-soneki> <model> <görev-dosyası>`). **Önemli:** headless agy, klasör yeniden adlandırıldığı için dosya okuyamıyordu; `run.sh` her çalıştırmaya yalnız o worktree'ye okuma/yazma ve `~/.gemini` okuma izni veren `--settings` geçirir. Arka planda iki kez başlatma yapılmaz (bir kez iki yazar aynı worktree'ye yazdı; sonuç incelendi, sorun kalmadı).
+
+| Görev | Dal | Durum | Sonraki adım |
+|---|---|---|---|
+| 1A.0 sözleşme | `task/staff-topi-api` | **commit `daf9350`**, 7/7 test | — |
+| 1A Topi sunucu | `task/staff-topi-api` | commit **yok**; kod + testler worktree'de (24/24 yeşildi). Ardından "SQL'i `repositories/d1/staffAssistantRepository.js`'e taşı + isStale" düzeltmesi (`t-1a-fix.txt`) çalıştı, **sonucu incelenmedi** | testleri koş (`node --test test/staffAssistant*.test.js`), `staffAssistantTools.js`'te SQL kalmadığını doğrula, commit `feat(staff-assistant): server route, read-only tools and intent parsing` |
+| 2A YKN saf modüller | `task/ykn-auto-pure` | **commit `6938cf7`**, 28/28, hayalet yüz + iptal düzeltmeleri dahil | — |
+| 2B YKN bağlama | `task/ykn-auto-flow` (2A'dan) | commit **yok**; worktree'de, tüm YKN testleri 266/266 | **`t-2b-fix.txt` gönderilmedi**: Tek Tık çalışırken otomatik zincirin devreye girmemesi (3 koruma). Sonra incele, commit `feat(ykn): wire automatic search→acceptance→crop→transfer chain`; kullanıcıyla yerel deneme (2B.7) |
+| 3A Excel sunucu + migration 0046 | `task/yoksis-excel-api` | **commit `ea6d26e`**, 24/24; ledger kontrolü CI token ister (yerelde koşmadı) | — |
+| 3B Excel arayüz | `task/yoksis-excel-ui` (3A'dan) | **commit `7d1dff1`**, 25/25 | gerçek `Ikamet_Islemleri_*.xls` ile yerel sayım doğrulaması (dosya bilgisayarda bulunamadı; kullanıcı koyacak) |
+| 5B belge yeniden isteme | `task/document-rerequest-fix` | agy **çalışıyordu** (durdurulmadı, kendi kendine biter); kullanıcı teyidi: düğme hiç görünmüyor; UI kodu doğru, kök neden sunucu tarafında aranıyor | çıktısını incele: başarısız test + kök neden (dosya:satır) + en küçük düzeltme; testleri koş, commit |
+| 1B Topi arayüz | `task/staff-topi-ui` (`daf9350`'den, worktree hazır, boş) | **başlatılmadı**; istem hazır `t-1b.txt` | başlat |
+| 5A yumak oyunu | `task/topi-yarn-play` | **başlatılmadı**, worktree yok; istem yazılmadı (tasarım 13.1) | istem yaz, başlat (1B'den sonra panele bağlanır) |
+| Faz 5 (4A–4D), Bölüm 12 testleri | — | başlanmadı | Faz 1–4 ve 5A/5B bittikten sonra |
+
+- **Açık sorular:** gerçek Excel dosyasının yeri (3B doğrulaması); ~20 pasaport taraması ile yüz bulma ölçümü (2A.1; şimdilik Chrome `FaceDetector`, yoksa zincir durur → elle kırpma); A9 varsayılanı uygulandı (itiraz gelmedi).
+- **Devam sırası:** (1) 5B çıktısı ve 1A düzeltmesini incele/commit; (2) `t-2b-fix.txt` + `t-1b.txt` + 5A'yı başlat (en çok 3 agent); (3) hepsi bitince entegrasyon dalında `npm test`, `npm run build:production`, `npm run deploy:dry-run:production`; (4) kullanıcı yerel deneme; merge/yayın ayrı karar.
