@@ -4,7 +4,6 @@ import {
     isExportedAtStale,
     parseExportedAtFromFileName,
     parseYoksisExcel,
-    readPendingImport,
     uploadYoksisImport
 } from '../staff/yoksisExcelImport.js';
 
@@ -72,6 +71,18 @@ function classifyApplicationStatus(status) {
     if (normalized === 'eksik belge bekliyor') return 'missing_documents';
     if (['reddedildi', 'basvuru reddedildi', 'ret'].includes(normalized)) return 'rejected';
     return 'other';
+}
+
+function isValidExcelFile(file) {
+    return Boolean(file && /\.(xls|xlsx)$/i.test(String(file.name || '').trim()));
+}
+
+function formatFileSize(bytes) {
+    const size = Number(bytes);
+    if (!Number.isFinite(size) || size < 0) return '0 B';
+    if (size < 1024) return `${Math.round(size)} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1).replace('.', ',')} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
 }
 
 function readFileBuffer(file, window) {
@@ -213,8 +224,8 @@ export function initializeYoksisDocumentAuditManager(root) {
     if (!window || !startButton || !stopButton || !confirmation || !results) return;
 
     const excelFileInput = root.querySelector('#audit-excel-file');
+    const excelFileInfo = root.querySelector('#audit-excel-file-info');
     const excelUploadButton = root.querySelector('#audit-excel-upload');
-    const excelResumeButton = root.querySelector('#audit-excel-resume');
     const excelLatest = root.querySelector('#audit-import-latest');
     const excelStaleWarning = root.querySelector('#audit-excel-stale-warning');
     const excelSummary = root.querySelector('#audit-excel-summary');
@@ -245,8 +256,9 @@ export function initializeYoksisDocumentAuditManager(root) {
                 ? `Okunamayanları yeniden tara (${state.unreadableCount})`
                 : 'Okunamayanları yeniden tara';
         }
-        if (excelUploadButton) excelUploadButton.disabled = state.excelBusy;
-        if (excelResumeButton) excelResumeButton.disabled = state.excelBusy;
+        if (excelUploadButton) {
+            excelUploadButton.disabled = state.excelBusy || !isValidExcelFile(excelFileInput?.files?.[0]);
+        }
         if (excelFileInput) excelFileInput.disabled = state.excelBusy;
     }
 
@@ -637,19 +649,6 @@ export function initializeYoksisDocumentAuditManager(root) {
         }
     }
 
-    function syncPendingImportUi() {
-        if (!excelResumeButton) return;
-        const pendingImport = readPendingImport(window.sessionStorage);
-        excelResumeButton.hidden = !pendingImport;
-        if (pendingImport) {
-            const remainingCount = pendingImport.batches.reduce((sum, batch) => sum + batch.length, 0);
-            const progressEl = root.querySelector('#audit-excel-progress');
-            if (progressEl && !progressEl.textContent) {
-                progressEl.textContent = `Yarım kalan aktarım bulundu (${remainingCount} kayıt bekliyor). Kaldığı yerden devam edebilirsiniz.`;
-            }
-        }
-    }
-
     function updateStaleFileWarning(exportedAt) {
         if (!excelStaleWarning) return;
         excelStaleWarning.hidden = !isExportedAtStale(exportedAt);
@@ -658,10 +657,24 @@ export function initializeYoksisDocumentAuditManager(root) {
     function handleExcelFileChange() {
         const file = excelFileInput?.files?.[0];
         if (!file) {
+            if (excelFileInfo) {
+                excelFileInfo.textContent = '';
+                excelFileInfo.hidden = true;
+            }
             updateStaleFileWarning(null);
+            updateControls();
             return;
         }
-        updateStaleFileWarning(parseExportedAtFromFileName(file.name));
+        const validFile = isValidExcelFile(file);
+        if (excelFileInfo) {
+            const sizeLabel = formatFileSize(file.size);
+            excelFileInfo.textContent = validFile
+                ? `Seçilen dosya: ${file.name} (${sizeLabel})`
+                : `Seçilen dosya: ${file.name} (${sizeLabel}) — Yalnız .xls veya .xlsx dosyaları yüklenebilir.`;
+            excelFileInfo.hidden = false;
+        }
+        updateStaleFileWarning(validFile ? parseExportedAtFromFileName(file.name) : null);
+        updateControls();
     }
 
     async function handleExcelUpload() {
@@ -709,7 +722,6 @@ export function initializeYoksisDocumentAuditManager(root) {
                 rows: parsed.rows,
                 exportedAt: parsed.exportedAt,
                 fetcher: window.fetch.bind(window),
-                storage: window.sessionStorage,
                 onProgress: ({ completedBatches, totalBatches, storedCount }) => {
                     setText(
                         root,
@@ -720,8 +732,11 @@ export function initializeYoksisDocumentAuditManager(root) {
             });
 
             if (!result.ok) {
-                setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${result.error || 'Bilinmeyen hata.'}`);
-                syncPendingImportUi();
+                setText(
+                    root,
+                    '#audit-excel-progress',
+                    `Yükleme yarıda kaldı (${result.completedBatches}/${result.totalBatches} parti gönderildi). Aynı dosyayı yeniden seçip yükleyin; kayıtlar çift yazılmaz.`
+                );
                 return;
             }
 
@@ -733,59 +748,10 @@ export function initializeYoksisDocumentAuditManager(root) {
                 renderRejectedRows(root, [...parsed.rejected, ...serverRows]);
             }
             setText(root, '#audit-excel-progress', `Excel aktarımı tamamlandı (${result.storedCount} kayıt kaydedildi).`);
-            if (excelResumeButton) excelResumeButton.hidden = true;
             await loadLatestImport();
             await loadSharedRecords();
         } catch (error) {
             setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${error.message || 'Bilinmeyen hata.'}`);
-            syncPendingImportUi();
-        } finally {
-            state.excelBusy = false;
-            updateControls();
-        }
-    }
-
-    async function handleExcelResume() {
-        if (state.excelBusy) return;
-        const pendingImport = readPendingImport(window.sessionStorage);
-        if (!pendingImport) {
-            if (excelResumeButton) excelResumeButton.hidden = true;
-            return;
-        }
-        state.excelBusy = true;
-        updateControls();
-        setText(root, '#audit-excel-progress', 'Yarım kalan aktarım kaldığı yerden sürdürülüyor…');
-
-        try {
-            const result = await uploadYoksisImport({
-                batches: pendingImport.batches,
-                exportedAt: pendingImport.exportedAt,
-                fetcher: window.fetch.bind(window),
-                importId: pendingImport.importId,
-                storage: window.sessionStorage,
-                startBatchIndex: pendingImport.completedBatches,
-                totalBatches: pendingImport.totalBatches,
-                initialStoredCount: pendingImport.storedCount,
-                onProgress: ({ completedBatches, totalBatches, storedCount }) => {
-                    setText(
-                        root,
-                        '#audit-excel-progress',
-                        `${completedBatches} / ${totalBatches} paket yüklendi (${storedCount} kayıt)…`
-                    );
-                }
-            });
-            if (!result.ok) {
-                setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${result.error || 'Bilinmeyen hata.'}`);
-                syncPendingImportUi();
-                return;
-            }
-            setText(root, '#audit-excel-progress', `Excel aktarımı tamamlandı (${result.storedCount} kayıt kaydedildi).`);
-            if (excelResumeButton) excelResumeButton.hidden = true;
-            await loadLatestImport();
-            await loadSharedRecords();
-        } catch (error) {
-            setText(root, '#audit-excel-progress', `Aktarım tamamlanamadı: ${error.message || 'Bilinmeyen hata.'}`);
-            syncPendingImportUi();
         } finally {
             state.excelBusy = false;
             updateControls();
@@ -797,7 +763,6 @@ export function initializeYoksisDocumentAuditManager(root) {
     stopButton.addEventListener('click', () => { void stopScan(); });
     excelFileInput?.addEventListener('change', () => { handleExcelFileChange(); });
     excelUploadButton?.addEventListener('click', () => { void handleExcelUpload(); });
-    excelResumeButton?.addEventListener('click', () => { void handleExcelResume(); });
     root.querySelector('#audit-search-submit')?.addEventListener('click', () => {
         query.page = 1;
         void loadSharedRecords();
@@ -828,7 +793,6 @@ export function initializeYoksisDocumentAuditManager(root) {
         void loadSharedRecords();
     });
     updateControls();
-    syncPendingImportUi();
     if (excelLatest) void loadLatestImport();
     void refreshSharedRecords(true);
 }

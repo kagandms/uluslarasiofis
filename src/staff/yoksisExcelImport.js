@@ -3,9 +3,6 @@
  * Pure normalization logic is separated from SheetJS workbook access so it can be unit-tested in Node.
  */
 
-/** Session storage key used to persist interrupted Excel import batches for resume. */
-export const IMPORT_PENDING_STORAGE_KEY = 'staff-yoksis-audit-import-pending-v1';
-
 /** Maximum accepted Excel file size in bytes (10 MB). */
 export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -454,87 +451,15 @@ export function chunkImportRows(rows, chunkSize = DEFAULT_IMPORT_CHUNK_SIZE) {
 }
 
 /**
- * Reads an interrupted Excel import state from session storage.
- * @param {Storage|null|undefined} storage Browser storage object.
- * @returns {{
- *   importId: string,
- *   exportedAt: string|null,
- *   batches: Array<Array<object>>,
- *   completedBatches: number,
- *   totalBatches: number,
- *   storedCount: number
- * }|null} Pending import state or `null`.
- */
-export function readPendingImport(storage) {
-    if (!storage || typeof storage.getItem !== 'function') return null;
-    try {
-        const raw = storage.getItem(IMPORT_PENDING_STORAGE_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object'
-            || typeof parsed.importId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(parsed.importId)
-            || !Array.isArray(parsed.batches) || parsed.batches.length === 0) {
-            return null;
-        }
-        return {
-            importId: parsed.importId,
-            exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : null,
-            batches: parsed.batches,
-            completedBatches: Number.isSafeInteger(parsed.completedBatches) ? parsed.completedBatches : 0,
-            totalBatches: Number.isSafeInteger(parsed.totalBatches) ? parsed.totalBatches : parsed.batches.length,
-            storedCount: Number.isSafeInteger(parsed.storedCount) ? parsed.storedCount : 0
-        };
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Saves or clears pending Excel import batches in session storage (safe against quota/security errors).
- * @param {Storage|null|undefined} storage Browser storage object.
- * @param {object|null} state Pending state to save, or `null` to clear.
- * @returns {boolean} True when persisted successfully.
- */
-export function savePendingImport(storage, state) {
-    if (!storage) return false;
-    try {
-        if (!state) {
-            if (typeof storage.removeItem === 'function') {
-                storage.removeItem(IMPORT_PENDING_STORAGE_KEY);
-            }
-            return true;
-        }
-        if (typeof storage.setItem !== 'function') return false;
-        storage.setItem(IMPORT_PENDING_STORAGE_KEY, JSON.stringify(state));
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-/**
- * Clears any saved pending Excel import state from session storage.
- * @param {Storage|null|undefined} storage Browser storage object.
- */
-export function clearPendingImport(storage) {
-    savePendingImport(storage, null);
-}
-
-/**
  * Uploads normalized Excel rows in 50-row batches to `POST /api/staff/yoksis-document-audit/import`.
  * Sends `final: true` only on the last batch after all preceding batches succeed.
- * On failure, persists remaining batches under `IMPORT_PENDING_STORAGE_KEY` with the same `importId`.
+ * Stops immediately on failure without sending `final: true`.
  * @param {{
  *   rows?: Array<object>,
- *   batches?: Array<Array<object>>,
  *   exportedAt?: string|null,
  *   fetcher?: typeof fetch,
  *   importId?: string,
- *   onProgress?: (progress: { completedBatches: number, totalBatches: number, storedCount: number }) => void,
- *   storage?: Storage|null,
- *   startBatchIndex?: number,
- *   totalBatches?: number,
- *   initialStoredCount?: number
+ *   onProgress?: (progress: { completedBatches: number, totalBatches: number, storedCount: number }) => void
  * }} options Upload options.
  * @returns {Promise<{
  *   ok: boolean,
@@ -543,55 +468,36 @@ export function clearPendingImport(storage) {
  *   rejected: Array<{ index: number, reason: string }>,
  *   completedBatches: number,
  *   totalBatches: number,
- *   remainingBatches: Array<Array<object>>,
  *   error?: string
  * }>} Upload outcome.
  */
 export async function uploadYoksisImport({
     rows = [],
-    batches: providedBatches,
     exportedAt = null,
     fetcher = globalThis.fetch,
     importId: providedImportId,
-    onProgress,
-    storage = null,
-    startBatchIndex = 0,
-    totalBatches: providedTotalBatches,
-    initialStoredCount = 0
+    onProgress
 } = {}) {
     const importId = providedImportId || createImportId();
-    const batches = Array.isArray(providedBatches) ? providedBatches : chunkImportRows(rows, DEFAULT_IMPORT_CHUNK_SIZE);
-    const totalBatches = Number.isSafeInteger(providedTotalBatches)
-        ? providedTotalBatches
-        : startBatchIndex + batches.length;
+    const batches = chunkImportRows(rows, DEFAULT_IMPORT_CHUNK_SIZE);
+    const totalBatches = batches.length;
 
-    let completedBatches = startBatchIndex;
-    let storedCount = initialStoredCount;
+    let completedBatches = 0;
+    let storedCount = 0;
     const serverRejected = [];
 
     if (batches.length === 0) {
-        clearPendingImport(storage);
         return {
             ok: true,
             importId,
             storedCount,
             rejected: serverRejected,
             completedBatches,
-            totalBatches,
-            remainingBatches: []
+            totalBatches
         };
     }
 
     if (typeof fetcher !== 'function') {
-        const remainingBatches = batches.slice();
-        savePendingImport(storage, {
-            importId,
-            exportedAt,
-            batches: remainingBatches,
-            completedBatches,
-            totalBatches,
-            storedCount
-        });
         return {
             ok: false,
             importId,
@@ -599,7 +505,6 @@ export async function uploadYoksisImport({
             rejected: serverRejected,
             completedBatches,
             totalBatches,
-            remainingBatches,
             error: 'Sunucu bağlantısı bulunamadı.'
         };
     }
@@ -650,15 +555,6 @@ export async function uploadYoksisImport({
                 onProgress({ completedBatches, totalBatches, storedCount });
             }
         } catch (error) {
-            const remainingBatches = batches.slice(i);
-            savePendingImport(storage, {
-                importId,
-                exportedAt,
-                batches: remainingBatches,
-                completedBatches,
-                totalBatches,
-                storedCount
-            });
             return {
                 ok: false,
                 importId,
@@ -666,20 +562,17 @@ export async function uploadYoksisImport({
                 rejected: serverRejected,
                 completedBatches,
                 totalBatches,
-                remainingBatches,
                 error: error instanceof Error ? error.message : 'Aktarım sırasında bağlantı kesildi.'
             };
         }
     }
 
-    clearPendingImport(storage);
     return {
         ok: true,
         importId,
         storedCount,
         rejected: serverRejected,
         completedBatches,
-        totalBatches,
-        remainingBatches: []
+        totalBatches
     };
 }
