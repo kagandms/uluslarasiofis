@@ -63,7 +63,7 @@ test('public landing exposes the requested student entry points and information 
     assert.equal(privacyLink?.getAttribute('href'), 'https://www.topkapi.edu.tr/tr-TR/gizlilik-politikasi/13455');
     assert.equal(privacyLink?.getAttribute('target'), '_blank');
     assert.match(privacyLink?.getAttribute('rel') || '', /noopener/);
-    assert.ok(document.querySelector('.staff-entry[data-i18n="staffLink"][href="/yetkili/"]'));
+    assert.ok(document.querySelector('.staff-entry[href="/yetkili/"] [data-i18n="staffLink"]'));
     assert.ok(document.querySelector('.public-brand-copy [data-i18n="homeUniversityName"]'));
     assert.equal(document.querySelectorAll('[data-process-step]').length, 5);
     assert.equal(document.querySelectorAll('.status-timeline-step').length, 5);
@@ -139,16 +139,21 @@ test('public locale dictionaries have matching keys for all five supported langu
     }
 });
 
-test('home header includes the localized staff login note linked via aria-describedby', async () => {
+test('home header includes the localized staff login title and note inside the staff link', async () => {
     const publicHtml = await readRepositoryFile('index.html');
     const document = new JSDOM(publicHtml).window.document;
-    const staffLink = document.querySelector('.public-header-actions .staff-entry[data-i18n="staffLink"][href="/yetkili/"]');
+    const staffLink = document.querySelector('.public-header-actions .staff-entry[href="/yetkili/"]');
+    const staffTitle = document.querySelector('.public-header-actions .staff-entry[href="/yetkili/"] [data-i18n="staffLink"]');
     const staffNote = document.querySelector('.public-header-actions .staff-entry-note[data-i18n="staffNote"]');
 
     assert.ok(staffLink);
+    assert.ok(staffTitle);
+    assert.equal(staffLink.hasAttribute('data-i18n'), false);
+    assert.equal(staffLink.hasAttribute('aria-describedby'), false);
+    assert.equal(staffTitle.textContent.trim(), PUBLIC_MESSAGES.tr.staffLink);
     assert.ok(staffNote);
-    assert.ok(staffNote.id);
-    assert.equal(staffLink.getAttribute('aria-describedby'), staffNote.id);
+    assert.equal(staffLink.contains(staffNote), true);
+    assert.equal(staffNote.getAttribute('data-i18n'), 'staffNote');
     assert.equal(staffNote.textContent.trim(), PUBLIC_MESSAGES.tr.staffNote);
 
     for (const locale of SUPPORTED_LOCALES) {
