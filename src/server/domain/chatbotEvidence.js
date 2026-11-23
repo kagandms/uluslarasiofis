@@ -114,21 +114,24 @@ const APPLICATION_TYPE_PATTERNS = Object.freeze({
         /(?<![\p{L}\p{N}])ilkinj[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:first\s+(?:time|(?:permit\s+)?application)|initial)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:вперв[\p{L}\p{N}]*|первич[\p{L}\p{N}]*|перв(?:ая|ыи|ое)\s+подач[\p{L}\p{N}]*|первыи\s+раз)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:اول|اولي|اوليا|اوليه|الاول|الاولي|الاوليه|اول\s+مره|للمره\s+الاولي|طلب[\p{L}\p{N}]*\s+اول[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u
+        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:اول|اولي|اوليا|اوليه|الاول|الاولي|الاوليه|اول\s+مره|للمره\s+الاولي|طلب[\p{L}\p{N}]*\s+اول[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:aww?al\s+marra|talab\s+aww?al[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u
     ]),
     renewal: Object.freeze([
         /(?<![\p{L}\p{N}])(?:uzat[\p{L}\p{N}]*|yenile[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:uzalt[\p{L}\p{N}]*|tazele[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:exten[\p{L}\p{N}]*|renew[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])продл[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تمديد|تجديد|امدد|اجدد)(?![\p{L}\p{N}])/u
+        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تمديد|تجديد|امدد|اجدد)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:a?jadd(?:ed|id)|tajd(?:id|eed)|tamd(?:id|eed)|a?madd(?:ed|id)|prodl[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u
     ]),
     transition: Object.freeze([
         /(?<![\p{L}\p{N}])(?:gecis[\p{L}\p{N}]*|tur\s+degis[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:uytget[\p{L}\p{N}]*|gecish[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:transition[\p{L}\p{N}]*|switch[\p{L}\p{N}]*|transfer)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:переход[\p{L}\p{N}]*|переи[\p{L}\p{N}]*|перевест[\p{L}\p{N}]*|смен(?:ить|а)\s+вид[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تحويل|انتقال|الانتقال|احول|انقل)(?![\p{L}\p{N}])/u
+        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تحويل|انتقال|الانتقال|احول|انقل)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:tahwil|intiqal)(?![\p{L}\p{N}])/u
     ])
 });
 
@@ -146,11 +149,12 @@ const ACCOMMODATION_PATTERNS = Object.freeze({
         /(?<![\p{L}\p{N}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?سكن\s+(?:ال)?طلاب[\p{L}\p{N}]*|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?سكن\s+(?:ال)?جامع[\p{L}\p{N}]*|sakan\s+jami[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u
     ]),
     rental_contract: Object.freeze([
-        /(?<![\p{L}\p{N}])kira(?:da|lik|ci|yi|ladim|sozlesme[\p{L}\p{N}]*|\s+sozlesme[\p{L}\p{N}]*)?(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])kira(?:da|lik|ci|yi|ladim|l[\p{L}\p{N}]*|sozlesme[\p{L}\p{N}]*|\s+(?:sozlesme|kontrat)[\p{L}\p{N}]*)?(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])rent(?:al|ing|ed|s)?(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:аренд[\p{L}\p{N}]*|договор[\p{L}\p{N}]*\s+наима|снима[\p{L}\p{N}]*\s+кварт[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:karend[\p{L}\p{N}]*|kirey[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:ايجار|عقد\s+(?:ال)?ايجار|عقد\s+(?:ال)?اجار|مستاجر[\p{L}\p{N}]*|استاجر[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u
+        /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:ايجار|اجار|عقد\s+(?:ال)?(?:ايجار|اجار)|مستاجر[\p{L}\p{N}]*|استاجر[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:(?:bet|beit|bayt|sha2a|shaqqa|3a2d|3aqd|aqd)\s+(?:el\s+|al\s+)?(?:ijar|ajar)|ijar|ajar|m[iu]sta2?jir)(?![\p{L}\p{N}])/u
     ]),
     own_home: Object.freeze([
         /(?<![\p{L}\p{N}])(?:kendi\s+ev[\p{L}\p{N}]*|tapu[\p{L}\p{N}]*|ev\s+benim)(?![\p{L}\p{N}])/u,
@@ -174,15 +178,15 @@ const ACCOMMODATION_PATTERNS = Object.freeze({
         /(?<![\p{L}\p{N}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تعهد|التعهد|كفاله|مقدم\s+(?:ال)?تعهد)|(?:اسكن|بسكن|تسكن|يسكن|نسكن|اقيم|بقيم|تقيم|يقيم|نقيم|ساكن[\p{L}\p{N}]*|مقيم[\p{L}\p{N}]*|عايش[\p{L}\p{N}]*|اعيش|بعيش|تعيش|يعيش|نعيش|قاعد[\p{L}\p{N}]*)\s+(?:مع|عند|لدي))(?![\p{L}\p{N}])/u
     ]),
     residence_certificate: Object.freeze([
-        /(?<![\p{L}\p{N}])(?:adres\s+kayd[\p{L}\p{N}]*|yerlesim\s+yeri(?:\s+belge[\p{L}\p{N}]*)?|ikametgah\s+belge[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
-        /(?<![\p{L}\p{N}])(?:residence\s+certificate|registered\s+address|address\s+registration)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:adres\s+kay(?:d|it)[\p{L}\p{N}]*|yerlesim\s+yeri(?:\s+belge[\p{L}\p{N}]*)?|ikametgah(?:\s+belge[\p{L}\p{N}]*)?)(?![\p{L}\p{N}])/u,
+        /(?<![\p{L}\p{N}])(?:residence\s+certificate|certificate\s+of\s+residence|registered\s+address|address\s+(?:registration|certificate))(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:справк[\p{L}\p{N}]*\s+о\s+месте(?:\s+жительств[\p{L}\p{N}]*)?|регистрац[\p{L}\p{N}]*\s+по\s+адресу)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:hasaba\s+alnan\s+salg[\p{L}\p{N}]*|yasayan\s+yeri\s+sahadatnama[\p{L}\p{N}]*|salgy\s+sahadatnama[\p{L}\p{N}]*)(?![\p{L}\p{N}])/u,
         /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:شهاده\s+(?:محل\s+)?(?:ال)?اقامه|(?:ال)?عنوان\s+(?:ال)?مسجل|بيان\s+(?:ال)?عنوان)(?![\p{L}\p{N}])/u
     ])
 });
 
-const ACCOMMODATION_CONTRAST_CORRECTION_PATTERN = /(?<![\p{L}\p{N}])(?:ama|fakat|ancak|aslinda|artik|su\s*an(?:da)?|but|actually|now|any\s*more|но|на\s+самом\s+деле|сеичас|уже\s+не|yone|emma|hazir[\p{L}\p{N}]*|(?:و)?لكن[\p{L}\p{N}]*|(?:و)?بس|حاليا|(?:و|ف)?الان)(?![\p{L}\p{N}])/u;
+const ACCOMMODATION_CONTRAST_CORRECTION_PATTERN = /(?<![\p{L}\p{N}])(?:ama|fakat|ancak|aslinda|artik|simdi|su\s*an(?:da)?|but|actually|now|any\s*more|но|на\s+самом\s+деле|сеичас|уже\s+не|yone|emma|hazir[\p{L}\p{N}]*|(?:و)?لكن[\p{L}\p{N}]*|(?:و)?بس|حاليا|(?:و|ف)?الان)(?![\p{L}\p{N}])/u;
 const ACCOMMODATION_MOVEOUT_PATTERN = /(?<![\p{L}\p{N}])(?:cikti(?:m|k)|tasindi(?:m|k)|ayrildi(?:m|k)|moved\s+(?:out|to)|left|съехал[\p{L}\p{N}]*|переехал[\p{L}\p{N}]*|gocd(?:um|uk)|cykd(?:ym|yk)|ayryld(?:ym|yk)|(?:و|ف)?(?:طلع(?:ت|نا)|انتقل(?:ت|نا)|خرج(?:ت|نا)|ترك(?:ت|نا)))(?![\p{L}\p{N}])/u;
 const FRIEND_STAY_LOCATION_PATTERNS = Object.freeze([
     /(?<![\p{L}\p{N}])arkadas(?:im)?in\s+ev[\p{L}\p{N}]*(?![\p{L}\p{N}])/u,
@@ -226,18 +230,39 @@ const QUOTE_AGE_CONTEXT_PATTERN = /(?<![\p{L}\p{N}])(?:yas[\p{L}\p{N}]*|years?|y
 
 const NUMERIC_AGE_PATTERNS = Object.freeze([
     // tr / tk suffix age units
-    /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:yasindayim|yasinda|yasimda|yasim|yasymda|yasym)(?![\p{L}\p{N}])/gu,
+    /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:yasindayim|yasinda|yasimda|yasim|yasymda|yasym|oldum|yasimi\s+doldurdum|yasina\s+girdim|yasina\s+bastim|yasymy\s+doldurdym|yasyna\s+girdim)(?![\p{L}\p{N}])/gu,
     // en explicit age units ("years old", "yrs old", "y.o.")
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:years?\s+old|yrs?\s+old|y\.?o\.?)(?![\p{L}\p{N}])/gu,
-    // en "I am N" / "I'm N" only at end of clause (allowing trailing delimiter/comma) or followed by "years" or "and"
-    /(?<![\p{L}\p{N}])(?:i\s+am|i'm|im)(?:\s+not)?\s+(1[4-9]|[2-9]\d)(?=(?:\s*(?:years(?=\s*(?:and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$))|and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$)))/gu,
-    // ru explicit age statements ("мне [уже|исполнилось] N [лет/года/год]" or "N лет/года/год от роду")
-    /(?<![\p{L}\p{N}])(?:мне|mne)(?:\s+еще)?(?:\s+(?:не|ne))?(?:\s+(?:уже|uzhe))?(?:\s+исполнилось)?\s+(1[4-9]|[2-9]\d)(?:\s*(?:лет|года|год|let|goda|god)(?![\p{L}\p{N}])|(?=\s*(?:(?:и|а|i|a)(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$)))/gu,
+    // en "just turned N" / "turned N"
+    /(?<![\p{L}\p{N}])(?:(?:just|recently)\s+)?turned\s+(1[4-9]|[2-9]\d)(?![\p{L}\p{N}])/gu,
+    // en "I am N" / "he is N" / "my son is N" at end of clause or followed by "years" or "and"
+    /(?<![\p{L}\p{N}])(?:i\s+am|i'm|im|he\s+is|he's|she\s+is|she's|(?:my\s+)?(?:son|daughter|child|kid)\s+is)(?:\s+not)?\s+(1[4-9]|[2-9]\d)(?=(?:\s*(?:years(?=\s*(?:and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$))|and(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$)))/gu,
+    // ru explicit age statements ("мне/сыну/ему [недавно] [уже|исполнилось] N [лет/года/год]" or "N лет/года/год от роду")
+    /(?<![\p{L}\p{N}])(?:мне|mne|ему|еи|сыну|дочери|ребенку)(?:\s+еще)?(?:\s+(?:не|ne))?(?:\s+(?:недавно|только\s+что))?(?:\s+(?:уже|uzhe))?(?:\s+исполнилось)?\s+(1[4-9]|[2-9]\d)(?:\s*(?:лет|года|год|let|goda|god)(?![\p{L}\p{N}])|(?=\s*(?:(?:и|а|i|a)(?![\p{L}\p{N}])|[,.;!?\u061f\u061b\u060c]|$)))/gu,
     /(?<![\p{L}\p{N}])(1[4-9]|[2-9]\d)\s*(?:лет|года|год)\s+от\s+роду(?![\p{L}\p{N}])/gu,
     // ru standalone age phrase between clause delimiters (e.g. ", 19 лет,")
     /^\s*(?:не\s+)?(1[4-9]|[2-9]\d)\s*(?:лет|года|год)\s*[!?;,.\n\r\u061f\u061b\u060c]*$/gu,
-    // tr / tk / en / ar prefix age ("yaşım N", "ýaşym N", "age N", "عمري/عمر/سني N [سنة/عاماً]")
-    /(?<![\p{L}\p{N}])(?:yasim|yasym|age|omri|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:عمري|عمر|سني))\s*[:=]?\s*(?:(?:degil[\p{L}\p{N}]*|not|ليس|ليست|لست|غير|مش|مو)\s+)?(1[4-9]|[2-9]\d)(?:\s*(?:سنه|سنوات|عاما|عام|sana))?(?![\p{L}\p{N}])/gu
+    // tr / tk / en / ar prefix age ("yaşım N", "ýaşym N", "age N", "عمري/عمره/عمرها/عمر/سني N [سنة/عاماً]")
+    /(?<![\p{L}\p{N}])(?:yasim|yasym|age|omri|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:عمري|عمره|عمرها|عمر|سني|سنه|سنها))\s*[:=]?\s*(?:(?:degil[\p{L}\p{N}]*|not|ليس|ليست|لست|غير|مش|مو)\s+)?(1[4-9]|[2-9]\d)(?:\s*(?:سنه|سنوات|عاما|عام|sana))?(?![\p{L}\p{N}])/gu,
+    // ar turned N ("أكملت/صرت/بلغت 18")
+    /(?<![\p{L}\p{N}])(?:اكملت|صرت|بلغت|اصبح\s+عمري)\s+(1[4-9]|[2-9]\d)(?:\s*(?:سنه|عاما|عام))?(?![\p{L}\p{N}])/gu
+]);
+
+const BIRTH_YEAR_PATTERNS = Object.freeze([
+    // tr
+    /(?<![\p{L}\p{N}])(19\d{2}|20\d{2})\s*(?:dogumlu[\p{L}\p{N}]*|dogum\s+yil[\p{L}\p{N}]*)(?![\p{L}\p{N}])/gu,
+    /(?<![\p{L}\p{N}])dogum\s+(?:yil|tarih)[\p{L}\p{N}]*\s*[:=]?\s*(19\d{2}|20\d{2})(?![\p{L}\p{N}])/gu,
+    // en
+    /(?<![\p{L}\p{N}])born\s+(?:in\s+)?(19\d{2}|20\d{2})(?![\p{L}\p{N}])/gu,
+    /(?<![\p{L}\p{N}])birth\s+year\s*[:=]?\s*(19\d{2}|20\d{2})(?![\p{L}\p{N}])/gu,
+    // ru
+    /(?<![\p{L}\p{N}])(?:родил(?:ся|ась)|год\s+рождения)\s*(?:в\s+)?(19\d{2}|20\d{2})(?![\p{L}\p{N}])/gu,
+    /(?<![\p{L}\p{N}])(19\d{2}|20\d{2})\s*(?:года?\s+рождения|г\.?\s*р\.?)(?![\p{L}\p{N}])/gu,
+    // tk
+    /(?<![\p{L}\p{N}])(19\d{2}|20\d{2})\s*(?:-?nji\s+yylda\s+)?doglan[\p{L}\p{N}]*(?![\p{L}\p{N}])/gu,
+    /(?<![\p{L}\p{N}])doglan\s+yyl[\p{L}\p{N}]*\s*[:=]?\s*(19\d{2}|20\d{2})(?![\p{L}\p{N}])/gu,
+    // ar
+    /(?<![\p{L}\p{N}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:مواليد|مولود[ه]?\s+(?:في\s+|عام\s+|سنه\s+)?|ولدت\s+(?:في\s+|عام\s+|سنه\s+)?)\s*(19\d{2}|20\d{2})(?![\p{L}\p{N}])/gu
 ]);
 
 const RUSSIAN_START_AGE_PATTERN = /^\s*(?:не\s+)?(1[4-9]|[2-9]\d)\s*(?:лет|года|год)(?!\s*(?:назад|спустя|подряд|здесь|живу|прожил[\p{L}\p{N}]*))(?![\p{L}\p{N}])/gu;
@@ -553,8 +578,14 @@ export const QUOTED_FACT_VALUE_STEMS = Object.freeze({
             'امدد',
             'اجدد',
             'jadd',
+            'jadded',
+            'ajadded',
             'tamdid',
-            'tajdid'
+            'tamdeed',
+            'tajdid',
+            'tajdeed',
+            'madded',
+            'amadded'
         ]),
         transition: Object.freeze([
             'gecis',
@@ -628,6 +659,16 @@ export const QUOTED_FACT_VALUE_STEMS = Object.freeze({
             'karende',
             'karend',
             'ijar',
+            'ajar',
+            '3a2d ijar',
+            '3a2d ajar',
+            '3aqd ijar',
+            'bet ajar',
+            'beit ajar',
+            'sha2a ajar',
+            'mustajir',
+            'musta2jir',
+            'mista2jir',
             'ايجار',
             'اجار',
             'مستاجر',
@@ -729,11 +770,14 @@ export const QUOTED_FACT_VALUE_STEMS = Object.freeze({
         ]),
         residence_certificate: Object.freeze([
             'adres kayd',
+            'adres kayit',
             'yerlesim',
             'ikametgah',
             'residence certificate',
+            'certificate of residence',
             'registered address',
             'address registration',
+            'address certificate',
             'e-devlet',
             'edevlet',
             'справк',
@@ -785,6 +829,7 @@ export const EVIDENCE_PATTERN_LISTS = Object.freeze({
     EXPLICIT_DOUBLE_NEG_ADULT_PATTERN,
     QUOTE_AGE_CONTEXT_PATTERN,
     NUMERIC_AGE_PATTERNS,
+    BIRTH_YEAR_PATTERNS,
     RUSSIAN_START_AGE_PATTERN,
     DURATION_PREFIX_WORDS,
     DURATION_SUFFIX_WORDS,
@@ -1068,8 +1113,8 @@ function detectApplicationType(clauses, language) {
 function detectAccommodationType(clauses, language) {
     const positiveKeys = new Set();
     const negatedKeys = new Set();
+    const retractedKeys = new Set();
     let questioned = false;
-    let retractedOrMovedOut = false;
 
     const turnHasFriendStayLocation = new Set();
     for (const clause of clauses) {
@@ -1090,45 +1135,72 @@ function detectAccommodationType(clauses, language) {
             ...findAllMatches(clause.text, HOST_TURKISH_NEGATIVE)
         ];
 
+        const clauseMatches = [];
         for (const [key, patterns] of Object.entries(ACCOMMODATION_PATTERNS)) {
             const matches = findAllMatches(clause.text, patterns);
             if (key === 'undertaking' && ARABIC_QARIB_CONTEXT_PATTERN.test(clause.text)) {
                 matches.push(...findAllMatches(clause.text, [ARABIC_QARIB_PATTERN]));
             }
             for (const match of matches) {
-                const ignoredSpans = key === 'undertaking' ? hostNegSpans : [];
-                if (isQuestion) {
-                    questioned = true;
-                } else if (hasNegationInWindow(clause, match.start, match.end, ignoredSpans)) {
-                    negatedKeys.add(key);
-                } else {
-                    const tailInClause = clause.text.slice(match.end);
-                    const nextText = nextClauseInTurn ? nextClauseInTurn.text : '';
-                    const hasContrastOrMoveOut = (
-                        ACCOMMODATION_CONTRAST_CORRECTION_PATTERN.test(tailInClause)
-                        || ACCOMMODATION_CONTRAST_CORRECTION_PATTERN.test(nextText)
-                        || ACCOMMODATION_MOVEOUT_PATTERN.test(clause.text)
-                        || ACCOMMODATION_MOVEOUT_PATTERN.test(nextText)
-                        || (key !== 'undertaking' && turnHasFriendStayLocation.has(turnIndex))
+                clauseMatches.push({ key, ...match });
+            }
+        }
+
+        for (const match of clauseMatches) {
+            const { key } = match;
+            const ignoredSpans = key === 'undertaking' ? hostNegSpans : [];
+            if (isQuestion) {
+                questioned = true;
+            } else if (hasNegationInWindow(clause, match.start, match.end, ignoredSpans)) {
+                negatedKeys.add(key);
+            } else if (key !== 'undertaking' && turnHasFriendStayLocation.has(turnIndex)) {
+                retractedKeys.add(key);
+            } else {
+                const tailInClause = clause.text.slice(match.end);
+                const headInClause = clause.text.slice(0, match.start);
+                const nextText = nextClauseInTurn ? nextClauseInTurn.text : '';
+                const followedByContrastOrMoveOut = (
+                    ACCOMMODATION_CONTRAST_CORRECTION_PATTERN.test(tailInClause)
+                    || ACCOMMODATION_CONTRAST_CORRECTION_PATTERN.test(nextText)
+                    || ACCOMMODATION_MOVEOUT_PATTERN.test(tailInClause)
+                    || ACCOMMODATION_MOVEOUT_PATTERN.test(nextText)
+                );
+
+                let retractedByPrecedingMoveOut = false;
+                const precedingMoveOuts = findAllMatches(headInClause, [ACCOMMODATION_MOVEOUT_PATTERN]);
+                if (precedingMoveOuts.length > 0) {
+                    const lastMoveOut = precedingMoveOuts[precedingMoveOuts.length - 1];
+                    const between = headInClause.slice(lastMoveOut.end);
+                    const hasNewPlaceBridge = ACCOMMODATION_CONTRAST_CORRECTION_PATTERN.test(between);
+                    const isMovedToDestination = /^moved\s+to$/u.test(lastMoveOut.text);
+                    const moveOutAlreadyAppliedEarlier = clauseMatches.some(
+                        (other) => other.end <= lastMoveOut.start
                     );
-                    if (hasContrastOrMoveOut) {
-                        retractedOrMovedOut = true;
-                    } else {
-                        positiveKeys.add(key);
+                    if (!hasNewPlaceBridge && !isMovedToDestination && !moveOutAlreadyAppliedEarlier) {
+                        retractedByPrecedingMoveOut = true;
                     }
+                }
+
+                if (followedByContrastOrMoveOut || retractedByPrecedingMoveOut) {
+                    retractedKeys.add(key);
+                } else {
+                    positiveKeys.add(key);
                 }
             }
         }
     }
 
-    if (questioned || retractedOrMovedOut) {
+    if (questioned) {
         return { value: undefined, uncertain: true };
     }
-    const effectivePositiveKeys = [...positiveKeys].filter((key) => !negatedKeys.has(key));
-    if (effectivePositiveKeys.length === 1) {
+    const effectivePositiveKeys = [...positiveKeys].filter(
+        (key) => !negatedKeys.has(key) && !retractedKeys.has(key)
+    );
+    const hasFriendStayAmbiguity = clauses.some((clause) => turnHasFriendStayLocation.has(clause.turnIndex ?? 0));
+    if (effectivePositiveKeys.length === 1 && (!hasFriendStayAmbiguity || retractedKeys.size === 0)) {
         return { value: effectivePositiveKeys[0], uncertain: false };
     }
-    if (effectivePositiveKeys.length > 1 || negatedKeys.size > 0) {
+    if (effectivePositiveKeys.length > 1 || negatedKeys.size > 0 || retractedKeys.size > 0) {
         return { value: undefined, uncertain: true };
     }
     return { value: undefined, uncertain: false };
@@ -1168,6 +1240,34 @@ const CONDITIONAL_AGE_PREFIX_PATTERN = /(?<![\p{L}\p{N}])(?:if|whether)(?:\s+(?:
 
 function isConditionalAgeMatch(clauseText, matchStart) {
     return CONDITIONAL_AGE_PREFIX_PATTERN.test(clauseText.slice(0, matchStart));
+}
+
+function getIstanbulCalendarDate(now = new Date()) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Istanbul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+    const parts = formatter.formatToParts(now);
+    const year = Number.parseInt(parts.find((part) => part.type === 'year')?.value || '', 10);
+    const month = Number.parseInt(parts.find((part) => part.type === 'month')?.value || '', 10);
+    const day = Number.parseInt(parts.find((part) => part.type === 'day')?.value || '', 10);
+    return { year, month, day };
+}
+
+function classifyBirthYearUnder18(birthYear, now = new Date()) {
+    if (!Number.isInteger(birthYear)) return 'invalid';
+    const { year, month, day } = getIstanbulCalendarDate(now);
+    if (!Number.isInteger(year) || birthYear < 1920 || birthYear > year - 10) {
+        return 'invalid';
+    }
+    const yearDiff = year - birthYear;
+    if (yearDiff < 18) return 'under_18';
+    if (yearDiff > 18 || (yearDiff === 18 && month === 12 && day === 31)) {
+        return 'adult';
+    }
+    return 'ambiguous';
 }
 
 function detectUnder18(clauses, language) {
@@ -1230,6 +1330,25 @@ function detectUnder18(clauses, language) {
             ) {
                 uncertain = true;
             } else if (parsed < 18) {
+                under18Matched = true;
+            } else {
+                adultMatched = true;
+            }
+        }
+
+        const birthYearMatches = findAllMatches(maskedText, BIRTH_YEAR_PATTERNS);
+        for (const match of birthYearMatches) {
+            const birthYear = Number.parseInt(match.group1, 10);
+            const classification = classifyBirthYearUnder18(birthYear);
+            if (classification === 'invalid') continue;
+            if (
+                classification === 'ambiguous'
+                || hasNegationInWindow(clause, match.start, match.end)
+                || isQuestion
+                || isConditionalAgeMatch(clause.text, match.start)
+            ) {
+                uncertain = true;
+            } else if (classification === 'under_18') {
                 under18Matched = true;
             } else {
                 adultMatched = true;
@@ -1717,6 +1836,14 @@ function verifyUnder18QuoteContent(normalizedQuote, quoteTokens, value) {
         if (!Number.isInteger(parsed) || parsed < 1 || parsed > 99) continue;
         if (parsed < 18) hasMinorAgeNumber = true;
         else hasAdultAgeNumber = true;
+    }
+
+    const birthYearMatches = findAllMatches(textForNumbers, BIRTH_YEAR_PATTERNS);
+    for (const match of birthYearMatches) {
+        const classification = classifyBirthYearUnder18(Number.parseInt(match.group1, 10));
+        if (classification === 'ambiguous') return false;
+        if (classification === 'under_18') hasMinorAgeNumber = true;
+        else if (classification === 'adult') hasAdultAgeNumber = true;
     }
 
     if (QUOTE_AGE_CONTEXT_PATTERN.test(textForNumbers)) {
