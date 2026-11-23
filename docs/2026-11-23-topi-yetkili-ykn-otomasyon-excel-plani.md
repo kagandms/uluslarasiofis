@@ -447,3 +447,30 @@ Paylaşılan dosyalar tek sahipli çalışır: `src/server/worker.js` (rota sat�
 1. Eşikler (12.4 madde 2) uygun mu? [evet; ilk ölçümden sonra gözden geçirilir]
 2. Kırmızı takımı bağımsız bir model ailesi mi yürütsün? [evet: Neon veya Argon, Claude/Opus ajan modelleri değil]
 3. Aşama 0 hemen mi başlasın, yoksa Faz 5 ve Topi yetkili ile mi birleşsin? [Aşama 0 önce: canlıdaki sohbet şimdiden herkese açık]
+
+## 13. Ek işler (kullanıcı isteği, 2026-11-23): Topi yumak oyunu ve belge yeniden isteme hatası
+
+- **Tarih:** 2026-11-23. **Kaynak:** kullanıcının aynı günkü isteği; `production` = `425652a` üzerinde kod okundu. **Durum:** PLAN; kod yazılmadı. Faz 1–4 ile birlikte uygulanır ve test edilir; yayın ayrı karardır.
+
+### 13.1 Görev 5A — Topi yumak oyunu (`task/topi-yarn-play`)
+
+- **Gerçek:** Öğrenci sayfasındaki Topi başlatıcısında yalnız fare kovalama var: `createTopiMouse` (`src/public/topiMascot.js:173`, `TOPI_MOUSE_SVG_SOURCE`), `homeChatbot.js:166` (hareketi azalt açıksa hiç oluşturulmaz), `chatbot.css` `.topi-mouse` ve `@keyframes topi-mouse-chase` (7 sn, sonsuz). Yetkili sayfada bugün Topi yok; Topi yetkili paneli 1B ile gelir.
+- **İstek:** Fare oyununun yanına yumakla oynama eklenir; oyun tek tip olmaktan çıkar.
+- **Tasarım:** `topiMascot.js`'e `TOPI_YARN_SVG_SOURCE` (küçük yün yumağı, iplik ucu, mevcut renk değişkenleriyle; dış görsel yok) ve `createTopiYarn(document, { size })` (`<span class="topi-yarn" aria-hidden="true">`). Ortak seçici `pickTopiToy(random = Math.random) → 'mouse'|'yarn'` ve sıradaki oyunu seçen `createTopiPlaytime(document, { reducedMotion, random })`: her animasyon turu bitince (`animationiteration`) oyuncak değişebilir; aynı oyuncak en çok 2 tur üst üste. Yumak animasyonu `@keyframes topi-yarn-roll`: yuvarlanma ve dönme, Topi'ye doğru gidip patiyle itilmiş gibi geri seker. Hareketi azalt açıkken hiçbir oyuncak oluşturulmaz; panel açıkken oyuncaklar gizlenir (mevcut fare kuralı gibi).
+- **Kapsam:** öğrenci başlatıcısı (`homeChatbot.js`, `chatbot.css`) şimdi; yetkili Topi paneli 1B'de aynı `createTopiPlaytime`'ı kullanır (1B brief'ine eklenir; 1B başka dalda olduğu için birleştirmede Claude kontrol eder).
+- **YOU OWN:** `src/public/topiMascot.js`, `src/public/homeChatbot.js` (yalnız oyuncak bölümü), `src/public/chatbot.css` (yalnız oyuncak kuralları), `test/topiPlaytime.test.js` (yeni). Faz 5'in 4B görevi de `homeChatbot.js`/`chatbot.css`'e dokunur: 5A önce biter, 4B onun commit'inden açılır.
+- **DONE WHEN:** fare ve yumak ikisi de görünür; seçici testleri (sahte `random` ile sıra, 2 tur kuralı, hareketi azalt → oyuncak yok, `aria-hidden`); mevcut `test/homeChatbot.test.js` aynen yeşil; 320 px ve koyu modda gözle kontrol (Claude, tarayıcı önizlemesi).
+
+### 13.2 Görev 5B — Reddedilen belge yeniden yüklenince tekrar istenemiyor (`task/document-rerequest-fix`)
+
+- **Belirti (kullanıcı):** Bir belgesi bir kez reddedilen (yeniden yükleme istenen) öğrenci yenisini yükleyince, yetkili aynı belgeyi **tekrar** isteyemiyor.
+- **İlgili kod (okundu, kök neden henüz doğrulanmadı):** düğme görünürlüğü `can_request_resubmission` (`src/server/routes/staffApplicationRoutes.js:224`): yüklenmiş belge için `revision_status === 'submitted'`, `review_status ∈ {pending, under_review}`, `scan_status ∈ {clean, unsafe, failed}`, başvuru `under_review|resubmission_required` ister. Öğrencinin yeniden yüklemesi (`resubmissionUploadRepository.js:160-215`) yeni revizyonu `submitted`, dosyayı `scan_status='pending'`, kaydı `review_status='pending'` yapar ve tarama işi açar. Sunucu yolu `requestStaffDocumentResubmission` → `resolveResubmissionTarget` → `requestCurrentDocumentResubmission` (`applicationReviewRepository.js:237`). Not ekleme `prepareStudentDocumentMessage` yalnız `revisions.status='resubmission_required'` iken ekler.
+- **Şüpheliler (önce test ile kanıtlanacak):** (1) yeni revizyonun taraması `pending`'de kalırsa düğme hiç çıkmaz (tarama işi yeniden yüklemede doğru kuyruklanıyor mu, tarayıcı yeni revizyonu işliyor mu); (2) ikinci istekteki koşullu `UPDATE` zincirinden birinin (`changes() = 1`) eski revizyon/not/audit satırı yüzünden 0 dönmesi → 409 `DOCUMENT_REVIEW_CONFLICT`; (3) istemcinin eski `revision_number`'ı göndermesi (liste yenilenmeden); (4) başvuru durumunun yeniden yüklemeden sonra izin verilen kümenin dışına çıkması.
+- **YOU OWN:** düzeltmenin dokunduğu sunucu/istemci dosyası (kök nedene göre Claude daraltır), `test/documentRerequestAfterResubmission.test.js` (yeni). Migration yok; gerekirse ayrı karar.
+- **Adımlar:** (a) **önce başarısız test**: yerel D1 ile tam döngü: belge yüklenir → yetkili yeniden yükleme ister → öğrenci yeni dosyayı yükler → tarama `clean` sonuçlanır → yetkili listesinde `can_request_resubmission === true` ve ikinci istek 200 döner; ayrıca tarama `pending` iken düğmenin durumu ve kullanıcıya gösterilen açıklama; (b) kök neden; (c) en küçük düzeltme; (d) mevcut belge/inceleme/tarayıcı testleri aynen yeşil.
+- **DONE WHEN:** aynı belge en az 3 kez arka arkaya istenip yüklenebilir (test); tarama bekliyorsa yetkili ekranında "Tarama bekleniyor" gibi açık bir neden görünür, düğme sessizce kaybolmaz.
+
+### 13.3 Sıra ve sahiplik
+
+- 5A ve 5B, Faz 1–4 dosyalarıyla çakışmaz (5A: `topiMascot.js`/`homeChatbot.js`/`chatbot.css`; 5B: belge inceleme dosyaları). Dalga 2 ile aynı anda en çok 3 agent kuralı korunur.
+- Birleştirme sırası: 5A → 4B (aynı widget dosyaları). 5B bağımsız, hızlı yol adayıdır (migration yoksa).
