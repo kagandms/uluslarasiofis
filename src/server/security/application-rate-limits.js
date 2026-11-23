@@ -37,3 +37,13 @@ export const CHATBOT_IP_DAILY_LIMIT = Object.freeze({
 export const CHATBOT_GLOBAL_DAILY_LIMIT = Object.freeze({
     endpoint: 'chatbot-global-daily', identity: 'global', maxRequests: 300, windowSeconds: 86400
 });
+
+/** Bounds one staff member's assistant requests per 15 minutes. */
+export const STAFF_ASSISTANT_RATE_LIMIT = Object.freeze({
+    endpoint: 'staff-assistant', maxRequests: 40, windowSeconds: 900
+});
+
+/** Bounds one staff member's assistant requests per day. */
+export const STAFF_ASSISTANT_DAILY_LIMIT = Object.freeze({
+    endpoint: 'staff-assistant-daily', maxRequests: 300, windowSeconds: 86400
+});
