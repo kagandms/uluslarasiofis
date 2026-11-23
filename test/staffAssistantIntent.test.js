@@ -110,7 +110,20 @@ test('parseStaffIntent matches deterministic Turkish commands for supported tool
 
     assert.equal(isRedLineStaffMessage('silinmiş evrak var mı'), false);
     assert.equal(isRedLineStaffMessage("Asaf'a bugün 6 saat kaydet"), false);
+    assert.equal(isRedLineStaffMessage('Kağan için bugüne 6,5 saat'), false);
     assert.equal(isRedLineStaffMessage("AB123456 pasaportunu ykn'ye ver"), false);
+    assert.equal(isRedLineStaffMessage('A S diye bir öğrenci bize hiç onlineden başvuru yapmış mı'), false);
+    assert.equal(isRedLineStaffMessage('göçe iletilen başvuruları göster'), false);
+    assert.equal(isRedLineStaffMessage('göçe iletilmiş başvuru var mı'), false);
+    assert.equal(isRedLineStaffMessage('reddedilen başvuruları listele'), false);
+    assert.equal(isRedLineStaffMessage('Ahmet Demir başvuru durumu nedir'), false);
+
+    assert.deepEqual(
+        parseStaffIntent('göçe iletilen başvuruları göster'),
+        { tool: 'navigate', args: { view: 'applications' } }
+    );
+    const readQuestionIntent = parseStaffIntent('A S diye bir öğrenci bize hiç onlineden başvuru yapmış mı');
+    assert.equal(readQuestionIntent?.tool, 'search_applications');
 });
 
 test('isRedLineStaffMessage and parseStaffIntent refuse Turkish inflected red-line and destructive requests', () => {
@@ -149,7 +162,28 @@ test('isRedLineStaffMessage and parseStaffIntent refuse Turkish inflected red-li
         'yöksiste kaydet',
         'durumu kaydet',
         'AB123456 ykn ver ve talep gönder',
-        "AB123456 için YKN çalıştırıp YÖKSİS'e kaydet"
+        "AB123456 için YKN çalıştırıp YÖKSİS'e kaydet",
+        'pekki onu göçe iletildi olarak işaretler misin',
+        'başvurusunu reddedildi olarak işaretle',
+        'bu başvuruyu tamamlandı olarak işaretlesene',
+        'başvuru inceleniyor olarak işaretlensin',
+        'bunu eksik evrak olarak işaretleyebilir misin',
+        'durumunu tamamlandı yap',
+        'başvuruyu reddedildi yap',
+        'bunu göçe iletildi yap',
+        'başvurunun durumunu değiştirir misin',
+        'başvurunun durumunu güncelle',
+        'tamamlandı olarak kaydet',
+        'göçe iletildi olarak güncelle',
+        'bu başvuruyu göçe ilet',
+        'başvuruyu göçe gönder',
+        'son işlemi geri al',
+        'kaydı arşive taşı',
+        'başvuruyu başka listeye taşı',
+        'öğrencinin adını değiştir',
+        'öğrencinin soyadını düzenle',
+        'başvuru numarasını değiştirir misin',
+        'belgeyi düzenle'
     ]) {
         assert.equal(
             isRedLineStaffMessage(redLineMessage),

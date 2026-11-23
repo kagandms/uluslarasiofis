@@ -214,6 +214,68 @@ test('red-line commands are refused with state confused and no action', async ()
     assert.equal(fakeAi.callCount, 0);
 });
 
+test('status-change and record-mutation requests are refused before parsing or model call while read queries still work', async () => {
+    const { environment, fakeAi } = await createFixture({
+        aiScript: {
+            tool_calls: [{ name: 'search_applications', arguments: { query: 'test' } }]
+        }
+    });
+
+    const statusChangeMessages = [
+        'pekki onu göçe iletildi olarak işaretler misin',
+        'başvurusunu reddedildi olarak işaretle',
+        'bu başvuruyu tamamlandı olarak işaretlesene',
+        'başvuru inceleniyor olarak işaretlensin',
+        'bunu eksik evrak olarak işaretleyebilir misin',
+        'durumunu tamamlandı yap',
+        'başvuruyu reddedildi yap',
+        'bunu göçe iletildi yap',
+        'başvurunun durumunu değiştirir misin',
+        'başvurunun durumunu güncelle',
+        'tamamlandı olarak kaydet',
+        'göçe iletildi olarak güncelle',
+        'bu başvuruyu göçe ilet',
+        'başvuruyu göçe gönder',
+        'son işlemi geri al',
+        'kaydı arşive taşı',
+        'öğrencinin adını değiştir',
+        'belgeyi düzenle'
+    ];
+
+    for (const message of statusChangeMessages) {
+        const response = await worker.fetch(createAssistantRequest({ message }), environment, {});
+        const payload = await response.json();
+        assert.equal(response.status, 200, `Expected 200 for refusal: ${message}`);
+        const validated = validateStaffAssistantResponse(payload);
+        assert.equal(validated.state, 'confused', `Expected confused for refusal: ${message}`);
+        assert.equal(validated.action, undefined, `Expected no action for refusal: ${message}`);
+        assert.equal(validated.results, undefined, `Expected no results for refusal: ${message}`);
+    }
+
+    assert.equal(fakeAi.callCount, 0);
+
+    const readListResp = await worker.fetch(
+        createAssistantRequest({ message: 'göçe iletilen başvuruları göster' }),
+        environment,
+        {}
+    );
+    const readListPayload = validateStaffAssistantResponse(await readListResp.json());
+    assert.equal(readListResp.status, 200);
+    assert.equal(readListPayload.state, 'understood');
+    assert.deepEqual(readListPayload.action, { type: 'navigate', view: 'applications' });
+
+    const readQuestionResp = await worker.fetch(
+        createAssistantRequest({ message: 'A S diye bir öğrenci bize hiç onlineden başvuru yapmış mı' }),
+        environment,
+        {}
+    );
+    const readQuestionPayload = validateStaffAssistantResponse(await readQuestionResp.json());
+    assert.equal(readQuestionResp.status, 200);
+    assert.equal(readQuestionPayload.results?.kind, 'applications');
+
+    assert.equal(fakeAi.callCount, 0);
+});
+
 test('rogue model tool calls (unknown tool or unknown argument key) are refused safely', async () => {
     const unknownToolFixture = await createFixture({
         aiScript: {
