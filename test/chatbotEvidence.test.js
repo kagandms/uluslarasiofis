@@ -17,6 +17,7 @@ import {
     isDeterministicHandoffRequest,
     isOtherStudentsDataRequest,
     isStatusQuestionWithoutReference,
+    isStudentCardQuestion,
     isVeryShortDocumentQuestion
 } from '../src/server/routes/chatbotRoutes.js';
 
@@ -2220,4 +2221,55 @@ test('recency: newer user turns override older facts, within-turn conflicts stay
     assert.equal(hasEvidenceRisk(leftUndertakingTurns, 'tr'), false);
     assert.equal(verifyQuotedFact('host_is_married', 'no', 'akrabam evli değil', leftUndertakingTurns, 'tr'), false);
     assert.equal(verifyQuotedFact('host_is_turkish', 'no', 'Türk vatandaşı değil', leftUndertakingTurns, 'tr'), false);
+});
+
+test('isStudentCardQuestion matches student ID card phrasings across all five languages and excludes certificates, residence permits, list intent, and status questions', () => {
+    const positiveCases = [
+        'Öğrenci kartımı kaybettim',
+        'Öğrenci kartımı kaybettim”',
+        'öğrenci kartı',
+        'öğrenci kimlik kartı',
+        'okul kartı',
+        'Öğrenci kartım kırıldı, nereden yenileyebilirim?',
+        'Öğrenci kartının basımı ne kadar sürer?',
+        'student card',
+        'student ID card',
+        'I lost my student id',
+        'Where do I apply for my university student ID card?',
+        'студенческая карта',
+        'студенческий билет',
+        'Восстановление студенческой карты',
+        'Я потерял студенческий билет',
+        'talyp kart',
+        'talyp şahadatnama kart',
+        'Talyp kartymy ýitirdim',
+        'Uniwersitetiň talyp şahadatnama kartyny nireden almaly?',
+        'بطاقة الطالب',
+        'بطاقة طالب',
+        'كيف يمكنني استخراج بطاقة الطالب الجامعية؟'
+    ];
+    for (const query of positiveCases) {
+        assert.equal(isStudentCardQuestion(query), true, `Expected student_card match for: ${query}`);
+    }
+
+    const negativeCases = [
+        'öğrenci belgesi nedir',
+        'student certificate',
+        'İkamet izni kartımı kaybettim',
+        'student residence permit',
+        'ikamet izni için öğrenci kartı',
+        'student card for residence permit',
+        'студенческая карта для ВНЖ',
+        'talyp karty we ýaşaýyş rugsady',
+        'بطاقة الطالب للإقامة',
+        'My student id number is 2201045',
+        'ITU-7K9M-4X2P öğrenci kartı',
+        'Başvurum ne durumda, öğrenci kartımı kaybettim',
+        'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, öğrenci kartı dahil belgeler neler?',
+        'Do I need a student card? Which documents are required?',
+        'belge?'
+    ];
+    for (const query of negativeCases) {
+        assert.equal(isStudentCardQuestion(query), false, `Expected no student_card match for: ${query}`);
+    }
 });

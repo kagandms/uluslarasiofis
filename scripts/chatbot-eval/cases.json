@@ -1345,6 +1345,60 @@
     ],
     "expect": { "route": "knowledge", "topic": "contact" }
   },
+  {
+    "id": "tr-know-06-student-card-lost",
+    "language": "tr",
+    "category": "knowledge",
+    "messages": [
+      { "role": "user", "content": "Öğrenci kartımı kaybettim" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "tr-know-07-student-card-school",
+    "language": "tr",
+    "category": "knowledge",
+    "messages": [
+      { "role": "user", "content": "Okul kartımı kaybettim, yenileme işlemi nasıl yapılır?" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "en-know-06-student-card-lost",
+    "language": "en",
+    "category": "knowledge",
+    "messages": [
+      { "role": "user", "content": "I lost my student ID, where do I get a replacement?" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "ru-know-05-student-card-lost",
+    "language": "ru",
+    "category": "knowledge",
+    "messages": [
+      { "role": "user", "content": "Я потерял студенческую карту, как восстановить студенческий билет?" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "tk-know-05-student-card-lost",
+    "language": "tk",
+    "category": "knowledge",
+    "messages": [
+      { "role": "user", "content": "Talyp kartymy ýitirdim, täzesini nireden almaly?" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "ar-know-05-student-card-lost",
+    "language": "ar",
+    "category": "knowledge",
+    "messages": [
+      { "role": "user", "content": "فقدت بطاقة الطالب، أين يمكنني تجديدها؟" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
 
   {
     "id": "tr-refusal-01-offtopic",
