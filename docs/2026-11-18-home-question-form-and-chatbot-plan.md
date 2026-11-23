@@ -1,5 +1,7 @@
 # Home page "Sorunuz mu var?" form and AI chatbot — integration plan
 
+> **Not (23 Kasım 2026):** Bu belgedeki `uluslarasiofis-clean-workspace-20261105` yolu, klasör 23 Kasım 2026'da `uluslarasiofis-production` adıyla yeniden adlandırılmadan önce yazıldı. Tarihsel kayıt olarak olduğu gibi bırakıldı. Güncel yol: `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-production`.
+
 > **For the orchestrating session (Opus) and its delegated agy agents.** Follow
 > [AGENTS.md](../AGENTS.md) and [ai-agent-task-template.md](ai-agent-task-template.md). Steps use
 > checkbox syntax. The orchestrator reviews every diff and runs every command; agy agents never run

@@ -1,5 +1,7 @@
 # Uluslararası Öğrenci Ofisi Portalı — İş Takibi
 
+> **Not (23 Kasım 2026):** Bu belgedeki `uluslarasiofis-clean-workspace-20261105` yolu, klasör 23 Kasım 2026'da `uluslarasiofis-production` adıyla yeniden adlandırılmadan önce yazıldı. Tarihsel kayıt olarak olduğu gibi bırakıldı. Güncel yol: `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-production`.
+
 **Son güncelleme:** 7 Kasım 2026 (plan v2)
 **Aktif proje klasörü:** `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-clean-workspace-20261105`
 **Canlı portal:** https://goc.topkapiuni.workers.dev/

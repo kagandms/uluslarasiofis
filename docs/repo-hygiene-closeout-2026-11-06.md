@@ -1,5 +1,7 @@
 # Repository hygiene closeout
 
+> **Not (23 Kasım 2026):** Bu belgedeki `uluslarasiofis-clean-workspace-20261105` yolu, klasör 23 Kasım 2026'da `uluslarasiofis-production` adıyla yeniden adlandırılmadan önce yazıldı. Tarihsel kayıt olarak olduğu gibi bırakıldı. Güncel yol: `/Users/kagansmtdms/Downloads/Проекты/uluslarasiofis-production`.
+
 This is a workspace handoff, not a release procedure. The current source of truth is the freshly fetched `origin/production` commit. Since commit `c2e1c1d` (2026-11-06), development happens directly on `production` in the single active folder described in [AGENTS.md](../AGENTS.md); the earlier `codex/repo-hygiene-clean-workspace-20261105` branch is no longer the working branch. Other machines must use their actual authorized checkout and must not depend on this machine's path.
 
 ## Start each session
