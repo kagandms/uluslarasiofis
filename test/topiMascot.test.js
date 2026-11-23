@@ -4,9 +4,11 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import {
+    TOPI_MOUSE_SVG_SOURCE,
     TOPI_STATES,
     TOPI_SVG_SOURCE,
     createTopi,
+    createTopiMouse,
     ensureTopiStyles,
     setTopiState
 } from '../src/public/topiMascot.js';
@@ -146,4 +148,41 @@ test('ensureTopiStyles inserts a single stylesheet in document.head idempotently
     assert.equal(doc.head.querySelectorAll('#topi-mascot-styles').length, 1);
     assert.match(firstStyle.textContent, /\.mascot-cat/);
     assert.match(firstStyle.textContent, /@keyframes bk/);
+});
+
+test('TOPI_MOUSE_SVG_SOURCE is <= 1500 bytes and has no external URLs or scripts', () => {
+    assert.ok(Buffer.byteLength(TOPI_MOUSE_SVG_SOURCE, 'utf8') <= 1500, 'Mouse SVG source must be <= 1500 bytes');
+
+    const withoutXmlns = TOPI_MOUSE_SVG_SOURCE.replace('xmlns="http://www.w3.org/2000/svg"', '');
+    assert.equal(/https?:\/\//i.test(withoutXmlns), false, 'Mouse SVG must not contain external http(s) URLs');
+    assert.equal(/<script/i.test(TOPI_MOUSE_SVG_SOURCE), false, 'Mouse SVG must not contain <script');
+});
+
+test('createTopiMouse returns an aria-hidden element and works twice without duplicate IDs', (context) => {
+    const doc = createDom(context);
+
+    const first = createTopiMouse(doc, { size: 22 });
+    const second = createTopiMouse(doc, { size: 18 });
+
+    assert.ok(first);
+    assert.ok(second);
+    assert.equal(first.tagName, 'SPAN');
+    assert.equal(first.className, 'topi-mouse');
+    assert.equal(first.getAttribute('aria-hidden'), 'true');
+    assert.equal(second.getAttribute('aria-hidden'), 'true');
+
+    const svg1 = first.querySelector('svg.mascot-mouse');
+    const svg2 = second.querySelector('svg.mascot-mouse');
+    assert.ok(svg1);
+    assert.ok(svg2);
+    assert.equal(svg1.getAttribute('width'), '22');
+    assert.equal(svg1.getAttribute('height'), '22');
+    assert.equal(svg2.getAttribute('width'), '18');
+    assert.equal(svg2.getAttribute('height'), '18');
+    assert.equal(svg1.getAttribute('aria-hidden'), 'true');
+    assert.equal(svg1.getAttribute('focusable'), 'false');
+
+    doc.body.append(first, second);
+    const allIds = [...doc.querySelectorAll('[id]')].map((el) => el.getAttribute('id'));
+    assert.equal(new Set(allIds).size, allIds.length, 'Multiple createTopiMouse instances must not share duplicate IDs');
 });

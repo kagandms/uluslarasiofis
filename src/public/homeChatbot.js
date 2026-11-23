@@ -1,7 +1,7 @@
 import { CHATBOT_MESSAGES } from './i18n/chatbot-messages.js';
 import { INQUIRY_MESSAGES } from './i18n/inquiry-messages.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
-import { createTopi, ensureTopiStyles, setTopiState } from './topiMascot.js';
+import { createTopi, createTopiMouse, ensureTopiStyles, setTopiState } from './topiMascot.js';
 
 export const CHATBOT_PILOT_QUERY_GATE = 'bot';
 
@@ -10,6 +10,7 @@ const MAX_MESSAGES_IN_REQUEST = 10;
 const MAX_MESSAGE_LENGTH = 500;
 const HELLO_DURATION_MS = 2400;
 const REPLY_STATE_DURATION_MS = 4000;
+const PANEL_CLOSE_FALLBACK_MS = 260;
 const activeControllers = new WeakMap();
 
 function normalizeLocale(locale) {
@@ -63,6 +64,18 @@ function prefersReducedMotion(document) {
     return Boolean(document?.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 }
 
+function shouldAnimatePanel(document, animateOption) {
+    if (prefersReducedMotion(document)) return false;
+    if (animateOption === false) return false;
+    const view = document?.defaultView;
+    if (typeof view?.requestAnimationFrame !== 'function') return false;
+    if (animateOption === true) return true;
+    return (
+        typeof view?.matchMedia === 'function'
+        && ('ontransitionend' in view || typeof view?.TransitionEvent === 'function')
+    );
+}
+
 function getFocusableElements(container) {
     const selector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
     return [...container.querySelectorAll(selector)].filter(
@@ -91,10 +104,10 @@ function resolveReplyMascotState(actions) {
 /**
  * Mounts and manages the pilot home-page chatbot widget inside `#home-chatbot-root`.
  * Conversation state stays strictly in memory (no browser storage).
- * @param {{locale?: string, root?: Document, mountElement?: HTMLElement, fetcher?: typeof fetch}} [options]
+ * @param {{locale?: string, root?: Document, mountElement?: HTMLElement, fetcher?: typeof fetch, animate?: boolean}} [options]
  * @returns {{open: () => void, close: () => void, setLocale: (nextLocale: string) => void, destroy: () => void}|null}
  */
-export function initHomeChatbot({ locale, root = globalThis.document, mountElement, fetcher } = {}) {
+export function initHomeChatbot({ locale, root = globalThis.document, mountElement, fetcher, animate } = {}) {
     const document = mountElement?.ownerDocument || root;
     if (!document) return null;
 
@@ -106,6 +119,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
 
     ensureTopiStyles(document);
 
+    const reducedMotion = prefersReducedMotion(document);
     let activeLocale = normalizeLocale(locale || document.documentElement?.lang);
     let isOpen = false;
     let isSending = false;
@@ -113,11 +127,20 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     let hasValidationError = false;
     let hasGreeted = false;
     let mascotResetTimer = null;
+    let openFrameId = null;
+    let closeCleanup = null;
     let conversationHistory = [];
     const localizedLogBindings = [];
 
     const widgetRoot = document.createElement('div');
-    widgetRoot.className = 'chatbot-root';
+    widgetRoot.className = reducedMotion ? 'chatbot-root is-reduced-motion' : 'chatbot-root';
+
+    const launcherDock = document.createElement('div');
+    launcherDock.className = 'chatbot-launcher-dock';
+
+    const launcherTagline = document.createElement('div');
+    launcherTagline.className = 'chatbot-launcher-tagline';
+    launcherTagline.setAttribute('aria-hidden', 'true');
 
     const launcherButton = document.createElement('button');
     launcherButton.type = 'button';
@@ -125,10 +148,16 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     launcherButton.className = 'chatbot-launcher';
     launcherButton.setAttribute('aria-expanded', 'false');
     launcherButton.setAttribute('aria-controls', 'home-chatbot-panel');
-    const launcherTopi = createTopi(document, { state: 'idle', size: 32 });
+    const launcherTopi = createTopi(document, { state: 'idle', size: 48 });
     const launcherText = document.createElement('span');
     launcherText.className = 'chatbot-launcher-text';
-    launcherButton.append(launcherTopi, launcherText);
+    const launcherMouse = reducedMotion ? null : createTopiMouse(document, { size: 22 });
+    if (launcherMouse) {
+        launcherButton.append(launcherTopi, launcherText, launcherMouse);
+    } else {
+        launcherButton.append(launcherTopi, launcherText);
+    }
+    launcherDock.append(launcherTagline, launcherButton);
 
     const panel = document.createElement('section');
     panel.id = 'home-chatbot-panel';
@@ -229,7 +258,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     composer.append(composerRow, composerMeta);
 
     panel.append(header, notice, log, chipsContainer, composer);
-    widgetRoot.append(launcherButton, panel);
+    widgetRoot.append(launcherDock, panel);
     mountTarget.replaceChildren(widgetRoot);
     mountTarget.dataset.chatbotInitialized = 'true';
 
@@ -368,6 +397,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         panel.dir = dir;
 
         launcherText.textContent = messages.launcherLabel;
+        launcherTagline.textContent = messages.launcherTagline;
         launcherButton.setAttribute('aria-label', messages.launcherAriaLabel);
         titleName.textContent = messages.panelName;
         titleText.textContent = messages.panelTitle;
@@ -419,12 +449,42 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         }
     }
 
+    function cancelPendingPanelAnimation() {
+        if (openFrameId !== null) {
+            document.defaultView?.cancelAnimationFrame?.(openFrameId);
+            openFrameId = null;
+        }
+        if (closeCleanup) {
+            closeCleanup();
+            closeCleanup = null;
+        }
+    }
+
     function openPanel() {
         if (isOpen) return;
+        cancelPendingPanelAnimation();
         isOpen = true;
+        widgetRoot.classList.add('is-panel-open');
+        launcherTagline.hidden = true;
+        if (launcherMouse) launcherMouse.hidden = true;
+        panel.classList.remove('is-closing');
         panel.hidden = false;
         launcherButton.setAttribute('aria-expanded', 'true');
         document.addEventListener('keydown', handleDocumentKeydown);
+
+        if (shouldAnimatePanel(document, animate)) {
+            panel.classList.remove('is-open');
+            void panel.offsetWidth;
+            const raf = document.defaultView.requestAnimationFrame.bind(document.defaultView);
+            openFrameId = raf(() => {
+                openFrameId = null;
+                if (destroyed || !isOpen) return;
+                panel.classList.add('is-open');
+            });
+        } else {
+            panel.classList.add('is-open');
+        }
+
         if (!hasGreeted) {
             hasGreeted = true;
             if (!isSending && !prefersReducedMotion(document)) {
@@ -443,12 +503,57 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
 
     function closePanel({ restoreFocus = true } = {}) {
         if (!isOpen) return;
+        cancelPendingPanelAnimation();
         isOpen = false;
-        panel.hidden = true;
         launcherButton.setAttribute('aria-expanded', 'false');
         document.removeEventListener('keydown', handleDocumentKeydown);
         clearMascotTimer();
         setMascotState(isSending ? 'thinking' : 'idle');
+
+        const finishClose = () => {
+            if (destroyed || isOpen) return;
+            panel.classList.remove('is-open', 'is-closing');
+            panel.hidden = true;
+            widgetRoot.classList.remove('is-panel-open');
+            launcherTagline.hidden = false;
+            if (launcherMouse) launcherMouse.hidden = false;
+        };
+
+        if (shouldAnimatePanel(document, animate)) {
+            panel.classList.remove('is-open');
+            panel.classList.add('is-closing');
+            let done = false;
+            let fallbackTimer = null;
+            const finalize = () => {
+                if (done) return;
+                done = true;
+                if (fallbackTimer !== null) {
+                    globalThis.clearTimeout(fallbackTimer);
+                    fallbackTimer = null;
+                }
+                panel.removeEventListener('transitionend', handleTransitionEnd);
+                closeCleanup = null;
+                finishClose();
+            };
+            const handleTransitionEnd = (event) => {
+                if (event.target !== panel) return;
+                if (event.propertyName && event.propertyName !== 'opacity' && event.propertyName !== 'transform') return;
+                finalize();
+            };
+            closeCleanup = () => {
+                done = true;
+                if (fallbackTimer !== null) {
+                    globalThis.clearTimeout(fallbackTimer);
+                    fallbackTimer = null;
+                }
+                panel.removeEventListener('transitionend', handleTransitionEnd);
+            };
+            panel.addEventListener('transitionend', handleTransitionEnd);
+            fallbackTimer = globalThis.setTimeout(finalize, PANEL_CLOSE_FALLBACK_MS);
+        } else {
+            finishClose();
+        }
+
         if (restoreFocus) {
             launcherButton.focus();
         }
@@ -601,6 +706,10 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         applyLocale(document.documentElement?.lang || activeLocale);
     };
 
+    launcherTagline.addEventListener('click', () => {
+        openPanel();
+    });
+
     launcherButton.addEventListener('click', () => {
         if (isOpen) {
             closePanel({ restoreFocus: true });
@@ -656,6 +765,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         destroy() {
             destroyed = true;
             clearMascotTimer();
+            cancelPendingPanelAnimation();
             document.removeEventListener('keydown', handleDocumentKeydown);
             document.removeEventListener('public:locale-changed', handleLocaleChanged);
             mountTarget.replaceChildren();

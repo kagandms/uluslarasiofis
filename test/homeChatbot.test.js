@@ -619,7 +619,8 @@ test('Topi appears in launcher, header (all five locales), and assistant/error a
     const headerTopiSvg = panel.querySelector('.chatbot-header .topi svg.mascot-cat');
 
     assert.ok(launcherTopiSvg);
-    assert.equal(launcherTopiSvg.getAttribute('width'), '32');
+    assert.equal(launcherTopiSvg.getAttribute('width'), '48');
+    assert.equal(launcherTopiSvg.getAttribute('height'), '48');
     assert.ok(headerTopiSvg);
     assert.equal(headerTopiSvg.getAttribute('width'), '36');
 
@@ -787,4 +788,155 @@ test('Topi plays hello once on first open, resets after 2.4s, and skips hello wh
     reducedDom.window.document.getElementById('home-chatbot-launcher').click();
     const reducedHeaderSvg = reducedDom.window.document.querySelector('#home-chatbot-panel .chatbot-header .topi svg.mascot-cat');
     assert.equal(reducedHeaderSvg.classList.contains('is-hello'), false);
+});
+
+test('launcher renders localized tagline and aria-hidden mouse, clicking tagline opens panel, and both hide while open', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+    const { doc, controller } = mountChatbotDom(context, html, { locale: 'tr' });
+
+    const widgetRoot = doc.querySelector('.chatbot-root');
+    const tagline = doc.querySelector('.chatbot-launcher-tagline');
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const mouse = launcher.querySelector('.topi-mouse');
+    const panel = doc.getElementById('home-chatbot-panel');
+
+    assert.ok(tagline);
+    assert.equal(tagline.getAttribute('aria-hidden'), 'true');
+    assert.equal(tagline.hidden, false);
+
+    assert.ok(mouse);
+    assert.equal(mouse.getAttribute('aria-hidden'), 'true');
+    assert.equal(mouse.querySelector('svg.mascot-mouse')?.getAttribute('aria-hidden'), 'true');
+    assert.equal(mouse.hidden, false);
+
+    for (const locale of SUPPORTED_LOCALES) {
+        controller.setLocale(locale);
+        assert.equal(tagline.textContent.trim(), CHATBOT_MESSAGES[locale].launcherTagline);
+    }
+
+    tagline.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(launcher.getAttribute('aria-expanded'), 'true');
+    assert.equal(widgetRoot.classList.contains('is-panel-open'), true);
+    assert.equal(tagline.hidden, true);
+    assert.equal(mouse.hidden, true);
+
+    panel.querySelector('.chatbot-close').click();
+    assert.equal(panel.hidden, true);
+    assert.equal(launcher.getAttribute('aria-expanded'), 'false');
+    assert.equal(widgetRoot.classList.contains('is-panel-open'), false);
+    assert.equal(tagline.hidden, false);
+    assert.equal(mouse.hidden, false);
+});
+
+test('reduced motion omits launcher mouse while keeping tagline and synchronous open/close intact', async (context) => {
+    const html = await readWorkspaceFile('index.html');
+    const reducedDom = new JSDOM(html, { url: 'https://portal.test/?bot=1' });
+    context.after(() => reducedDom.window.close());
+    reducedDom.window.matchMedia = (query) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        addEventListener() {},
+        removeEventListener() {}
+    });
+
+    const controller = initHomeChatbot({ locale: 'tr', root: reducedDom.window.document });
+    context.after(() => controller.destroy());
+
+    const doc = reducedDom.window.document;
+    const widgetRoot = doc.querySelector('.chatbot-root');
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const tagline = doc.querySelector('.chatbot-launcher-tagline');
+    const panel = doc.getElementById('home-chatbot-panel');
+
+    assert.equal(widgetRoot.classList.contains('is-reduced-motion'), true);
+    assert.equal(launcher.querySelector('.topi-mouse'), null);
+    assert.ok(tagline);
+    assert.equal(tagline.getAttribute('aria-hidden'), 'true');
+
+    tagline.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.classList.contains('is-open'), true);
+    assert.equal(tagline.hidden, true);
+
+    panel.querySelector('.chatbot-close').click();
+    assert.equal(panel.hidden, true);
+    assert.equal(panel.classList.contains('is-open'), false);
+    assert.equal(panel.classList.contains('is-closing'), false);
+    assert.equal(tagline.hidden, false);
+});
+
+test('animated panel open/close toggles is-open and is-closing and finishes on transitionend or fallback timeout', async (context) => {
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    context.after(() => context.mock.timers.reset());
+
+    const html = await readWorkspaceFile('index.html');
+    const dom = new JSDOM(html, { url: 'https://portal.test/?bot=1' });
+    context.after(() => dom.window.close());
+
+    let nextRafId = 0;
+    const rafCallbacks = new Map();
+    dom.window.requestAnimationFrame = (cb) => {
+        nextRafId += 1;
+        rafCallbacks.set(nextRafId, cb);
+        return nextRafId;
+    };
+    dom.window.cancelAnimationFrame = (id) => {
+        rafCallbacks.delete(id);
+    };
+    const flushRaf = () => {
+        const pending = [...rafCallbacks.values()];
+        rafCallbacks.clear();
+        for (const cb of pending) cb(0);
+    };
+
+    const controller = initHomeChatbot({ locale: 'tr', root: dom.window.document, animate: true });
+    context.after(() => controller.destroy());
+
+    const doc = dom.window.document;
+    const widgetRoot = doc.querySelector('.chatbot-root');
+    const launcher = doc.getElementById('home-chatbot-launcher');
+    const tagline = doc.querySelector('.chatbot-launcher-tagline');
+    const mouse = launcher.querySelector('.topi-mouse');
+    const panel = doc.getElementById('home-chatbot-panel');
+    const closeButton = panel.querySelector('.chatbot-close');
+
+    // Open with rAF -> adds is-open on next frame.
+    launcher.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.classList.contains('is-open'), false);
+    assert.equal(tagline.hidden, true);
+    assert.equal(mouse.hidden, true);
+    flushRaf();
+    assert.equal(panel.classList.contains('is-open'), true);
+
+    // Close waits for transitionend before setting hidden = true.
+    closeButton.click();
+    assert.equal(panel.classList.contains('is-open'), false);
+    assert.equal(panel.classList.contains('is-closing'), true);
+    assert.equal(panel.hidden, false);
+
+    panel.dispatchEvent(Object.assign(new dom.window.Event('transitionend', { bubbles: true }), {
+        propertyName: 'opacity'
+    }));
+    assert.equal(panel.hidden, true);
+    assert.equal(panel.classList.contains('is-closing'), false);
+    assert.equal(widgetRoot.classList.contains('is-panel-open'), false);
+    assert.equal(tagline.hidden, false);
+    assert.equal(mouse.hidden, false);
+
+    // Reopen and close via 260 ms fallback timeout when transitionend does not fire.
+    launcher.click();
+    flushRaf();
+    assert.equal(panel.classList.contains('is-open'), true);
+
+    closeButton.click();
+    assert.equal(panel.hidden, false);
+    assert.equal(panel.classList.contains('is-closing'), true);
+
+    context.mock.timers.tick(260);
+    assert.equal(panel.hidden, true);
+    assert.equal(panel.classList.contains('is-closing'), false);
+    assert.equal(tagline.hidden, false);
+    assert.equal(mouse.hidden, false);
 });
