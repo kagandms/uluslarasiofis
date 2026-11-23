@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import {
-    IMPORT_PENDING_STORAGE_KEY,
+import * as yoksisExcelImport from '../src/staff/yoksisExcelImport.js';
+
+const {
     chunkImportRows,
     formatDeadlineWithRemaining,
     formatLatestImportLine,
@@ -10,10 +11,9 @@ import {
     normalizeYoksisRows,
     parseExportedAtFromFileName,
     parseYoksisExcel,
-    readPendingImport,
     rowsFromWorkbook,
     uploadYoksisImport
-} from '../src/staff/yoksisExcelImport.js';
+} = yoksisExcelImport;
 
 const fixture = JSON.parse(
     readFileSync(new URL('./fixtures/yoksis-ikamet-islemleri-ornek.json', import.meta.url), 'utf8')
@@ -200,7 +200,12 @@ test('chunkImportRows splits 120 rows into 3 batches of 50, 50, 20', () => {
     assert.equal(chunks[2].length, 20);
 });
 
-test('uploadYoksisImport sends final:true only on last batch and persists remaining batches on failure for resume', async () => {
+test('uploadYoksisImport sends final:true only on last batch, stops on failure without final:true, and does not export pending storage helpers', async () => {
+    assert.equal('IMPORT_PENDING_STORAGE_KEY' in yoksisExcelImport, false);
+    assert.equal('readPendingImport' in yoksisExcelImport, false);
+    assert.equal('savePendingImport' in yoksisExcelImport, false);
+    assert.equal('clearPendingImport' in yoksisExcelImport, false);
+
     const rows = Array.from({ length: 120 }, (_, i) => ({
         applicationNumber: `2026-00-${String(i + 1).padStart(7, '0')}`,
         studentNumber: `260000${String(i + 1).padStart(5, '0')}`,
@@ -214,13 +219,6 @@ test('uploadYoksisImport sends final:true only on last batch and persists remain
         missingNote: '',
         gocLastQueryAt: null
     }));
-
-    const store = new Map();
-    const storage = {
-        getItem: (k) => (store.has(k) ? store.get(k) : null),
-        setItem: (k, v) => { store.set(k, String(v)); },
-        removeItem: (k) => { store.delete(k); }
-    };
 
     const calls = [];
     let attempt = 0;
@@ -242,48 +240,49 @@ test('uploadYoksisImport sends final:true only on last batch and persists remain
         };
     };
 
-    const firstRun = await uploadYoksisImport({
+    const failedRun = await uploadYoksisImport({
         rows,
         exportedAt: '2026-11-23 13:07',
         importId: 'imp-test-001',
-        fetcher: flakyFetcher,
-        storage
+        fetcher: flakyFetcher
     });
 
-    assert.equal(firstRun.ok, false);
-    assert.equal(firstRun.importId, 'imp-test-001');
-    assert.equal(firstRun.completedBatches, 1);
-    assert.equal(firstRun.totalBatches, 3);
+    assert.equal(failedRun.ok, false);
+    assert.equal(failedRun.importId, 'imp-test-001');
+    assert.equal(failedRun.completedBatches, 1);
+    assert.equal(failedRun.totalBatches, 3);
     assert.equal(calls.length, 2);
     assert.equal(calls[0].body.final, false);
     assert.equal(calls[1].body.final, false);
+    assert.equal(calls.some((call) => call.body.final === true), false);
 
-    const pending = readPendingImport(storage);
-    assert.ok(pending);
-    assert.equal(pending.importId, 'imp-test-001');
-    assert.equal(pending.batches.length, 2);
-    assert.equal(store.has(IMPORT_PENDING_STORAGE_KEY), true);
+    // Full re-upload succeeds and sends final:true only on the 3rd batch
+    const successCalls = [];
+    const okFetcher = async (url, options) => {
+        const body = JSON.parse(options.body);
+        successCalls.push({ url, body });
+        return {
+            ok: true,
+            status: 200,
+            json: async () => ({ storedCount: body.rows.length, rejected: [] })
+        };
+    };
 
-    // Resume with the SAME importId
-    const resumeRun = await uploadYoksisImport({
-        batches: pending.batches,
-        exportedAt: pending.exportedAt,
-        importId: pending.importId,
-        startBatchIndex: pending.completedBatches,
-        totalBatches: pending.totalBatches,
-        initialStoredCount: pending.storedCount,
-        fetcher: flakyFetcher,
-        storage
+    const okRun = await uploadYoksisImport({
+        rows,
+        exportedAt: '2026-11-23 13:07',
+        importId: 'imp-test-002',
+        fetcher: okFetcher
     });
 
-    assert.equal(resumeRun.ok, true);
-    assert.equal(resumeRun.storedCount, 120);
-    assert.equal(calls.length, 4);
-    assert.equal(calls[2].body.importId, 'imp-test-001');
-    assert.equal(calls[2].body.final, false);
-    assert.equal(calls[3].body.importId, 'imp-test-001');
-    assert.equal(calls[3].body.final, true);
-    assert.equal(readPendingImport(storage), null);
+    assert.equal(okRun.ok, true);
+    assert.equal(okRun.storedCount, 120);
+    assert.equal(okRun.completedBatches, 3);
+    assert.equal(okRun.totalBatches, 3);
+    assert.equal(successCalls.length, 3);
+    assert.equal(successCalls[0].body.final, false);
+    assert.equal(successCalls[1].body.final, false);
+    assert.equal(successCalls[2].body.final, true);
 });
 
 test('exportedAt, staleness, deadline and latest-import formatting helpers work accurately', () => {

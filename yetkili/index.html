@@ -254,11 +254,13 @@
                     <div id="staff-yoksis-audit" class="yoksis-audit-panel">
                         <div class="yoksis-audit-excel" style="display: grid; gap: 0.75rem; margin-bottom: 1.25rem;">
                             <p id="audit-import-latest" aria-live="polite" style="margin: 0; color: var(--staff-home-card-secondary); font-size: 0.92rem;">Son yükleme bilgisi kontrol ediliyor…</p>
+                            <div class="yoksis-audit-step" style="display: grid; gap: 0.35rem;">
+                                <label for="audit-excel-file" style="font-weight: 600; font-size: 0.92rem;">1. YÖKSİS'ten indirdiğiniz İkamet İşlemleri dosyasını seçin</label>
+                                <input id="audit-excel-file" type="file" accept=".xls,.xlsx" style="max-width: 100%; min-width: 0;">
+                                <p id="audit-excel-file-info" aria-live="polite" hidden style="margin: 0; font-size: 0.85rem; color: var(--staff-home-card-secondary);"></p>
+                            </div>
                             <div class="yoksis-audit-controls" style="align-items: center;">
-                                <label for="audit-excel-file" class="sr-only">YÖKSİS Excel dosyası (.xls veya .xlsx)</label>
-                                <input id="audit-excel-file" type="file" accept=".xls,.xlsx" style="max-width: 100%; min-width: 0; flex: 1 1 14rem;">
-                                <button id="audit-excel-upload" class="btn btn-primary" type="button">Excel yükle</button>
-                                <button id="audit-excel-resume" class="btn btn-outline" type="button" hidden>Kaldığı yerden devam</button>
+                                <button id="audit-excel-upload" class="btn btn-primary" type="button" disabled>2. Excel yükle</button>
                             </div>
                             <div id="audit-excel-stale-warning" class="yoksis-audit-warning" role="alert" hidden>
                                 <strong>Bu dosya dünden kalma görünüyor.</strong> Daha güncel bir YÖKSİS dışa aktarımı indirmeniz önerilir.
