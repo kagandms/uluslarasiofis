@@ -209,9 +209,12 @@ async function sendYoksisAuditCheck(tabId, scanId) {
 }
 
 async function sendYoksisGocnetQueryCheck(tabId, request) {
-    const message = { action: 'YOKSIS_GOCNET_QUERY', requestId: request.requestId,
-        portalTabId: request.portalTabId, applicationNumber: request.applicationNumber,
-        phase: request.phase || 'form', attemptId: request.attemptId };
+    const message = request.action === 'YOKSIS_GOCNET_LOOKUP'
+        ? { action: 'YOKSIS_GOCNET_LOOKUP', requestId: request.requestId,
+            portalTabId: request.portalTabId, applicationNumber: request.applicationNumber }
+        : { action: 'YOKSIS_GOCNET_QUERY', requestId: request.requestId,
+            portalTabId: request.portalTabId, applicationNumber: request.applicationNumber,
+            phase: request.phase || 'form', attemptId: request.attemptId };
     try { return await sendTabMessage(tabId, message, { frameId: 0 }); }
     catch (initialError) {
         if (!chrome.scripting?.executeScript) throw initialError;
@@ -2499,6 +2502,69 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     clearInterval(keepAlive);
                     console?.info?.('[YKN][timing] gocnet check', {
                         phase: request.phase || 'history',
+                        ms: Date.now() - startedAt,
+                        state: finalState
+                    });
+                }
+            })();
+            return true;
+        }
+
+        if (request.action === 'LOOKUP_GOCNET_RECORD') {
+            const startedAt = Date.now();
+            const keepAlive = setInterval(() => {
+                chrome.runtime?.getPlatformInfo?.(() => {});
+            }, 20_000);
+            void (async () => {
+                let finalState = 'error';
+                try {
+                    if (!Number.isInteger(sender.tab?.id)) throw new Error('Portal tab is not verified.');
+                    const target = await getVerifiedYoksisTarget((await resolveGocnetYoksisTab()).id);
+                    const result = await runYoksisOperation(target.yoksisTabId, 'gocnet-query', request.requestId, () =>
+                        sendYoksisGocnetQueryCheck(target.yoksisTabId, {
+                            action: 'YOKSIS_GOCNET_LOOKUP',
+                            requestId: request.requestId,
+                            applicationNumber: request.applicationNumber,
+                            portalTabId: sender.tab.id
+                        }));
+                    const rawState = result?.state;
+                    if (rawState === 'no_match') {
+                        finalState = 'no_match';
+                        sendResponse({ success: true, requestId: request.requestId, state: 'no_match' });
+                        return;
+                    }
+                    if (rawState === 'found') {
+                        const basvuruKayitNo = typeof result.basvuruKayitNo === 'string' && /^\d{1,12}$/.test(result.basvuruKayitNo)
+                            ? result.basvuruKayitNo : null;
+                        if (!basvuruKayitNo) {
+                            finalState = 'unknown';
+                            sendResponse({ success: false, requestId: request.requestId, state: 'unknown', reason: 'basvuru_kayit_no_invalid' });
+                            return;
+                        }
+                        const islemKayitNo = typeof result.islemKayitNo === 'string' && /^\d{1,12}$/.test(result.islemKayitNo)
+                            ? result.islemKayitNo : null;
+                        finalState = 'found';
+                        sendResponse({
+                            success: true,
+                            requestId: request.requestId,
+                            state: 'found',
+                            basvuruKayitNo,
+                            ...(islemKayitNo ? { islemKayitNo } : {})
+                        });
+                        return;
+                    }
+                    finalState = 'unknown';
+                    const reason = typeof result?.reason === 'string' && result.reason
+                        ? result.reason.slice(0, 160) : 'controller_unknown';
+                    sendResponse({ success: false, requestId: request.requestId, state: 'unknown', reason });
+                } catch (error) {
+                    const reason = typeof error?.message === 'string' && error.message
+                        ? error.message.slice(0, 160) : 'unknown_error';
+                    finalState = 'unknown';
+                    sendResponse({ success: false, requestId: request.requestId, state: 'unknown', reason });
+                } finally {
+                    clearInterval(keepAlive);
+                    console?.info?.('[YKN][timing] gocnet lookup', {
                         ms: Date.now() - startedAt,
                         state: finalState
                     });

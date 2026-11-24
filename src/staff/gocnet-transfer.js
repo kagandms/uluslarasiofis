@@ -188,3 +188,29 @@ export async function prepareGocnetTransfer({ applicationId, api, signal, regist
         pdfSha256
     };
 }
+
+/** Reads the registration number from the first page of the application's residence form, or returns null. */
+export async function readRegistrationNumberFromForm({ applicationId, api, signal }) {
+    if (signal?.aborted) throw new DOMException('Canceled', 'AbortError');
+    const manifest = await api.createArchiveManifest(applicationId, signal);
+    if (signal?.aborted) throw new DOMException('Canceled', 'AbortError');
+    const formEntry = manifest?.files?.find((file) => file?.code === 'residence_application_form');
+    if (!formEntry) return null;
+    const response = await api.readArchiveFile(applicationId, formEntry, signal);
+    if (signal?.aborted) throw new DOMException('Canceled', 'AbortError');
+    if (!response?.ok || !response?.body) {
+        throw new Error(`“${formEntry.entry_name || formEntry.code}” güvenli biçimde alınamadı.`);
+    }
+    const blob = await response.blob();
+    if (signal?.aborted) throw new DOMException('Canceled', 'AbortError');
+    if (blob.size !== formEntry.byte_size) {
+        throw new Error(`“${formEntry.entry_name || formEntry.code}” boyutu doğrulanamadı.`);
+    }
+    const file = new File([blob], formEntry.entry_name || 'residence_application_form.pdf', {
+        type: formEntry.media_type
+    });
+    const { candidates: rawCandidates, text: formText } = await recognizeFormNumber(file, signal);
+    if (signal?.aborted) throw new DOMException('Canceled', 'AbortError');
+    const candidates = filterRegistrationCandidates(rawCandidates);
+    return resolveRegistrationNumber(candidates, '', formText);
+}

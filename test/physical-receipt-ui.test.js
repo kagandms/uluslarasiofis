@@ -47,7 +47,7 @@ test('closed intake keeps compact A4 download and hides removed management contr
     renderPhysicalIntakes(root,{view:'detail',detail:{intake,files:[],allowed_transitions:[],receipts:[{id:'receipt',document_version:1,state:'ready',metadata_version:1}]},printAttempts:[{id:'attempt',status:'unknown',blocks_new_attempt:1}]},{});
 
     assert.ok(root.querySelector('button.physical-receipt-download'));
-    assert.equal(root.querySelector('button.physical-receipt-download').textContent,'A4 İndir');
+    assert.equal(root.querySelector('button.physical-receipt-download').textContent,'Dosya Kapağı Yazdır');
     assert.doesNotMatch(root.textContent,/A4 Hazırla|A4 Yazdır|Manuel Yazdır|Ofis İşlemini Kapat|Kaydı Yenile|awaiting_content|unknown/);
     assert.equal([...root.querySelectorAll('button')].some(button=>['PDF Ekle','Bilgileri Düzenle','Baskıyı Güvenle İptal Et'].includes(button.textContent)),false);
     dom.window.close();

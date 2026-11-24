@@ -9,8 +9,10 @@ import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerServi
 import { listSentToMigrationApplications, runMigrationBulkExport } from './migrationBulkArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
+import { openTebligatDialog } from '../ui/tebligatDialog.js';
+import { canPrintTebligat } from '../shared/tebligatPage.js';
 import { createApplicationQueueFilters, splitNoteStatus } from './application-queue-filters.js';
-import { describeGocnetPreparationError, prepareGocnetTransfer } from './gocnet-transfer.js';
+import { describeGocnetPreparationError, prepareGocnetTransfer, readRegistrationNumberFromForm } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
 import { confirmPermanentDelete, formatPermanentDeleteError } from './permanentDeleteDialog.js';
@@ -594,12 +596,35 @@ function createApplicationSummary(document, application, state = {}, handlers = 
     ];
     section.className = 'staff-application-summary';
     section.append(createText(document, 'h4', '', 'Başvuru ve başvuran bilgileri'));
-    section.append(createApplicationPdfDownloadControl(document, application, {
-        downloadApplicationPdf: 'A4 kapak PDF’ini indir / yazdır',
+    const pdfActions = document.createElement('div');
+    pdfActions.className = 'staff-application-pdf-actions';
+    Object.assign(pdfActions.style, { display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: '0.65rem' });
+    pdfActions.append(createApplicationPdfDownloadControl(document, application, {
+        downloadApplicationPdf: 'Dosya Kapağı Yazdır',
         applicationPdfPreparing: 'Kapak PDF’i hazırlanıyor…',
         applicationPdfReady: 'Kapak PDF’i indirildi. Yazdırabilir veya cihazınızda saklayabilirsiniz.',
         applicationPdfFailed: 'PDF oluşturulamadı. Lütfen yeniden deneyin.'
     }, 'staff-application-pdf-control'));
+    if (canPrintTebligat(application.status)) {
+        const tebligatButton = document.createElement('button');
+        tebligatButton.type = 'button';
+        tebligatButton.className = 'btn btn-primary';
+        tebligatButton.dataset.action = 'print-tebligat';
+        tebligatButton.textContent = 'Tebliğ/Tebligat Yazdır';
+        tebligatButton.addEventListener('click', () => {
+            openTebligatDialog(document, {
+                firstName: application.first_name,
+                lastName: application.last_name,
+                passportNumber: application.passport_number,
+                birthDate: application.date_of_birth,
+                migrationGoDate: application.updated_at
+            }, tebligatButton, handlers.onReadEIkametNo
+                ? { readEIkametNo: (signal) => handlers.onReadEIkametNo(application.id, signal) }
+                : undefined);
+        });
+        pdfActions.append(tebligatButton);
+    }
+    section.append(pdfActions);
     if (state.fieldEditNotice) {
         const notice = createText(document, 'p', 'staff-application-notice staff-field-edit-notice', state.fieldEditNotice);
         notice.setAttribute('role', 'status');
@@ -1271,7 +1296,10 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onBeginFieldEdit: fieldEditController.beginEdit,
             onUpdateFieldDraft: fieldEditController.updateDraftValue,
             onSaveFieldEdit: fieldEditController.saveEdit,
-            onCancelFieldEdit: fieldEditController.cancelEdit
+            onCancelFieldEdit: fieldEditController.cancelEdit,
+            onReadEIkametNo: typeof api?.createArchiveManifest === 'function'
+                ? (applicationId, signal) => readRegistrationNumberFromForm({ applicationId, api, signal })
+                : null
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,

@@ -12,6 +12,7 @@
         'START_YOKSIS_DOCUMENT_AUDIT',
         'STOP_YOKSIS_DOCUMENT_AUDIT',
         'CHECK_GOCNET_TRANSFER',
+        'LOOKUP_GOCNET_RECORD',
         'SAVE_GOCNET_RECORD',
         'UPLOAD_GOCNET_DOCUMENT',
         'ACK_GOCNET_SAVE',
@@ -110,8 +111,32 @@
         }
     }
 
+    const LOOKUP_GOCNET_ALLOWED_KEYS = new Set([
+        'action',
+        'requestId',
+        'applicationNumber',
+        'source',
+        'screenArea',
+        'yknViewOpen'
+    ]);
+
+    /** Validates optional bridge-injected transport metadata and rejects any unexpected keys. */
+    function hasOnlyLookupGocnetKeys(request) {
+        if ('source' in request && request.source !== 'IKAMET_PORTAL') return false;
+        if ('yknViewOpen' in request && typeof request.yknViewOpen !== 'boolean') return false;
+        if ('screenArea' in request) {
+            const area = request.screenArea;
+            if (!area || typeof area !== 'object' || Array.isArray(area)) return false;
+            if (Object.keys(area).length !== 4
+                || !['availLeft', 'availTop', 'availWidth', 'availHeight'].every((key) => Number.isFinite(area[key]))) {
+                return false;
+            }
+        }
+        return Object.keys(request).every((key) => LOOKUP_GOCNET_ALLOWED_KEYS.has(key));
+    }
+
     function isValidPortalMessage(request) {
-        if (!request || typeof request !== 'object' || !PORTAL_ACTIONS.has(request.action) || !isRequestId(request.requestId)) {
+        if (!request || typeof request !== 'object' || Array.isArray(request) || !PORTAL_ACTIONS.has(request.action) || !isRequestId(request.requestId)) {
             return false;
         }
 
@@ -144,6 +169,11 @@
             return typeof request.applicationNumber === 'string' && /^20\d{2}-\d{2}-\d{5,8}$/.test(request.applicationNumber)
                 && (request.phase === undefined || ['history', 'form'].includes(request.phase))
                 && (request.attemptId === undefined || /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.attemptId));
+        }
+        if (request.action === 'LOOKUP_GOCNET_RECORD') {
+            return hasOnlyLookupGocnetKeys(request)
+                && typeof request.applicationNumber === 'string'
+                && /^20\d{2}-\d{2}-\d{5,8}$/.test(request.applicationNumber);
         }
         if (['SAVE_GOCNET_RECORD', 'UPLOAD_GOCNET_DOCUMENT', 'ACK_GOCNET_SAVE', 'ACK_GOCNET_UPLOAD'].includes(request.action)) {
             if (!Number.isInteger(request.targetTabId) || request.targetTabId < 0

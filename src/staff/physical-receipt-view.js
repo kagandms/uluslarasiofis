@@ -1,4 +1,6 @@
 import { bindPhysicalUppercaseInput } from './physical-uppercase-input.js';
+import { canPrintTebligat } from '../shared/tebligatPage.js';
+import { openTebligatDialog } from '../ui/tebligatDialog.js';
 
 function appendText(parent,tag,value) {
     const node=parent.ownerDocument.createElement(tag); node.textContent=value; parent.append(node); return node;
@@ -84,9 +86,28 @@ export function renderPhysicalReceiptControls(panel,state,handlers) {
         if (intake.tracking_reference) appendButton(panel,'Bilgileri Düzenle',handlers.editMetadata);
     }
     if (state.isEditingMetadata) renderMetadataEdit(panel,state,handlers);
-    if (!intake.tracking_reference || intake.deleted_at) return;
+    if (intake.deleted_at) return;
+    const showTebligat = canPrintTebligat(intake.status);
+    if (!intake.tracking_reference && !showTebligat) return;
     const actions=panel.ownerDocument.createElement('div'); actions.className='physical-receipt-actions';
-    const download=appendButton(actions,'A4 İndir',handlers.downloadReceipt);
-    download.classList.add('physical-receipt-download');
+    actions.style.flexWrap='wrap';
+    if (intake.tracking_reference) {
+        const download=appendButton(actions,'Dosya Kapağı Yazdır',handlers.downloadReceipt);
+        download.classList.add('physical-receipt-download');
+    }
+    if (showTebligat) {
+        const tebligat=appendButton(actions,'Tebliğ/Tebligat Yazdır',()=>{
+            openTebligatDialog(panel.ownerDocument,{
+                firstName:intake.first_name,
+                lastName:intake.last_name,
+                passportNumber:intake.passport_number,
+                birthDate:intake.date_of_birth || '',
+                migrationGoDate:intake.updated_at || ''
+            },tebligat);
+        });
+        tebligat.className='btn btn-primary physical-receipt-tebligat';
+        tebligat.dataset.action='print-tebligat';
+        Object.assign(tebligat.style,{minHeight:'36px',padding:'6px 12px',fontSize:'.875rem',width:'auto'});
+    }
     panel.append(actions);
 }
