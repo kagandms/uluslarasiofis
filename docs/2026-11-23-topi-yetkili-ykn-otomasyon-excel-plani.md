@@ -527,3 +527,9 @@ Paylaşılan dosyalar tek sahipli çalışır: `src/server/worker.js` (rota sat�
 - Kullanıcı isteği: "Sohbetler" kartı sırayla gelmiyordu → 11. ve 12. kart animasyonu eklendi (`task/chat-log-staff` a792ad6).
 - Entegrasyon `test/combined-2026-11-23`: 2127 test, 0 başarısız; build ve dry-run geçti.
 - **Yarına kalan (YÖKSİS erişimi gerekir):** YKN otomatik zinciri 3 öğrenciyle (biri yanlış belge), yüz bulma doğruluğu sayımı, Topi'den "şuna YKN ver". Sonra: KVKK metni ofis/hukuk onayı, kullanıcının "Sohbetler" ve Topi panelini gözle denemesi, yayın kararı (tam yol: 0046 + 0047 + package.json).
+
+### 15.4 Sohbet geçmişi yerleşimi ve tarih testi (2026-11-24 sabah)
+
+- **Kullanıcı denemesi:** "Sohbetler" kartı tıklanmıyordu ve Gelen Sorular panelinin içine yığılıyordu. Kök neden: `src/ui/workspaceNavigation.js` `VIEW_TITLES` listesinde `chat-logs` yok; 4C'nin eklediği tıklama yakalayıcısı ana ekranı gizleyip paneli kendi açıyordu. **Karar (kullanıcı):** ayrı kart/sekme/görünüm olmayacak; "Gelen Sorular" panelinin altında **"Topi ile sohbet geçmişleri"** bölümü. Yapıldı: `task/chat-log-staff` ed9f87a (kart, sekme, `#view-chat-logs` ve yakalayıcı silindi; bölüm `#view-inquiries` içinde `#staff-inquiries-manager` altında). Ana ekran yine 10 kart.
+- **Tarihe bağlı test (production'da da kırmızıydı):** 2026-11-24'ten itibaren `test/applicationWizard.test.js` içindeki üç test kırmızıydı: sabit doğum tarihi `24.10.2008`, yalnız 2026-11-23'e kadar "son bir ayda 18'e girdi" penceresindeydi. Ürün kodu (`src/shared/age.js`) doğru; testler bugünün İstanbul tarihinden türetilen tarihlere çevrildi (`task/test-relative-dates` c3cdad8, `submissionReadiness.test.js` dahil); altı farklı sahte günde (artık yıl günü, ay/yıl sonu dahil) geçtiği sınandı. Bu düzeltme `production`'a ayrı, küçük bir commit olarak da alınabilir (migration yok).
+- Entegrasyon `test/combined-2026-11-23` (merge c3cdad8 sonrası): 2127 test, 0 başarısız; build ve dry-run geçti.
