@@ -1,4 +1,12 @@
-/* Staff "Sohbetler" workspace styles — reuses inquiries.css tokens and layout patterns */
+/* Staff "Topi ile sohbet geçmişleri" section under "Gelen Sorular" — reuses inquiries.css tokens and layout patterns */
+
+.staff-chat-history-section {
+    margin-top: 2.25rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--card-border);
+    min-width: 0;
+    width: 100%;
+}
 
 .staff-chatlog-stats {
     display: grid;
