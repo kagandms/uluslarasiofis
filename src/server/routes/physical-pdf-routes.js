@@ -3,6 +3,7 @@ import { ApiError } from '../domain/errors.js';
 import { MAX_PHYSICAL_PDF_BYTES, requirePhysicalVersion } from '../domain/physical-intake-policy.js';
 import { hashScannerValue } from '../domain/scanner-policy.js';
 import { createSafeFilename } from './documentRoutes.js';
+import { createStudentFilename } from '../../shared/studentFilename.js';
 
 function conflict() {
     return new ApiError(409, 'PHYSICAL_UPDATE_CONFLICT', 'Kayıt değişti. Güncel kaydı açıp tekrar deneyin.');
@@ -123,13 +124,16 @@ async function storeReservedPdf(context, payload) {
     return reserved.file;
 }
 
-function createStudentPdfDisposition(intake) {
-    const studentName = [intake.first_name, intake.last_name].filter(Boolean).join(' ').trim();
-    if (!studentName) return `attachment; filename="${createSafeFilename('document.pdf')}"`;
-    const filename = `${studentName}.pdf`;
+export function createStudentPdfDisposition(intake, dispositionType = 'attachment') {
+    const type = dispositionType === 'inline' ? 'inline' : 'attachment';
+    const filename = createStudentFilename({
+        firstName: intake?.first_name,
+        lastName: intake?.last_name,
+        passportNumber: intake?.passport_number
+    });
     const fallback = createSafeFilename(filename);
     const encoded = encodeURIComponent(filename).replace(/[!'()*]/g, character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-    return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+    return `${type}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
 /** Persists an immutable staff PDF version after PDF validation.
@@ -163,9 +167,10 @@ export async function openPhysicalPdf(context, options) {
     if (bytes.length !== file.byte_size || await hashScannerValue(bytes) !== file.sha256) {
         throw new ApiError(409, 'PDF_CHANGED', 'PDF içeriği kayıtla eşleşmiyor. Dosya şu anda açılamıyor.');
     }
-    const disposition = options.action === 'download'
-        ? createStudentPdfDisposition(context.intake)
-        : `inline; filename="${createSafeFilename(file.original_filename)}"`;
+    const disposition = createStudentPdfDisposition(
+        context.intake,
+        options.action === 'download' ? 'attachment' : 'inline'
+    );
     return new Response(bytes, { headers: { 'Content-Type': 'application/pdf',
         'Content-Disposition': disposition,
         'Content-Length': String(file.byte_size), 'Cache-Control': 'private, no-store',

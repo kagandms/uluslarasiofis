@@ -4,6 +4,8 @@ import { listRequiredDocumentAnswers } from '../shared/document-conditions.js';
 import { isPlausibleBirthDate } from '../shared/age.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
+import { createStudentFilename } from '../shared/studentFilename.js';
+import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerService.js';
 import { listSentToMigrationApplications, runMigrationBulkExport } from './migrationBulkArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
@@ -11,6 +13,7 @@ import { createApplicationQueueFilters, splitNoteStatus } from './application-qu
 import { describeGocnetPreparationError, prepareGocnetTransfer } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
+import { confirmPermanentDelete, formatPermanentDeleteError } from './permanentDeleteDialog.js';
 import {
     appendEditableDetailItem,
     createApplicationFieldEditController,
@@ -214,7 +217,7 @@ function createMigrationBulkExportAction(document, state, onExport) {
     return wrapper;
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onRevertFromMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
+function createQueueTable(document, items, onOpenDetail, onDownloadPdf, onDeleteApplication, combinedPdfApplicationId, deletingApplicationId, onSendToMigration, onRevertFromMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
     const headers = ['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -230,6 +233,8 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
     const noteEntries = [];
     items.forEach((item) => {
         const row = document.createElement('tr');
+        if (item.id) row.dataset.applicationId = item.id;
+        const isRowDeleting = deletingApplicationId === item.id;
         const studentName = [item.first_name, item.last_name].filter(Boolean).join(' ');
         const noteCell = document.createElement('td');
         noteCell.className = 'staff-record-note-cell';
@@ -260,6 +265,8 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         });
         const actionCell = document.createElement('td');
         actionCell.dataset.label = 'Detay';
+        const actionGroup = document.createElement('div');
+        actionGroup.className = 'staff-queue-actions';
         const canCheckGocnet = Boolean(item.submitted_at) && !item.deletion_state
             && !['draft', 'completed', 'cancelled', 'rejected'].includes(item.status);
         if (canCheckGocnet) {
@@ -272,11 +279,11 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
             gocnetButton.textContent = gocnetPending.has(item.id) ? 'GöçNet’e aktarılıyor…' : 'GöçNet’e aktar';
             gocnetButton.setAttribute('aria-label', gocnetButton.textContent);
             gocnetButton.addEventListener('click', () => onGocnetTransfer(item.id));
-            actionCell.append(gocnetButton);
+            actionGroup.append(gocnetButton);
             if (result) {
                 const status = createText(document, 'span', 'staff-gocnet-transfer-status', result);
                 status.setAttribute('role', 'status');
-                actionCell.append(status);
+                actionGroup.append(status);
             }
         }
         const terminalStatus = ['cancelled', 'rejected'].includes(item.status);
@@ -301,11 +308,11 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
                 ? (activeSpreadsheetTransfer === item.id ? 'E-Tablo işlemi sürüyor' : 'E-Tablo işlemi sırada')
                 : spreadsheetButton.textContent);
             spreadsheetButton.addEventListener('click', () => onSpreadsheetTransfer(item.id, retryAction || (isPresent ? 'remove' : 'add')));
-            actionCell.append(spreadsheetButton);
+            actionGroup.append(spreadsheetButton);
             if (spreadsheetErrors[item.id]) {
                 const error = createText(document, 'span', 'staff-spreadsheet-transfer-error', spreadsheetErrors[item.id]);
                 error.setAttribute('role', 'alert');
-                actionCell.append(error);
+                actionGroup.append(error);
             }
         }
         if (item.status === 'draft') {
@@ -315,46 +322,56 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
             reset.dataset.action = 'staff-reset-access-code';
             reset.textContent = 'Devam kodunu yenile';
             reset.addEventListener('click', () => onResetDraftAccess(item.id));
-            actionCell.append(reset);
+            actionGroup.append(reset);
         }
         const action = document.createElement('button');
         action.type = 'button';
         action.className = 'btn btn-outline';
         action.dataset.action = 'open-detail';
         action.textContent = 'Detay';
+        action.disabled = isRowDeleting;
         action.addEventListener('click', () => onOpenDetail(item.id));
+        const isDownloadingPdf = combinedPdfApplicationId === item.id;
         const download = document.createElement('button');
         download.type = 'button';
         download.className = 'btn btn-outline';
-        download.dataset.action = 'download-application-archive';
-        download.textContent = archiveApplicationId === item.id ? 'İptal' : 'İndir';
-        download.setAttribute('aria-label', archiveApplicationId === item.id ? 'ZIP indirmeyi iptal et' : 'Virüs taramasından geçmiş belgeleri ZIP olarak indir');
-        download.addEventListener('click', () => onDownloadArchive(item.id));
-        const archive = document.createElement('button');
-        archive.type = 'button';
-        archive.className = 'btn btn-outline';
-        archive.dataset.action = 'archive-application';
-        archive.textContent = 'Sil';
-        archive.setAttribute('aria-label', `${item.student_number} başvurusunu Silinen arşivine taşı`);
-        archive.addEventListener('click', () => onArchiveApplication(item.id));
-        actionCell.append(action, download, archive);
+        download.dataset.action = 'download-application-pdf';
+        download.textContent = isDownloadingPdf ? 'İptal' : 'İndir';
+        download.disabled = isRowDeleting;
+        download.setAttribute('aria-label', isDownloadingPdf ? 'Tek PDF indirmeyi iptal et' : 'Belgeleri tek PDF olarak indir');
+        download.addEventListener('click', () => onDownloadPdf(item.id));
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'btn btn-danger btn-permanent-delete';
+        deleteButton.dataset.action = 'delete-application';
+        deleteButton.textContent = isRowDeleting ? 'Siliniyor…' : 'Sil';
+        deleteButton.disabled = isRowDeleting;
+        deleteButton.setAttribute('aria-label', `${studentName || item.student_number || 'Başvuru'} kaydını kalıcı olarak sil`);
+        deleteButton.addEventListener('click', (event) => onDeleteApplication(item, event.currentTarget));
+        actionGroup.append(action, download, deleteButton);
         if (['submitted', 'under_review', 'resubmission_required', 'approved_for_processing'].includes(item.status)) {
             const send = document.createElement('button');
             send.type = 'button';
             send.className = 'btn btn-outline';
             send.dataset.action = 'send-to-migration';
             send.textContent = 'Göçe İletildi';
+            send.disabled = isRowDeleting;
             send.addEventListener('click', () => onSendToMigration(item));
-            actionCell.append(send);
+            actionGroup.append(send);
         } else if (item.status === 'sent_to_migration') {
             const revert = document.createElement('button');
             revert.type = 'button';
             revert.className = 'btn btn-outline';
             revert.dataset.action = 'revert-from-migration';
             revert.textContent = 'Göçten Geri Al';
+            revert.disabled = isRowDeleting;
             revert.setAttribute('aria-label', `${item.student_number} başvurusunu Göç İdaresinden geri al`);
             revert.addEventListener('click', () => onRevertFromMigration(item));
-            actionCell.append(revert);
+            actionGroup.append(revert);
+        }
+        actionCell.append(actionGroup);
+        if (isRowDeleting) {
+            actionCell.querySelectorAll('button').forEach((btn) => { btn.disabled = true; });
         }
         row.append(actionCell);
         body.append(row);
@@ -482,14 +499,17 @@ function renderQueue(root, state, handlers) {
             panel.append(message);
         }
     } else if (state.result) {
-        panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
-            handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId, handlers.onSendToMigration,
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'staff-applications-table-wrap';
+        tableWrap.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
+            handlers.onDownloadPdf, handlers.onDeleteApplication, state.combinedPdfApplicationId, state.deletingApplicationId, handlers.onSendToMigration,
             handlers.onRevertFromMigration, handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
             state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer, {
                 notesById: state.recordNotes,
                 shouldLoad: !state.loading && state.recordNotesResult !== state.result,
                 onLoadStarted: () => { state.recordNotesResult = state.result; }
             }));
+        panel.append(tableWrap);
         if (state.archiveMessage) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveMessage));
         if (state.archiveError) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveError));
         if (state.archiveMessage || state.archiveError) {
@@ -638,14 +658,16 @@ function createDocumentReadActions(document, item, options) {
     return [preview];
 }
 
-function createApplicationArchiveAction(document, applicationId, state, onDownloadArchive, onPrepareYoksisPdf) {
+function createApplicationArchiveAction(document, application, state, onDownloadArchive, onPrepareYoksisPdf, onDeleteApplication) {
+    const applicationId = application.id;
     const actions = document.createElement('div');
     actions.className = 'staff-application-document-actions';
     const button = document.createElement('button');
     const isActive = state.archiveApplicationId === applicationId;
+    const isDeleting = state.deletingApplicationId === applicationId;
     button.type = 'button';
     button.className = 'btn btn-outline';
-    button.disabled = Boolean(state.combinedPdfController);
+    button.disabled = Boolean(state.combinedPdfController || isDeleting);
     button.dataset.action = 'download-application-archive';
     button.textContent = isActive ? 'ZIP’i iptal et' : 'Belgeleri ZIP indir';
     button.setAttribute('aria-label', isActive ? 'ZIP indirmeyi iptal et' : 'Virüs taramasından geçmiş belgeleri ZIP olarak indir');
@@ -654,11 +676,20 @@ function createApplicationArchiveAction(document, applicationId, state, onDownlo
     combinedPdf.type = 'button';
     combinedPdf.className = 'btn btn-primary';
     combinedPdf.dataset.action = 'prepare-yoksis-pdf';
-    combinedPdf.disabled = Boolean(state.combinedPdfController || state.archiveController);
+    combinedPdf.disabled = Boolean(state.combinedPdfController || state.archiveController || isDeleting);
     combinedPdf.textContent = state.combinedPdfApplicationId === applicationId
         ? 'Evraklar hazırlanıyor…' : 'Tek PDF indir';
     combinedPdf.addEventListener('click', () => onPrepareYoksisPdf(applicationId));
-    actions.append(button, combinedPdf);
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'btn btn-danger btn-permanent-delete';
+    deleteButton.dataset.action = 'delete-application';
+    deleteButton.disabled = Boolean(isDeleting || state.actionPending);
+    deleteButton.textContent = isDeleting ? 'Siliniyor…' : 'Sil';
+    const studentName = [application.first_name, application.last_name].filter(Boolean).join(' ');
+    deleteButton.setAttribute('aria-label', `${studentName || application.student_number || 'Başvuru'} kaydını kalıcı olarak sil`);
+    deleteButton.addEventListener('click', (event) => onDeleteApplication(application, event.currentTarget));
+    actions.append(button, combinedPdf, deleteButton);
     return actions;
 }
 
@@ -791,6 +822,15 @@ function createDocumentSection(document, applicationId, documents, state, handle
         }
         if (item.access_available !== true && item.can_request_resubmission === true) {
             card.append(createDocumentAccessActions(document, item, { applicationId, handlers, isPending: Boolean(state.actionPending) }));
+        } else if (item.scan_status === 'pending' && item.can_request_resubmission !== true
+            && item.revision_number != null && item.revision_status === 'submitted'
+            && ['under_review', 'resubmission_required'].includes(state.detail?.application?.status)) {
+            card.append(createText(
+                document,
+                'p',
+                'staff-application-document-scan-pending-note',
+                'Yeni dosyanın güvenlik taraması bekleniyor; tarama bitince yeniden isteyebilirsiniz.'
+            ));
         }
         if (item.student_message) {
             card.append(createText(document, 'p', 'staff-application-student-message', `Öğrenciye iletilen neden: ${item.student_message}`));
@@ -1023,8 +1063,8 @@ function renderDetail(root, state, handlers) {
         panel.append(createText(document, 'p', 'staff-applications-state', message));
     } else if (state.detail) {
         panel.append(
-            createApplicationArchiveAction(document, state.detail.application.id, state,
-                handlers.onDownloadArchive, handlers.onPrepareYoksisPdf),
+            createApplicationArchiveAction(document, state.detail.application, state,
+                handlers.onDownloadArchive, handlers.onPrepareYoksisPdf, handlers.onDeleteApplication),
             createApplicationSummary(document, state.detail.application, state, handlers),
             createApplicationWorkflow(document, state.detail.application, state.detail, state, handlers),
             createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
@@ -1106,8 +1146,8 @@ function createStaffApplicationsApi() {
         createArchiveManifest(applicationId, signal) {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}/documents/archive-manifest`, { method: 'POST', signal });
         },
-        archiveApplication(applicationId) {
-            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/archive`, {});
+        deleteApplication(applicationId) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/delete`, { confirmed: true });
         },
         resetAccessCode(applicationId) {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/reset-access-code`, {});
@@ -1155,9 +1195,15 @@ function createStaffApplicationsApi() {
  * Initializes the authenticated, read-only staff application queue and detail workspace.
  * @param {HTMLElement} root Manager mount element inside the applications workspace.
  * @param {{queryApplications: (query: object) => Promise<object>, readApplicationDetail: (id: string) => Promise<object>}|null} [api] Optional API adapter for tests.
+ * @param {{mergeDocumentsToPdf?: Function, downloadPdfFile?: Function, openPdfMergerModal?: Function}} [services] Optional PDF service overrides for tests.
  * @returns {void} Registers the workspace view handler.
  */
-export function initializeStaffApplicationsManager(root, api = createStaffApplicationsApi()) {
+export function initializeStaffApplicationsManager(root, api = createStaffApplicationsApi(), services = {}) {
+    const mergePdf = services?.mergeDocumentsToPdf || mergeDocumentsToPdf;
+    const savePdfFile = services?.downloadPdfFile || downloadPdfFile;
+    const loadOpenPdfMergerModal = typeof services?.openPdfMergerModal === 'function'
+        ? async () => services.openPdfMergerModal
+        : async () => (await import('../ui/pdfMergerModal.js')).openPdfMergerModal;
     const document = root.ownerDocument;
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
@@ -1165,6 +1211,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         fieldEdit: null, fieldEditNotice: null, fieldEditBannerError: null,
         rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
+        deletingApplicationId: null,
         combinedPdfApplicationId: null, combinedPdfController: null, bulkExportController: null, bulkExportReport: null,
         bulkExportProgress: null,
         archiveError: null, archiveMessage: null,
@@ -1219,6 +1266,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onCancelRejection: cancelApplicationRejection,
             onDownloadArchive: downloadArchive,
             onPrepareYoksisPdf: prepareYoksisPdf,
+            onDeleteApplication: deleteApplication,
             onDismissToast: dismissToast,
             onBeginFieldEdit: fieldEditController.beginEdit,
             onUpdateFieldDraft: fieldEditController.updateDraftValue,
@@ -1227,7 +1275,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
-            onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
+            onDownloadPdf: downloadApplicationPdf, onDeleteApplication: deleteApplication,
             onResetDraftAccess: resetDraftAccess,
             onSendToMigration: sendToMigration, onRevertFromMigration: revertFromMigration, onDismissToast: dismissToast,
             onSpreadsheetTransfer: transferApplicationToSpreadsheet, onGocnetTransfer: checkGocnetTransfer,
@@ -1264,14 +1312,24 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         state.preview = null;
         previewTriggerCode = null;
     }
+    function findApplicationRecord(applicationId) {
+        if (state.detail?.application?.id === applicationId) return state.detail.application;
+        return state.result?.items?.find((item) => item.id === applicationId) || null;
+    }
     function readArchiveFilename(applicationId) {
-        const applicationObj = state.detail?.application?.id === applicationId
-            ? state.detail.application
-            : state.result?.items?.find((item) => item.id === applicationId);
+        const applicationObj = findApplicationRecord(applicationId);
         return createArchiveFilename({
             firstName: applicationObj?.first_name,
             lastName: applicationObj?.last_name,
             studentNumber: applicationObj?.student_number
+        });
+    }
+    function readStudentPdfFilename(applicationId) {
+        const applicationObj = findApplicationRecord(applicationId);
+        return createStudentFilename({
+            firstName: applicationObj?.first_name,
+            lastName: applicationObj?.last_name,
+            passportNumber: applicationObj?.passport_number
         });
     }
     async function exportMigrationApplications() {
@@ -1369,44 +1427,118 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         render();
         await completeArchiveDownload(applicationId, archiveController, requestId);
     }
-    async function prepareYoksisPdf(applicationId) {
-        if (!api.createArchiveManifest || !api.readArchiveFile || state.archiveController || state.combinedPdfController) return;
+    async function fetchOrderedCleanFiles(applicationId, signal) {
+        const manifest = await readCleanArchiveManifest(applicationId, signal, state, api);
+        if (!Array.isArray(manifest?.files) || manifest.files.length === 0) {
+            throw new Error('Birleştirilecek güncel ve güvenli evrak bulunamadı.');
+        }
+        if (manifest.files.length > 30) throw new Error('PDF için en fazla 30 evrak birleştirilebilir.');
+        const FileClass = document.defaultView?.File || File;
+        // Download a few documents at a time; results keep the manifest order.
+        const orderedFiles = new Array(manifest.files.length);
+        let nextIndex = 0;
+        const downloadNext = async () => {
+            while (nextIndex < manifest.files.length) {
+                const index = nextIndex;
+                nextIndex += 1;
+                const file = manifest.files[index];
+                if (signal.aborted) throw new DOMException('Canceled', 'AbortError');
+                const response = await api.readArchiveFile(applicationId, file, signal);
+                if (!response.ok || !response.body) throw new Error(`“${file.entry_name}” güvenli biçimde alınamadı; PDF oluşturulmadı.`);
+                const blob = await response.blob();
+                if (blob.size !== file.byte_size) throw new Error(`“${file.entry_name}” boyutu doğrulanamadı; PDF oluşturulmadı.`);
+                orderedFiles[index] = new FileClass([blob], file.entry_name, { type: file.media_type });
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, manifest.files.length) }, downloadNext));
+        return orderedFiles;
+    }
+    function cancelCombinedPdf() {
+        archiveRequestId += 1;
+        state.combinedPdfController.abort();
+        state.combinedPdfApplicationId = null;
+        state.combinedPdfController = null;
+        state.archiveError = null;
+        state.archiveMessage = 'Tek PDF indirme iptal edildi.';
+        render();
+    }
+    async function downloadApplicationPdf(applicationId) {
+        if (state.combinedPdfController && state.combinedPdfApplicationId === applicationId) {
+            cancelCombinedPdf();
+            return;
+        }
+        if (!api.createArchiveManifest || !api.readArchiveFile || state.archiveController || state.combinedPdfController || state.bulkExportController) return;
         const controller = new AbortController();
         const requestId = ++archiveRequestId;
         state.combinedPdfApplicationId = applicationId;
         state.combinedPdfController = controller;
         state.archiveError = null;
+        state.archiveMessage = 'Belgeler hazırlanıyor…';
         render();
         try {
-            const manifest = await readCleanArchiveManifest(applicationId, controller.signal, state, api);
-            if (!Array.isArray(manifest?.files) || manifest.files.length === 0) {
-                throw new Error('Birleştirilecek güncel ve güvenli evrak bulunamadı.');
-            }
-            if (manifest.files.length > 30) throw new Error('PDF için en fazla 30 evrak birleştirilebilir.');
-            const FileClass = document.defaultView.File;
-            // Download a few documents at a time; results keep the manifest order.
-            const orderedFiles = new Array(manifest.files.length);
-            let nextIndex = 0;
-            const downloadNext = async () => {
-                while (nextIndex < manifest.files.length) {
-                    const index = nextIndex;
-                    nextIndex += 1;
-                    const file = manifest.files[index];
-                    if (controller.signal.aborted) throw new DOMException('Canceled', 'AbortError');
-                    const response = await api.readArchiveFile(applicationId, file, controller.signal);
-                    if (!response.ok || !response.body) throw new Error(`“${file.entry_name}” güvenli biçimde alınamadı; PDF oluşturulmadı.`);
-                    const blob = await response.blob();
-                    if (blob.size !== file.byte_size) throw new Error(`“${file.entry_name}” boyutu doğrulanamadı; PDF oluşturulmadı.`);
-                    orderedFiles[index] = new FileClass([blob], file.entry_name, { type: file.media_type });
-                }
-            };
-            await Promise.all(Array.from({ length: Math.min(4, manifest.files.length) }, downloadNext));
+            const orderedFiles = await fetchOrderedCleanFiles(applicationId, controller.signal);
             if (requestId !== archiveRequestId || controller.signal.aborted) return;
-            const { openPdfMergerModal } = await import('../ui/pdfMergerModal.js');
+            state.archiveMessage = 'Belgeler tek PDF olarak birleştiriliyor…';
+            render();
+            const result = await mergePdf(orderedFiles, (progress) => {
+                if (requestId !== archiveRequestId || controller.signal.aborted) return;
+                if (progress?.message) {
+                    state.archiveMessage = progress.message;
+                    render();
+                }
+            });
+            if (requestId !== archiveRequestId || controller.signal.aborted) return;
+            const downloadFilename = readStudentPdfFilename(applicationId);
+            if (result?.metrics?.targetReached) {
+                savePdfFile(result.bytes, downloadFilename);
+                state.archiveError = null;
+                state.archiveMessage = 'Tek PDF indirildi.';
+            } else {
+                const openPdfMergerModal = await loadOpenPdfMergerModal();
+                if (requestId !== archiveRequestId || controller.signal.aborted) return;
+                state.archiveMessage = null;
+                state.archiveError = 'Birleştirilen PDF 9 MiB YÖKSİS sınırını aştığı için indirilemedi; açılan pencereden sayfaları düzenleyin.';
+                openPdfMergerModal({
+                    initialFiles: orderedFiles,
+                    maxFiles: 30,
+                    downloadFilename,
+                    contextLabel: 'Birleştirilen PDF 9 MiB sınırını aştı. Sayfaları azaltıp veya düzenleyip tekrar oluşturun.'
+                });
+            }
+        } catch (error) {
+            if (requestId !== archiveRequestId) return;
+            state.archiveMessage = null;
+            state.archiveError = error?.name === 'AbortError'
+                ? 'Tek PDF indirme iptal edildi.'
+                : (typeof error?.message === 'string' && /evrak|belge|PDF/i.test(error.message)
+                    ? error.message : 'Tek PDF hazırlanamadı. Evrak güvenlik durumlarını kontrol edip tekrar deneyin.');
+        } finally {
+            if (requestId === archiveRequestId) {
+                state.combinedPdfApplicationId = null;
+                state.combinedPdfController = null;
+                render();
+            }
+        }
+    }
+    async function prepareYoksisPdf(applicationId) {
+        if (!api.createArchiveManifest || !api.readArchiveFile || state.archiveController || state.combinedPdfController || state.bulkExportController) return;
+        const controller = new AbortController();
+        const requestId = ++archiveRequestId;
+        state.combinedPdfApplicationId = applicationId;
+        state.combinedPdfController = controller;
+        state.archiveError = null;
+        state.archiveMessage = null;
+        render();
+        try {
+            const orderedFiles = await fetchOrderedCleanFiles(applicationId, controller.signal);
+            if (requestId !== archiveRequestId || controller.signal.aborted) return;
+            const openPdfMergerModal = await loadOpenPdfMergerModal();
+            if (requestId !== archiveRequestId || controller.signal.aborted) return;
             render();
             openPdfMergerModal({
                 initialFiles: orderedFiles,
                 maxFiles: 30,
+                downloadFilename: readStudentPdfFilename(applicationId),
                 contextLabel: 'Tüm temiz evraklar başvurudaki sırayla eklendi. Tek PDF oluşturup boyutunu ve okunabilirliğini kontrol edin.'
             });
         } catch (error) {
@@ -1546,7 +1678,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         });
     }
     async function loadQueue() {
-        if (state.actionPending) return;
+        if (state.actionPending || state.deletingApplicationId) return;
         const requestId = ++queueRequestId;
         state.loading = true;
         state.error = false;
@@ -1567,20 +1699,54 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             render();
         }
     }
-    async function archiveApplication(applicationId) {
-        if (state.actionPending || typeof api.archiveApplication !== 'function') return;
-        state.actionPending = `archive:${applicationId}`;
+    async function deleteApplication(item, trigger = null) {
+        const applicationId = item?.id;
+        if (!applicationId || state.actionPending || state.deletingApplicationId || typeof api.deleteApplication !== 'function') return;
+        const confirmed = await confirmPermanentDelete(document, {
+            name: [item.first_name, item.last_name].filter(Boolean).join(' '),
+            number: item.reference_number || item.student_number || item.passport_number || '',
+            kind: 'online',
+            trigger
+        });
+        if (!confirmed) return;
+        state.deletingApplicationId = applicationId;
         state.archiveError = null;
         state.archiveMessage = null;
         render();
+        let deleted = false;
         try {
-            await api.archiveApplication(applicationId);
-            state.archiveMessage = 'Başvuru Silinen arşivine taşındı.';
+            await api.deleteApplication(applicationId);
+            deleted = true;
+            state.deletingApplicationId = null;
+            if (state.result?.items) {
+                state.result = {
+                    ...state.result,
+                    items: state.result.items.filter((entry) => entry.id !== applicationId),
+                    pagination: state.result.pagination ? {
+                        ...state.result.pagination,
+                        total_items: Math.max(0, (Number(state.result.pagination.total_items) || 0) - 1)
+                    } : state.result.pagination
+                };
+                if (state.result.items.length === 0 && state.query.page > 1) {
+                    state.query = { ...state.query, page: state.query.page - 1 };
+                }
+            }
+            if (state.view === 'detail') {
+                clearScanPoll();
+                fieldEditController.reset();
+                discardPreview();
+                state.detail = null;
+                state.view = 'queue';
+            }
+            state.archiveMessage = 'Kalıcı olarak silindi.';
+            render();
         } catch (error) {
-            console.error('Application archive failed.', { errorName: error.name });
-            state.archiveError = 'Başvuru arşive taşınamadı. Listeyi yenileyip tekrar deneyin.';
-        } finally {
-            state.actionPending = null;
+            console.error('Application permanent delete failed.', { errorName: error?.name || 'Error', code: error?.code });
+            state.deletingApplicationId = null;
+            state.archiveError = formatPermanentDeleteError(error);
+            render();
+        }
+        if (deleted) {
             await loadQueue();
         }
     }

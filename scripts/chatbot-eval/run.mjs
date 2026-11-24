@@ -486,7 +486,12 @@ function classifyReply(reply, language, httpStatus) {
         if (trimmed === getChatbotFixedText('dailyLimit', lang)) return 'daily_limit';
     }
     if (trimmed === getChatbotFixedText('fallback', language)) return 'fallback';
-    if (trimmed === getChatbotFixedText('refusal', language) || trimmed.includes(CHATBOT_REFUSAL_MARKER)) {
+    if (
+        trimmed === getChatbotFixedText('refusal', language)
+        || trimmed === getChatbotFixedText('otherPersonStatusRefusal', language)
+        || trimmed === getChatbotFixedText('guaranteeOrLegalRefusal', language)
+        || trimmed.includes(CHATBOT_REFUSAL_MARKER)
+    ) {
         return 'refusal';
     }
     if (trimmed === getChatbotFixedText('statusNeedsReference', language)) {

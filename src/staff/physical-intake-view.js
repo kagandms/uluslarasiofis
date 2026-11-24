@@ -146,7 +146,7 @@ function renderQueue(document, panel, options) {
     if (shouldLoadNotes && state.recordNotes) {
         state.recordNotesResult = state.result;
     }
-    panel.append(createApplicationQueueTable(document, state.result.items, {
+    const table = createApplicationQueueTable(document, state.result.items, {
         statusLabel: status => STATUS_LABELS[status] || status,
         headers: ['', 'Pasaport No', 'Takip No', 'Ad Soyad', 'Teslim Tarihi', 'Ofis Durumu', 'PDF', 'A4', ''],
         noteKind: 'physical',
@@ -165,23 +165,35 @@ function renderQueue(document, panel, options) {
             item.current_pdf_id ? 'PDF var' : 'PDF yok',
             formatReceiptSummary(item)
         ],
-        actions: item => [
-            { label: 'Detay', action: 'open-detail', run: () => handlers.open(item.id) },
-            {
-                label: 'İndir',
-                action: 'download-physical-pdf',
-                isDisabled: !item.current_pdf_id || Boolean(item.deleted_at),
-                ariaLabel: 'Güncel PDF’i indir',
-                run: () => (document.defaultView || window).open(buildPhysicalPdfUrl(item.id, item.current_pdf_id, 'download'), '_blank', 'noopener')
-            },
-            {
-                label: item.deleted_at ? 'Geri Yükle' : 'Sil',
-                action: item.deleted_at ? 'restore' : 'delete',
-                ariaLabel: `${[item.first_name, item.last_name].filter(Boolean).join(' ') || item.tracking_reference || 'Fiziksel teslim'} kaydını ${item.deleted_at ? 'geri yükle' : 'Silinen arşivine taşı'}`,
-                run: () => handlers.mutate(item, item.deleted_at ? 'restore' : 'delete')
-            }
-        ]
-    }), createPagination(document, state.result.pagination, handlers));
+        actions: item => {
+            const isDeleting = state.deletingId === item.id;
+            const studentName = [item.first_name, item.last_name].filter(Boolean).join(' ');
+            return [
+                { label: 'Detay', action: 'open-detail', isDisabled: isDeleting, run: () => handlers.open(item.id) },
+                {
+                    label: 'İndir',
+                    action: 'download-physical-pdf',
+                    isDisabled: isDeleting || !item.current_pdf_id,
+                    ariaLabel: 'Güncel PDF’i indir',
+                    run: () => (document.defaultView || window).open(buildPhysicalPdfUrl(item.id, item.current_pdf_id, 'download'), '_blank', 'noopener')
+                },
+                {
+                    label: isDeleting ? 'Siliniyor…' : 'Sil',
+                    action: 'delete',
+                    isDisabled: isDeleting,
+                    ariaLabel: `${studentName || item.tracking_reference || 'Fiziksel teslim'} kaydını kalıcı olarak sil`,
+                    run: (event) => {
+                        void handlers.deleteIntake?.(item, event?.currentTarget || null);
+                    }
+                }
+            ];
+        }
+    });
+    table.querySelectorAll('button[data-action="delete"]').forEach((deleteBtn) => {
+        deleteBtn.classList.remove('btn-outline');
+        deleteBtn.classList.add('btn-danger', 'btn-permanent-delete');
+    });
+    panel.append(table, createPagination(document, state.result.pagination, handlers));
 }
 
 function createField(document, form, options) {
@@ -236,7 +248,6 @@ function createFileRow(document, intake, file, handlers) {
     const row = document.createElement('li');
     row.append(text(document, 'strong', 'Güncel PDF'),
         text(document, 'p', `${formatQueueDate(file.uploaded_at)} · ${(file.byte_size / 1048576).toFixed(2)} MB · Kaydedildi`));
-    if (intake.deleted_at) return row;
     const actions = document.createElement('div');
     actions.className = 'physical-pdf-actions';
     [['preview', 'PDF’i Aç'], ['download', 'İndir']].forEach(([action, label]) => {
@@ -264,7 +275,7 @@ function createPdfControls(document, detail, handlers) {
     section.append(history);
     if (!currentPdf) {
         section.append(text(document, 'p', 'Bu kayda bağlı güncel PDF yok.'));
-        if (!detail.intake.deleted_at && PHYSICAL_PDF_EDIT_STATUSES.includes(detail.intake.status) && !detail.intake.processing_closed_at) {
+        if (PHYSICAL_PDF_EDIT_STATUSES.includes(detail.intake.status) && !detail.intake.processing_closed_at) {
             section.append(button(document, 'PDF Ekle', handlers.preparePdf));
         }
     }
@@ -297,15 +308,16 @@ function renderDetail(document, panel, options) {
     const { state, handlers } = options;
     const detail = state.detail;
     const intake = detail.intake;
+    const isDeleting = state.deletingId === intake.id;
     panel.append(button(document, 'Listeye Dön', handlers.back),
         text(document, 'h3', `${intake.first_name} ${intake.last_name}`),
-        text(document, 'p', `${intake.application_type === 'transition' ? 'Geçiş başvurusu' : intake.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'} · ${STATUS_LABELS[intake.status]}${intake.deleted_at ? ' · Silinen kayıt' : ''}`),
+        text(document, 'p', `${intake.application_type === 'transition' ? 'Geçiş başvurusu' : intake.application_type === 'renewal' ? 'Uzatma' : 'İlk başvuru'} · ${STATUS_LABELS[intake.status]}`),
         text(document, 'p', `Pasaport: ${intake.passport_number || '—'} · ${intake.linked_application_id ? 'Online başvuruya bağlı' : 'Bağımsız fiziksel teslim'}`));
     const actions = document.createElement('div');
     actions.className = 'physical-status-actions';
     for (const [status, label] of Object.entries(STATUS_LABELS)) {
         const action = button(document, label, () => status === 'rejected' ? handlers.reject(intake) : handlers.mutate(intake, 'status', status));
-        action.disabled = !detail.allowed_transitions.includes(status);
+        action.disabled = isDeleting || !detail.allowed_transitions.includes(status);
         if (status === intake.status) {
             action.setAttribute('aria-current', 'true');
             action.classList.add('is-current');
@@ -313,9 +325,19 @@ function renderDetail(document, panel, options) {
         if (action.disabled && status !== intake.status) action.title = 'Bu kayıt için durum değişikliği kullanılamıyor.';
         actions.append(action);
     }
-    actions.append(button(document, intake.deleted_at ? 'Geri Yükle' : 'Silinenlere Taşı', () => handlers.mutate(intake, intake.deleted_at ? 'restore' : 'delete')));
+    const studentName = [intake.first_name, intake.last_name].filter(Boolean).join(' ');
+    const deleteBtn = button(
+        document,
+        isDeleting ? 'Siliniyor…' : 'Sil',
+        (event) => { void handlers.deleteIntake?.(intake, event?.currentTarget || null); },
+        'btn btn-danger btn-permanent-delete'
+    );
+    deleteBtn.dataset.action = 'delete';
+    deleteBtn.disabled = isDeleting;
+    deleteBtn.setAttribute('aria-label', `${studentName || intake.tracking_reference || 'Fiziksel teslim'} kaydını kalıcı olarak sil`);
+    actions.append(deleteBtn);
     panel.append(actions);
-    if (!intake.current_pdf_id && !intake.deleted_at) panel.append(text(document, 'p', 'Dijital dosya PDF’i henüz eklenmedi. Fiziksel evrakın işlem durumunu güncelleyebilirsiniz.'));
+    if (!intake.current_pdf_id) panel.append(text(document, 'p', 'Dijital dosya PDF’i henüz eklenmedi. Fiziksel evrakın işlem durumunu güncelleyebilirsiniz.'));
     if (intake.rejection_reason) panel.append(text(document, 'p', `Ret gerekçesi: ${intake.rejection_reason}`));
     if (state.isRejecting) panel.append(createRejectionForm(document, { state, handlers }));
     renderPhysicalReceiptControls(panel, state, handlers);

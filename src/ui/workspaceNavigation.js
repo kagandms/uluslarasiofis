@@ -4,7 +4,6 @@ import { initStaffHomePresentation } from './staff-home-presentation.js';
 const VIEW_TITLES = {
     ...(IS_PHYSICAL_INTAKE_ENABLED ? { intake: 'İkamet Başvuruları', physical: 'Fiziksel Teslimler' } : {}),
     applications: IS_PHYSICAL_INTAKE_ENABLED ? 'Online Başvurular' : 'İkamet Başvuruları',
-    archive: 'Arşiv',
     ykn: 'YKN',
     cover: 'Kapak Hazırla',
     teblig: 'Tebliğ Bul',
@@ -42,12 +41,10 @@ function focusView(viewName) {
     const targetId = viewName === 'print'
         ? 'print-status-title'
         : (viewName === 'teblig'
-        ? 'workspace-title'
-        : (viewName === 'ykn'
-            ? 'ykn-title'
-            : (viewName === 'archive'
-                ? (document.getElementById('staff-archive-search') ? 'staff-archive-search' : 'archive-title')
-                : `${viewName}-title`)));
+            ? 'workspace-title'
+            : (viewName === 'ykn'
+                ? 'ykn-title'
+                : `${viewName}-title`));
     document.getElementById(targetId)?.focus();
 }
 

@@ -22,12 +22,15 @@
 
     <!-- CSS -->
     <link rel="stylesheet" href="/src/index.css">
-    <link rel="stylesheet" href="/src/staff/archive.css">
     <link rel="stylesheet" href="/src/staff/print-management.css">
     <link rel="stylesheet" href="/src/staff/home.css">
     <link rel="stylesheet" href="/src/shared/rating-stars.css">
     <link rel="stylesheet" href="/src/staff/application-ratings.css">
     <link rel="stylesheet" href="/src/staff/inquiries.css">
+    <link rel="stylesheet" href="/src/staff/staffAssistant.css">
+    <link rel="stylesheet" href="/src/staff/chatLog.css">
+    <link rel="stylesheet" href="/src/staff/permanentDelete.css">
+    <link rel="stylesheet" href="/src/staff/workspaceSideNav.css">
 
     <!-- CDNs -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" />
@@ -146,10 +149,6 @@
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"></rect><path d="M8 9h8M8 13h8M8 17h5"></path></svg></span>
                         <span class="home-action-content"><strong>İkamet Başvuruları</strong><small>Başvuru kuyruğu ve belge durumları</small></span>
                     </button>
-                    <button type="button" class="home-action" data-workspace-view="archive" aria-controls="view-archive">
-                        <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="m9 10 3 3 3-3"></path><path d="M12 4v9"></path><path d="M7 17h10"></path></svg></span>
-                        <span class="home-action-content"><strong>Arşiv</strong><small>Tamamlanan, iptal edilen ve reddedilen başvurular</small></span>
-                    </button>
                     <button type="button" class="home-action" data-workspace-view="ykn" aria-controls="view-ykn">
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4h16v16"></path><path d="M8 8h8M8 12h8M8 16h5"></path></svg></span>
                         <span class="home-action-content"><strong>YKN</strong><small>Öğrenci sorgulama ve aktarım</small></span>
@@ -176,7 +175,7 @@
                     </button>
                     <button type="button" class="home-action" data-workspace-view="yoksis-audit" aria-controls="view-yoksis-audit">
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4 4M8 10h6M8 13h4"></path></svg></span>
-                        <span class="home-action-content"><strong>YÖKSİS Eksik Evrak (Beta)</strong><small>Kayıt listesini doğrulayarak kontrol et</small></span>
+                        <span class="home-action-content"><strong>YÖKSİS Eksik Evrak</strong><small>Günlük Excel ile eksik evrak listesini güncelle</small></span>
                     </button>
                     <button type="button" class="home-action" data-workspace-view="inquiries" aria-controls="view-inquiries">
                         <span class="home-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
@@ -193,7 +192,6 @@
                 <p class="workspace-shortcut-hint"><kbd>1–9</kbd> çalışma alanına geç <kbd>Esc</kbd> ana sayfaya dön</p>
                 <nav class="workspace-nav" aria-label="Çalışma alanları">
                     <button type="button" data-intake-entry data-workspace-view="applications" aria-controls="view-applications">İkamet Başvuruları</button>
-                    <button type="button" data-workspace-view="archive" aria-controls="view-archive">Arşiv</button>
                     <button type="button" data-workspace-view="ykn" aria-controls="view-ykn">YKN</button>
                     <button type="button" data-workspace-view="cover" aria-controls="view-cover">Kapak Hazırla</button>
                     <button type="button" data-workspace-view="teblig" aria-controls="view-teblig">Tebliğ Bul</button>
@@ -234,34 +232,68 @@
                     <div id="staff-applications-manager"></div>
                 </section>
 
-                <section id="view-archive" class="view-panel" hidden aria-labelledby="archive-title">
-                    <h3 id="archive-title" class="sr-only" tabindex="-1">Arşiv</h3>
-                    <div id="staff-archive-manager"></div>
-                </section>
-
                 <section id="view-inquiries" class="view-panel" hidden aria-labelledby="inquiries-title">
                     <h3 id="inquiries-title" class="sr-only" tabindex="-1">Gelen Sorular</h3>
-                    <div id="staff-inquiries-manager"></div>
+                    <div id="staff-inquiry-source-switch" class="staff-source-switch" role="tablist" aria-label="Soru kaynağı">
+                        <button type="button" id="staff-source-tab-form" class="staff-source-tab is-active" role="tab" aria-selected="true" aria-controls="staff-inquiries-manager" tabindex="0" data-inquiry-source-tab="form">
+                            <span class="staff-source-tab-label">Formdan gelen sorular</span>
+                            <span id="staff-source-form-badge" class="staff-source-tab-badge" data-source-form-badge hidden>0</span>
+                        </button>
+                        <button type="button" id="staff-source-tab-topi" class="staff-source-tab" role="tab" aria-selected="false" aria-controls="staff-chat-history-section" tabindex="-1" data-inquiry-source-tab="topi">
+                            <span class="staff-source-tab-label">Topi sohbetleri</span>
+                        </button>
+                    </div>
+                    <div id="staff-inquiries-manager" role="tabpanel" aria-labelledby="staff-source-tab-form"></div>
+                    <section id="staff-chat-history-section" class="staff-chat-history-section" role="tabpanel" aria-labelledby="staff-source-tab-topi" aria-label="Topi ile sohbet geçmişleri" hidden>
+                        <div id="staff-chat-logs-manager"></div>
+                    </section>
                 </section>
 
                 <section id="view-yoksis-audit" class="view-panel yoksis-audit-workspace" hidden aria-labelledby="yoksis-audit-title">
                     <div class="yoksis-audit-heading">
                         <p class="home-eyebrow">YKN aktarımından ayrı · yalnızca okuma</p>
                         <h3 id="yoksis-audit-title" tabindex="-1">YÖKSİS Eksik Evrak Kontrolü</h3>
-                        <p>Açık YÖKSİS sekmesindeki kayıtlar sırayla seçilir; başvuru ve öğrenci numarası doğrulandıktan sonra durum ve eksik evrak satırları okunur.</p>
+                        <p>YÖKSİS İkamet İşlemleri Excel dışa aktarımını (.xls / .xlsx) yükleyerek ortak eksik evrak listesini güncelleyin.</p>
                     </div>
                     <div id="staff-yoksis-audit" class="yoksis-audit-panel">
-                        <div class="yoksis-audit-warning" role="note">
-                            <strong>YÖKSİS formu değişebilir.</strong> Tarama sırasında kayıt seçimi yapılır. Evrak yükleme, silme veya YÖKSİS işlemi kaydetme yapılmaz. Okunan sonuçlar yetkili personelin ortak listesine kaydedilir; pasaport numarası YÖKSİS kaydında görünüyorsa alınır.
+                        <div class="yoksis-audit-excel" style="display: grid; gap: 0.75rem; margin-bottom: 1.25rem;">
+                            <p id="audit-import-latest" aria-live="polite" style="margin: 0; color: var(--staff-home-card-secondary); font-size: 0.92rem;">Son yükleme bilgisi kontrol ediliyor…</p>
+                            <div class="yoksis-audit-step" style="display: grid; gap: 0.35rem;">
+                                <label for="audit-excel-file" style="font-weight: 600; font-size: 0.92rem;">1. YÖKSİS'ten indirdiğiniz İkamet İşlemleri dosyasını seçin</label>
+                                <input id="audit-excel-file" type="file" accept=".xls,.xlsx" style="max-width: 100%; min-width: 0;">
+                                <p id="audit-excel-file-info" aria-live="polite" hidden style="margin: 0; font-size: 0.85rem; color: var(--staff-home-card-secondary);"></p>
+                            </div>
+                            <div class="yoksis-audit-controls" style="align-items: center;">
+                                <button id="audit-excel-upload" class="btn btn-primary" type="button" disabled>2. Excel yükle</button>
+                            </div>
+                            <div id="audit-excel-stale-warning" class="yoksis-audit-warning" role="alert" hidden>
+                                <strong>Bu dosya dünden kalma görünüyor.</strong> Daha güncel bir YÖKSİS dışa aktarımı indirmeniz önerilir.
+                            </div>
+                            <p id="audit-excel-progress" class="yoksis-audit-progress" role="status" aria-live="polite" style="margin: 0;"></p>
+                            <p id="audit-excel-summary" aria-live="polite" hidden style="margin: 0; font-weight: 600;"></p>
+                            <div id="audit-excel-rejected-wrap" class="yoksis-audit-table-wrap" hidden>
+                                <table class="yoksis-audit-table" aria-label="Reddedilen Excel satırları">
+                                    <thead><tr><th>Satır No</th><th>Neden</th></tr></thead>
+                                    <tbody id="audit-excel-rejected-body"></tbody>
+                                </table>
+                            </div>
                         </div>
-                        <label class="yoksis-audit-confirm"><input id="audit-confirm" type="checkbox"> Form seçiminin değişebileceğini anladım.</label>
-                        <div class="yoksis-audit-controls">
-                            <button id="audit-start" class="btn btn-primary" type="button">YÖKSİS listesini tara</button>
-                            <button id="audit-retry-unreadable" class="btn btn-outline" type="button" disabled>Okunamayanları yeniden tara</button>
-                            <button id="audit-stop" class="btn btn-outline" type="button" hidden>Durdur</button>
-                        </div>
-                        <p id="audit-status" role="status" aria-live="polite">Tarama için yetkili YÖKSİS sekmesi ve kayıt listesi gerekir.</p>
-                        <p id="audit-progress" class="yoksis-audit-progress" aria-live="polite"></p>
+                        <details class="yoksis-audit-fallback" style="margin-bottom: 1rem; padding: 0.75rem 1rem; border: 1px solid var(--card-border); border-radius: 12px;">
+                            <summary style="cursor: pointer; font-weight: 600; color: var(--staff-home-card-secondary);">Yedek: eklenti ile tek tek tarama</summary>
+                            <div style="margin-top: 0.85rem;">
+                                <div class="yoksis-audit-warning" role="note">
+                                    <strong>YÖKSİS formu değişebilir.</strong> Tarama sırasında kayıt seçimi yapılır. Evrak yükleme, silme veya YÖKSİS işlemi kaydetme yapılmaz. Okunan sonuçlar yetkili personelin ortak listesine kaydedilir; pasaport numarası YÖKSİS kaydında görünüyorsa alınır.
+                                </div>
+                                <label class="yoksis-audit-confirm"><input id="audit-confirm" type="checkbox"> Form seçiminin değişebileceğini anladım.</label>
+                                <div class="yoksis-audit-controls">
+                                    <button id="audit-start" class="btn btn-outline" type="button">Yedek: tek tek tara</button>
+                                    <button id="audit-retry-unreadable" class="btn btn-outline" type="button" disabled>Okunamayanları yeniden tara</button>
+                                    <button id="audit-stop" class="btn btn-outline" type="button" hidden>Durdur</button>
+                                </div>
+                                <p id="audit-status" role="status" aria-live="polite">Tarama için yetkili YÖKSİS sekmesi ve kayıt listesi gerekir.</p>
+                                <p id="audit-progress" class="yoksis-audit-progress" aria-live="polite"></p>
+                            </div>
+                        </details>
                         <div class="yoksis-audit-search">
                             <div class="yoksis-audit-search-field">
                                 <label for="audit-search">Ad, öğrenci numarası veya pasaport numarası</label>

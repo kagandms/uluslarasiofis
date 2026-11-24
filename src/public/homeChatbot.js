@@ -1,11 +1,12 @@
 import { CHATBOT_MESSAGES } from './i18n/chatbot-messages.js';
 import { INQUIRY_MESSAGES } from './i18n/inquiry-messages.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from './i18n/messages.js';
-import { createTopi, createTopiMouse, ensureTopiStyles, setTopiState } from './topiMascot.js';
+import { createTopi, createTopiPlaytime, ensureTopiStyles, setTopiState } from './topiMascot.js';
 
 export const CHATBOT_PILOT_QUERY_GATE = 'bot';
 
 const CHAT_ENDPOINT = '/api/public/chat';
+const FEEDBACK_ENDPOINT = '/api/public/chat/feedback';
 const MAX_MESSAGES_IN_REQUEST = 10;
 const MAX_MESSAGE_LENGTH = 500;
 const HELLO_DURATION_MS = 2400;
@@ -142,6 +143,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     let closeCleanup = null;
     let attachedViewport = null;
     let conversationHistory = [];
+    let sessionId = null;
     const localizedLogBindings = [];
 
     const widgetRoot = document.createElement('div');
@@ -163,11 +165,17 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
     const launcherTopi = createTopi(document, { state: 'idle', size: 48 });
     const launcherText = document.createElement('span');
     launcherText.className = 'chatbot-launcher-text';
-    const launcherMouse = reducedMotion ? null : createTopiMouse(document, { size: 22 });
-    if (launcherMouse) {
-        launcherButton.append(launcherTopi, launcherText, launcherMouse);
+    const launcherPlaytime = createTopiPlaytime(document, { reducedMotion, size: 22 });
+    if (launcherPlaytime.element) {
+        launcherButton.append(launcherTopi, launcherText, launcherPlaytime.element);
     } else {
         launcherButton.append(launcherTopi, launcherText);
+    }
+    function setPlaytimeHidden(hidden) {
+        if (!launcherPlaytime.element) return;
+        launcherPlaytime.element.hidden = hidden;
+        const activeToy = launcherPlaytime.element.firstElementChild;
+        if (activeToy) activeToy.hidden = hidden;
     }
     launcherDock.append(launcherTagline, launcherButton);
 
@@ -385,7 +393,144 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         }
     }
 
-    function appendMessage({ role, text = '', textKey = '', actions = [], isError = false, mascotState = 'idle' }) {
+    function createInquiryActionButton() {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'chatbot-action-btn chatbot-action-inquiry';
+        button.textContent = readChatbotMessages(activeLocale).inquiryActionButton;
+        button.addEventListener('click', () => {
+            performInquiryAction();
+        });
+        localizedLogBindings.push({ element: button, type: 'message', key: 'inquiryActionButton' });
+        return button;
+    }
+
+    function ensureInquiryAction(contentContainer) {
+        if (contentContainer.querySelector('.chatbot-action-inquiry')) return;
+        let actionRow = contentContainer.querySelector('.chatbot-actions');
+        if (!actionRow) {
+            actionRow = document.createElement('div');
+            actionRow.className = 'chatbot-actions';
+            contentContainer.append(actionRow);
+        }
+        actionRow.append(createInquiryActionButton());
+    }
+
+    function createFeedbackRow(turnId, contentContainer) {
+        const messages = readChatbotMessages(activeLocale);
+        const feedbackRow = document.createElement('div');
+        feedbackRow.className = 'chatbot-feedback';
+        feedbackRow.setAttribute('role', 'group');
+        feedbackRow.setAttribute('aria-label', messages.feedbackPrompt);
+        localizedLogBindings.push({ element: feedbackRow, type: 'attr', attr: 'aria-label', key: 'feedbackPrompt' });
+
+        const promptEl = document.createElement('span');
+        promptEl.className = 'chatbot-feedback-prompt';
+        promptEl.textContent = messages.feedbackPrompt;
+        localizedLogBindings.push({ element: promptEl, type: 'message', key: 'feedbackPrompt' });
+
+        const buttonsGroup = document.createElement('div');
+        buttonsGroup.className = 'chatbot-feedback-buttons';
+
+        const yesButton = document.createElement('button');
+        yesButton.type = 'button';
+        yesButton.className = 'chatbot-feedback-btn chatbot-feedback-yes';
+        yesButton.dataset.feedbackValue = 'up';
+        yesButton.textContent = messages.feedbackYes;
+        yesButton.setAttribute('aria-label', messages.feedbackYesAriaLabel);
+        localizedLogBindings.push({ element: yesButton, type: 'message', key: 'feedbackYes' });
+        localizedLogBindings.push({ element: yesButton, type: 'attr', attr: 'aria-label', key: 'feedbackYesAriaLabel' });
+
+        const noButton = document.createElement('button');
+        noButton.type = 'button';
+        noButton.className = 'chatbot-feedback-btn chatbot-feedback-no';
+        noButton.dataset.feedbackValue = 'down';
+        noButton.textContent = messages.feedbackNo;
+        noButton.setAttribute('aria-label', messages.feedbackNoAriaLabel);
+        localizedLogBindings.push({ element: noButton, type: 'message', key: 'feedbackNo' });
+        localizedLogBindings.push({ element: noButton, type: 'attr', attr: 'aria-label', key: 'feedbackNoAriaLabel' });
+
+        const errorEl = document.createElement('p');
+        errorEl.className = 'chatbot-feedback-error';
+        errorEl.setAttribute('role', 'alert');
+        errorEl.hidden = true;
+        localizedLogBindings.push({ element: errorEl, type: 'message', key: 'feedbackError', onlyWhenVisible: true });
+
+        let isSubmitting = false;
+        let isSubmitted = false;
+
+        async function submitFeedback(value) {
+            if (destroyed || isSubmitting || isSubmitted) return;
+            isSubmitting = true;
+            yesButton.disabled = true;
+            noButton.disabled = true;
+            errorEl.hidden = true;
+            errorEl.textContent = '';
+
+            const fetchFn = resolveFetcher(document, fetcher);
+            if (!fetchFn) {
+                errorEl.textContent = readChatbotMessages(activeLocale).feedbackError;
+                errorEl.hidden = false;
+                yesButton.disabled = false;
+                noButton.disabled = false;
+                isSubmitting = false;
+                return;
+            }
+
+            try {
+                const response = await fetchFn(FEEDBACK_ENDPOINT, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        turn_id: turnId,
+                        value
+                    })
+                });
+                if (destroyed) return;
+                if (response.status === 204) {
+                    isSubmitted = true;
+                    const thanksEl = document.createElement('p');
+                    thanksEl.className = 'chatbot-feedback-thanks';
+                    thanksEl.setAttribute('role', 'status');
+                    thanksEl.textContent = readChatbotMessages(activeLocale).feedbackThanks;
+                    localizedLogBindings.push({ element: thanksEl, type: 'message', key: 'feedbackThanks' });
+                    feedbackRow.classList.add('is-submitted');
+                    feedbackRow.replaceChildren(thanksEl);
+                    if (value === 'down') {
+                        ensureInquiryAction(contentContainer);
+                    }
+                    scrollLogToBottom();
+                    return;
+                }
+                errorEl.textContent = readChatbotMessages(activeLocale).feedbackError;
+                errorEl.hidden = false;
+            } catch {
+                if (destroyed) return;
+                errorEl.textContent = readChatbotMessages(activeLocale).feedbackError;
+                errorEl.hidden = false;
+            } finally {
+                if (!destroyed && !isSubmitted) {
+                    yesButton.disabled = false;
+                    noButton.disabled = false;
+                    isSubmitting = false;
+                }
+            }
+        }
+
+        yesButton.addEventListener('click', () => {
+            void submitFeedback('up');
+        });
+        noButton.addEventListener('click', () => {
+            void submitFeedback('down');
+        });
+
+        buttonsGroup.append(yesButton, noButton);
+        feedbackRow.append(promptEl, buttonsGroup, errorEl);
+        return feedbackRow;
+    }
+
+    function appendMessage({ role, text = '', textKey = '', actions = [], isError = false, mascotState = 'idle', turnId = null }) {
         const wrapper = document.createElement('div');
         wrapper.className = `chatbot-message chatbot-message-${isError ? 'error' : role}`;
 
@@ -424,15 +569,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             for (const action of actions) {
                 if (!action || typeof action !== 'object') continue;
                 if (action.type === 'inquiry') {
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = 'chatbot-action-btn chatbot-action-inquiry';
-                    button.textContent = readChatbotMessages(activeLocale).inquiryActionButton;
-                    button.addEventListener('click', () => {
-                        performInquiryAction();
-                    });
-                    localizedLogBindings.push({ element: button, type: 'message', key: 'inquiryActionButton' });
-                    actionRow.append(button);
+                    actionRow.append(createInquiryActionButton());
                 } else if (action.type === 'link') {
                     const safeHref = resolveSafeHref(
                         action.href,
@@ -454,6 +591,13 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             if (actionRow.childElementCount > 0) {
                 contentContainer.append(actionRow);
             }
+        }
+
+        const normalizedTurnId = (typeof turnId === 'string' && turnId.trim().length > 0)
+            ? turnId.trim()
+            : null;
+        if (role === 'assistant' && !isError && normalizedTurnId) {
+            contentContainer.append(createFeedbackRow(normalizedTurnId, contentContainer));
         }
 
         log.append(wrapper);
@@ -495,12 +639,15 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         }
 
         for (const binding of localizedLogBindings) {
+            if (binding.onlyWhenVisible && binding.element.hidden) continue;
             if (binding.type === 'role') {
                 binding.element.textContent = `${messages[binding.key] || ''}: `;
             } else if (binding.type === 'message') {
                 binding.element.textContent = messages[binding.key] || '';
             } else if (binding.type === 'actionLabel') {
                 binding.element.textContent = resolveActionLabel(activeLocale, binding.key);
+            } else if (binding.type === 'attr') {
+                binding.element.setAttribute(binding.attr, messages[binding.key] || '');
             }
         }
     }
@@ -542,7 +689,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
         widgetRoot.classList.add('is-panel-open');
         document.documentElement?.classList?.add(MOBILE_OPEN_CLASS);
         launcherTagline.hidden = true;
-        if (launcherMouse) launcherMouse.hidden = true;
+        setPlaytimeHidden(true);
         panel.classList.remove('is-closing');
         panel.hidden = false;
         launcherButton.setAttribute('aria-expanded', 'true');
@@ -597,7 +744,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             panel.hidden = true;
             widgetRoot.classList.remove('is-panel-open');
             launcherTagline.hidden = false;
-            if (launcherMouse) launcherMouse.hidden = false;
+            setPlaytimeHidden(false);
         };
 
         if (shouldAnimatePanel(document, animate)) {
@@ -722,14 +869,18 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
 
         setSendingState(true);
         try {
+            const requestBody = {
+                messages: requestMessages,
+                language: activeLocale
+            };
+            if (sessionId) {
+                requestBody.session_id = sessionId;
+            }
             const response = await fetchFn(CHAT_ENDPOINT, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: requestMessages,
-                    language: activeLocale
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (destroyed) return;
@@ -740,12 +891,18 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
                     const replyText = payload.reply;
                     const actions = Array.isArray(payload.actions) ? payload.actions : [];
                     const replyState = resolveReplyMascotState(actions);
+                    if (typeof payload.session_id === 'string' && payload.session_id.trim().length > 0) {
+                        sessionId = payload.session_id.trim();
+                    }
+                    const turnId = (typeof payload.turn_id === 'string' && payload.turn_id.trim().length > 0)
+                        ? payload.turn_id.trim()
+                        : null;
                     conversationHistory = [
                         ...conversationHistory,
                         nextUserMessage,
                         { role: 'assistant', content: replyText.trim().slice(0, MAX_MESSAGE_LENGTH) }
                     ].slice(-MAX_MESSAGES_IN_REQUEST);
-                    appendMessage({ role: 'assistant', text: replyText, actions, mascotState: replyState });
+                    appendMessage({ role: 'assistant', text: replyText, actions, mascotState: replyState, turnId });
                     setMascotState(replyState);
                     scheduleMascotIdle(REPLY_STATE_DURATION_MS);
                     return;
@@ -855,6 +1012,7 @@ export function initHomeChatbot({ locale, root = globalThis.document, mountEleme
             input.removeEventListener('focus', handleInputFocus);
             document.removeEventListener('keydown', handleDocumentKeydown);
             document.removeEventListener('public:locale-changed', handleLocaleChanged);
+            launcherPlaytime.destroy();
             mountTarget.replaceChildren();
             delete mountTarget.dataset.chatbotInitialized;
             activeControllers.delete(mountTarget);

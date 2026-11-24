@@ -9,6 +9,7 @@ import { renderPhysicalIntakes } from './physical-intake-view.js';
 import { splitNoteStatus } from './application-queue-filters.js';
 import { openPdfMergerModal } from '../ui/pdfMergerModal.js';
 import { showToast } from '../ui/toastManager.js';
+import { performPhysicalPermanentDelete } from './permanentDeleteDialog.js';
 import './physical-intake.css';
 
 function setBusy(context, isBusy) {
@@ -236,7 +237,6 @@ async function createReceiptPdf(context, preview) {
 }
 
 async function mutateReceipt(context, options) {
-    if (options.action === 'delete' && !window.confirm('Bu fiziksel teslim kaydı Silinenler’e taşınsın mı? PDF sürümleri saklanır.')) return;
     const detail = await context.api.change(options.intake.id, { action: options.action,
         body: { lock_version: options.intake.lock_version, ...(options.action === 'status' ? { status: options.status, ...(options.status === 'rejected' ? { rejection_reason: options.reason } : {}) } : {}) } });
     if (context.state.view === 'detail') {
@@ -247,6 +247,10 @@ async function mutateReceipt(context, options) {
         return;
     }
     await loadQueue(context);
+}
+
+async function deletePhysicalIntake(context, intake, trigger = null) {
+    return performPhysicalPermanentDelete(context, intake, trigger, { render, splitNoteStatus });
 }
 
 async function persistPdf(context, capture, bytes) {
@@ -333,6 +337,7 @@ function createHandlers(context) {
         ...createMetadataHandlers(context,run),
         downloadReceipt: () => run(() => downloadReceiptPdf(context)),
         mutate: (intake, action, status) => run(() => mutateReceipt(context, { intake, action, status })),
+        deleteIntake: (intake, trigger) => deletePhysicalIntake(context, intake, trigger),
         reject: intake => { context.state.isRejecting = true; context.state.rejectionReason = ''; render(context); },
         cancelReject: () => { context.state.isRejecting = false; render(context); },
         saveRejection: reason => run(() => mutateReceipt(context, { intake: context.state.detail.intake, action: 'status', status: 'rejected', reason })),
@@ -349,6 +354,7 @@ export function initializePhysicalIntakeManager(root) {
         root,
         api: createPhysicalIntakeClient(),
         isBusy: false,
+        confirmingDelete: false,
         controls: [],
         handlers: null,
         queueRequestId: 0,
@@ -359,6 +365,7 @@ export function initializePhysicalIntakeManager(root) {
             loading: false,
             error: false,
             errorStatus: null,
+            deletingId: null,
             recordNotes: new Map(),
             recordNotesResult: null,
             query: { q: '', status: 'all', from_date: '', to_date: '', page: 1, page_size: 25 },

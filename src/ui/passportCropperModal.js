@@ -150,6 +150,14 @@ function initCropperInstance() {
             const imgData = passportCropperInstance.getImageData();
             baseRotation = imgData.rotate || 0;
             applyRotation();
+            const { cropperSelectMedeni } = getElements();
+            window.dispatchEvent(new CustomEvent('ykn:cropper-ready', {
+                detail: {
+                    pageIndex: currentCropperPageIndex,
+                    aspectRatio: currentAspectRatio,
+                    medeni: cropperSelectMedeni?.value || ''
+                }
+            }));
         }
     });
 }
@@ -175,6 +183,7 @@ export function closePassportCropper() {
     }
     const { modal, image, slider, angleLabel, pageSelector, sourceSelectorWrapper, sourceSelector } = getElements();
     if (modal) modal.classList.remove('show');
+    syncPassportCropperSilentState(false);
     if (image) image.src = '';
     if (slider) slider.value = 0;
     if (angleLabel) angleLabel.textContent = '0°';
@@ -186,6 +195,27 @@ export function closePassportCropper() {
     cropSources = [];
     currentCropperPageIndex = 0;
     window.dispatchEvent(new CustomEvent('ykn:cropper-closed'));
+}
+
+function isSilentModeActive() {
+    return document.documentElement?.dataset?.yknSilent === 'true';
+}
+
+/**
+ * YKN sessiz akışı etkinken kırpıcı penceresini yerleşimde tutup görsel ve erişilebilirlik olarak gizler.
+ *
+ * @param {boolean} [silent=isSilentModeActive()] - Sessiz gizleme etkinleştirilsin mi.
+ */
+export function syncPassportCropperSilentState(silent = isSilentModeActive()) {
+    const { modal } = getElements();
+    if (!modal) return;
+    if (silent && modal.classList.contains('show')) {
+        modal.setAttribute('aria-hidden', 'true');
+        modal.classList.add('is-ykn-silent');
+    } else {
+        modal.removeAttribute('aria-hidden');
+        modal.classList.remove('is-ykn-silent');
+    }
 }
 
 export function isPassportCropperOpen() {
@@ -215,6 +245,152 @@ export function setCropperSourceLoading(isLoading) {
     if (sourceSelector) sourceSelector.disabled = isLoading;
     if (btnTransfer) btnTransfer.disabled = isLoading;
     if (btnDownload) btnDownload.disabled = isLoading;
+}
+
+/**
+ * Aktif kırpıcı örneğine piksel tabanlı kırpma kutusunu uygular.
+ *
+ * @param {{ x: number, y: number, width: number, height: number }} box - Piksel kırpma kutusu.
+ * @returns {boolean} Kutu uygulandıysa `true`, aktif kırpıcı yoksa veya kutu geçersizse `false`.
+ */
+export function applyCropBox(box) {
+    if (
+        !passportCropperInstance ||
+        !box ||
+        !Number.isFinite(box.x) ||
+        !Number.isFinite(box.y) ||
+        !Number.isFinite(box.width) ||
+        !Number.isFinite(box.height) ||
+        box.width <= 0 ||
+        box.height <= 0
+    ) {
+        return false;
+    }
+    try {
+        passportCropperInstance.setData({
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Kırpıcıdaki mevcut kırpma alanıyla YÖKSİS aktarımını tetikler.
+ */
+export function submitCropperTransfer() {
+    downloadCroppedImage(true);
+}
+
+/**
+ * Kırpıcıdaki boş ve düzenlenebilir varsayılan alanları doldurur.
+ *
+ * @param {{ medeni?: string }} [defaults={}] - Uygulanacak varsayılan alanlar.
+ */
+export function setCropperDefaults({ medeni } = {}) {
+    const { cropperSelectMedeni } = getElements();
+    if (!cropperSelectMedeni || cropperSelectMedeni.disabled || cropperSelectMedeni.value) {
+        return;
+    }
+    const normalized = normalizeProfileMaritalStatus(medeni);
+    if (!normalized) return;
+    cropperSelectMedeni.value = normalized;
+    cropperSelectMedeni.dispatchEvent(new Event('change'));
+}
+
+/**
+ * Kırpıcıdaki seçili cinsiyet değerini döndürür.
+ *
+ * @returns {string} Seçili cinsiyet veya boş dize.
+ */
+export function getCropperGender() {
+    const { cropperSelectGender } = getElements();
+    return String(cropperSelectGender?.value || '').trim();
+}
+
+const CROPPER_PAGE_SWITCH_TIMEOUT_MS = 5000;
+
+/**
+ * Kırpıcıyı belirtilen sayfa dizinine geçirir ve yeni sayfanın hazır olmasını bekler.
+ *
+ * @param {number} index - Hedef sayfa dizini (0 tabanlı).
+ * @param {{ force?: boolean }} [options={}] - Seçenekler; `force: true` mevcut sayfayı yeniden yükler.
+ * @returns {Promise<boolean>} Sayfa başarıyla değiştirildiyse `true`, aksi halde `false`.
+ */
+export function selectCropperPage(index, { force = false } = {}) {
+    if (!Number.isInteger(index) || !cropperPages || index < 0 || index >= cropperPages.length) {
+        return Promise.resolve(false);
+    }
+    const pageItem = cropperPages[index];
+    const src = typeof pageItem === 'string' ? pageItem : pageItem?.dataUrl;
+    if (!src) {
+        return Promise.resolve(false);
+    }
+    const { image } = getElements();
+    if (!passportCropperInstance && !image) {
+        return Promise.resolve(false);
+    }
+    if (!force && index === currentCropperPageIndex && passportCropperInstance) {
+        return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (ok) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            window.removeEventListener('ykn:cropper-ready', onReady);
+            window.removeEventListener('ykn:cropper-closed', onClosed);
+            resolve(ok);
+        };
+        const onReady = (event) => {
+            if (event?.detail?.pageIndex === index) {
+                finish(true);
+            }
+        };
+        const onClosed = () => {
+            finish(false);
+        };
+        const timer = setTimeout(() => {
+            finish(false);
+        }, CROPPER_PAGE_SWITCH_TIMEOUT_MS);
+
+        window.addEventListener('ykn:cropper-ready', onReady);
+        window.addEventListener('ykn:cropper-closed', onClosed);
+        try {
+            switchToPage(index);
+        } catch {
+            finish(false);
+        }
+    });
+}
+
+/**
+ * Güncellenmiş sayfa görselini kırpıcıya yeniden yükler.
+ *
+ * @param {number} index - Yenilenecek sayfa dizini (0 tabanlı).
+ * @param {string} [dataUrl] - Sayfa nesnesine yazılacak yeni görsel data URL'i.
+ * @returns {Promise<boolean>} Sayfa yeniden yüklendiyse `true`, aksi halde `false`.
+ */
+export function reloadCropperPage(index, dataUrl) {
+    if (!Number.isInteger(index) || !cropperPages || index < 0 || index >= cropperPages.length) {
+        return Promise.resolve(false);
+    }
+    if (typeof dataUrl === 'string' && dataUrl) {
+        const pageItem = cropperPages[index];
+        if (pageItem && typeof pageItem === 'object') {
+            pageItem.dataUrl = dataUrl;
+            pageItem.rotate = 0;
+        } else {
+            cropperPages[index] = { dataUrl, pageNumber: index + 1, rotate: 0 };
+        }
+    }
+    return selectCropperPage(index, { force: true });
 }
 
 function formatDateDisplay(isoDate) {
@@ -313,6 +489,7 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
 
     image.src = activeSrc;
     modal.classList.add('show');
+    syncPassportCropperSilentState();
 
     initCropperInstance();
 }

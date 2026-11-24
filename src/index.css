@@ -1617,6 +1617,8 @@ body.dark-mode .version-badge {
 /* Cropper Modal */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; backdrop-filter: blur(4px); opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
 .modal-overlay.show { opacity: 1; visibility: visible; }
+html[data-ykn-silent="true"] #passport-cropper-modal.modal-overlay.show,
+#passport-cropper-modal.modal-overlay.show.is-ykn-silent { opacity: 0; pointer-events: none; }
 .modal-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem; width: 100%; max-width: 800px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; max-height: 80vh; max-height: 80svh; display: flex; flex-direction: column; overflow-y: auto; transform: scale(0.95) translateY(10px); opacity: 0; transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease; }
 .modal-overlay.show .modal-card { transform: scale(1) translateY(0); opacity: 1; }
 .modal-card h2 { margin-bottom: 0.5rem; color: var(--text-primary); }

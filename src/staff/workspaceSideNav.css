@@ -1,0 +1,239 @@
+/*
+ * Yetkili çalışma alanı dikey yan menüsü (masaüstü >= 901px).
+ * Dar ekranlarda (<= 900px) mevcut yatay kaydırılabilir sekme şeridi korunur.
+ */
+
+@media (min-width: 901px) {
+    /*
+     * Menüyü sağ tarafa almak için tek satırlık değişiklik örneği:
+     * --workspace-nav-columns: minmax(0, 1fr) minmax(12rem, 14.5rem);
+     * --workspace-nav-areas: "toolbar nav" "hint nav" "views nav";
+     */
+    .workspace-content {
+        --workspace-nav-columns: minmax(12rem, 14.5rem) minmax(0, 1fr);
+        --workspace-nav-areas:
+            "nav toolbar"
+            "nav hint"
+            "nav views";
+        --workspace-nav-sticky-top: 6rem;
+        display: grid;
+        grid-template-columns: var(--workspace-nav-columns);
+        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-areas: var(--workspace-nav-areas);
+        column-gap: 1.25rem;
+        align-items: start;
+    }
+
+    .workspace-content[hidden] {
+        display: none;
+    }
+
+    .workspace-content .workspace-toolbar {
+        grid-area: toolbar;
+        min-width: 0;
+    }
+
+    .workspace-content .workspace-shortcut-hint {
+        grid-area: hint;
+        min-width: 0;
+    }
+
+    .workspace-content .view-panel {
+        grid-area: views;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .workspace-content .workspace-nav {
+        grid-area: nav;
+        position: sticky;
+        top: var(--workspace-nav-sticky-top);
+        align-self: start;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        max-height: calc(100vh - var(--workspace-nav-sticky-top) - 1.5rem);
+        overflow-y: auto;
+        overflow-x: hidden;
+        margin-bottom: 0;
+        padding: 0.65rem;
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 14px;
+        box-shadow: 0 6px 20px rgb(var(--accent-rgb) / 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+        counter-reset: workspace-nav-shortcut;
+    }
+
+    .workspace-content .workspace-nav button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        width: 100%;
+        min-height: 44px;
+        padding: 0.6rem 0.75rem 0.6rem 0.7rem;
+        background: transparent;
+        border: 1px solid transparent;
+        border-left-width: 4px;
+        border-radius: 10px;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        font-weight: 600;
+        line-height: 1.3;
+        text-align: left;
+        white-space: normal;
+        overflow-wrap: break-word;
+        transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+    }
+
+    .workspace-content .workspace-nav button:hover {
+        background: rgb(var(--accent-rgb) / 0.08);
+        border-color: rgb(var(--accent-rgb) / 0.16);
+        border-left-color: var(--accent);
+        color: var(--accent);
+        transform: none;
+    }
+
+    .workspace-content .workspace-nav button:focus-visible {
+        background: rgb(var(--accent-rgb) / 0.08);
+        border-color: var(--accent);
+        border-left-color: var(--accent);
+        color: var(--accent);
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.18);
+    }
+
+    .workspace-content .workspace-nav button.is-active,
+    .workspace-content .workspace-nav button.is-active:hover,
+    .workspace-content .workspace-nav button.is-active:focus-visible {
+        background: var(--accent);
+        border-color: var(--accent);
+        border-left-color: var(--staff-home-rose, #f8e8ec);
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgb(var(--accent-rgb) / 0.22);
+    }
+
+    .workspace-content .workspace-nav button.is-active:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.26);
+    }
+
+    /* 1–9 klavye kısayolları ana ekran kart sırasıyla birebir eşleşir */
+    .workspace-content .workspace-nav button:nth-child(-n + 9) {
+        counter-increment: workspace-nav-shortcut;
+    }
+
+    .workspace-content .workspace-nav button:nth-child(-n + 9)::after {
+        content: counter(workspace-nav-shortcut);
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.35rem;
+        height: 1.35rem;
+        padding: 0 0.3rem;
+        border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--card-border));
+        border-radius: 5px;
+        background: color-mix(in srgb, var(--accent) 6%, var(--card-bg));
+        color: var(--text-secondary);
+        font-size: 0.7rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        line-height: 1;
+    }
+
+    .workspace-content .workspace-nav button:nth-child(-n + 9):hover::after,
+    .workspace-content .workspace-nav button:nth-child(-n + 9):focus-visible::after {
+        border-color: color-mix(in srgb, var(--accent) 32%, var(--card-border));
+        color: var(--accent);
+    }
+
+    .workspace-content .workspace-nav button.is-active:nth-child(-n + 9)::after {
+        border-color: rgba(255, 255, 255, 0.32);
+        background: rgba(255, 255, 255, 0.16);
+        color: #ffffff;
+    }
+
+    body.dark-mode .workspace-content .workspace-nav {
+        background: var(--card-bg);
+        border-color: var(--card-border);
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+    }
+
+    body.dark-mode .workspace-content .workspace-nav button:hover {
+        background: rgb(var(--accent-rgb) / 0.14);
+        border-color: rgb(var(--accent-rgb) / 0.3);
+        border-left-color: var(--accent);
+        color: var(--accent);
+    }
+
+    body.dark-mode .workspace-content .workspace-nav button:focus-visible {
+        background: rgb(var(--accent-rgb) / 0.14);
+        border-color: var(--accent);
+        border-left-color: var(--accent);
+        color: var(--accent);
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.28);
+    }
+
+    body.dark-mode .workspace-content .workspace-nav button.is-active,
+    body.dark-mode .workspace-content .workspace-nav button.is-active:hover,
+    body.dark-mode .workspace-content .workspace-nav button.is-active:focus-visible {
+        background: var(--accent-gradient);
+        border-color: color-mix(in srgb, #75b7e5 45%, #5a0e27);
+        border-left-color: var(--accent);
+        color: #ffffff;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32);
+    }
+
+    body.dark-mode .workspace-content .workspace-nav button.is-active:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        box-shadow: 0 0 0 4px rgb(var(--accent-rgb) / 0.32);
+    }
+
+    body.dark-mode .workspace-content .workspace-nav button:nth-child(-n + 9)::after {
+        border-color: rgb(var(--accent-rgb) / 0.24);
+        background: rgb(var(--accent-rgb) / 0.1);
+        color: var(--text-secondary);
+    }
+
+    body.dark-mode .workspace-content .workspace-nav button:nth-child(-n + 9):hover::after,
+    body.dark-mode .workspace-content .workspace-nav button:nth-child(-n + 9):focus-visible::after {
+        border-color: rgb(var(--accent-rgb) / 0.45);
+        color: var(--accent);
+    }
+
+    body.dark-mode .workspace-content .workspace-nav button.is-active:nth-child(-n + 9)::after {
+        border-color: rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.16);
+        color: #ffffff;
+    }
+}
+
+@media (max-width: 900px) {
+    .workspace-content .workspace-nav {
+        position: static;
+        scroll-snap-type: x proximity;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .workspace-content .workspace-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .workspace-content .workspace-nav button {
+        scroll-snap-align: start;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .workspace-content .workspace-nav button {
+        transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+        transform: none;
+    }
+}

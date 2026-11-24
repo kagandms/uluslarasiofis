@@ -794,83 +794,20 @@ test('replacing one requested document does not resume review; staff must clear 
     assert.equal((await readJson(explicitResume)).application_status, 'under_review');
 });
 
-test('staff soft-delete hides an application, revokes its applicant session, and restore returns the prior status', async () => {
-    const { database, environment } = createEnvironment();
-    const applicationId = await seedApplication(database, { status: 'under_review' });
-    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-before-delete-000000000000000000');
-    const staffCookie = await seedStaff(environment, database);
-
-    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-        method: 'POST', cookie: staffCookie, body: {}
-    }), environment);
-    assert.equal(archived.status, 200);
-    assert.equal(database.prepare('SELECT state FROM application_deletions WHERE application_id=?').bind(applicationId).first().state, 'soft_deleted');
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_sessions WHERE application_id=?').bind(applicationId).first().count, 0);
-    assert.equal((await worker.fetch(request('/api/public/applications/current', { cookie: ownerCookie }), environment)).status, 401);
-
-    const activeQueue = await worker.fetch(request('/api/staff/applications/query', {
-        method: 'POST', cookie: staffCookie, body: { status: 'all', page: 1, page_size: 25 }
-    }), environment);
-    assert.equal((await readJson(activeQueue)).items.some((item) => item.id === applicationId), false);
-    const deletedQueue = await worker.fetch(request('/api/staff/applications/query', {
-        method: 'POST', cookie: staffCookie, body: { status: 'deleted', page: 1, page_size: 25 }
-    }), environment);
-    assert.equal((await readJson(deletedQueue)).items[0].deletion_state, 'soft_deleted');
-
-    const restored = await worker.fetch(request(`/api/staff/applications/${applicationId}/restore`, {
-        method: 'POST', cookie: staffCookie, body: {}
-    }), environment);
-    assert.equal(restored.status, 200);
-    assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(applicationId).first().status, 'under_review');
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_deletions WHERE application_id=?').bind(applicationId).first().count, 0);
-});
-
-test('staff can reversibly archive a draft and restore it without enabling permanent purge', async () => {
-    const { database, environment } = createEnvironment();
-    const applicationId = await seedApplication(database, { status: 'draft' });
-    const ownerCookie = await seedOwnerSession(database, applicationId, 'owner-draft-before-delete-00000000000000');
-    const staffCookie = await seedStaff(environment, database);
-
-    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-        method: 'POST', cookie: staffCookie, body: {}
-    }), environment);
-    assert.equal(archived.status, 200);
-    assert.equal(database.prepare('SELECT state FROM application_deletions WHERE application_id=?').bind(applicationId).first().state, 'soft_deleted');
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_sessions WHERE application_id=?').bind(applicationId).first().count, 0);
-    assert.equal((await worker.fetch(request('/api/public/applications/current', { cookie: ownerCookie }), environment)).status, 401);
-
-    const deletedQueue = await worker.fetch(request('/api/staff/applications/query', {
-        method: 'POST', cookie: staffCookie, body: { status: 'deleted', page: 1, page_size: 25 }
-    }), environment);
-    assert.ok((await readJson(deletedQueue)).items.some((item) => item.id === applicationId));
-
-    const restored = await worker.fetch(request(`/api/staff/applications/${applicationId}/restore`, {
-        method: 'POST', cookie: staffCookie, body: {}
-    }), environment);
-    assert.equal(restored.status, 200);
-    assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(applicationId).first().status, 'draft');
-    assert.equal(database.prepare('SELECT COUNT(*) AS count FROM application_deletions WHERE application_id=?').bind(applicationId).first().count, 0);
-});
-
-test('permanent purge is administrator-only and keeps only a non-identifying audit record', async () => {
+test('permanent delete is administrator-only and keeps only a non-identifying audit record', async () => {
     const { database, environment } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'completed' });
     const reviewerCookie = await seedStaff(environment, database, 'reviewer-1', 'reviewer-session-token-000000000000000000', 'reviewer');
     const adminCookie = await seedStaff(environment, database, 'admin-1', 'admin-session-token-00000000000000000000', 'admin');
-    environment.STAFF_SHARED_USERNAME = 'reviewer-1';
-    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-        method: 'POST', cookie: reviewerCookie, body: {}
-    }), environment);
-    assert.equal(archived.status, 200);
 
     environment.STAFF_SHARED_USERNAME = 'reviewer-1';
-    const forbidden = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
-        method: 'POST', cookie: reviewerCookie, body: {}
+    const forbidden = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+        method: 'POST', cookie: reviewerCookie, body: { confirmed: true }
     }), environment);
     assert.equal(forbidden.status, 403);
     environment.STAFF_SHARED_USERNAME = 'admin-1';
-    const purged = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
-        method: 'POST', cookie: adminCookie, body: {}
+    const purged = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+        method: 'POST', cookie: adminCookie, body: { confirmed: true }
     }), environment);
     assert.equal(purged.status, 200);
     assert.equal(database.prepare('SELECT id FROM applications WHERE id=?').bind(applicationId).first(), null);
@@ -881,7 +818,7 @@ test('permanent purge is administrator-only and keeps only a non-identifying aud
     assert.equal(audit.safe_metadata_json.includes(applicationId), false);
 });
 
-test('archive blocks active spreadsheet rows and permanent purge deletes the absent transfer state', async () => {
+test('permanent delete blocks active spreadsheet rows and deletes the absent transfer state', async () => {
     const { database, environment } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'completed' });
     await database.prepare(`UPDATE applications SET submitted_at=?, first_name='Ada', last_name='Lovelace', passport_number='001'
@@ -891,19 +828,15 @@ test('archive blocks active spreadsheet rows and permanent purge deletes the abs
         (application_id,record_key,state,sheet_name,operation_id,last_actor_staff,updated_at)
         VALUES(?,?,'present','03.11.2026','operation-1','admin-1',?)`)
         .bind(applicationId, applicationId, new Date().toISOString()).run();
-    const blockedArchive = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-        method: 'POST', cookie: adminCookie, body: {}
+    const blockedDelete = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+        method: 'POST', cookie: adminCookie, body: { confirmed: true }
     }), environment);
-    assert.equal(blockedArchive.status, 409);
+    assert.equal(blockedDelete.status, 409);
 
     await database.prepare(`UPDATE application_spreadsheet_records SET state='absent',sheet_name=NULL WHERE application_id=?`)
         .bind(applicationId).run();
-    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-        method: 'POST', cookie: adminCookie, body: {}
-    }), environment);
-    assert.equal(archived.status, 200);
-    const purged = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
-        method: 'POST', cookie: adminCookie, body: {}
+    const purged = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+        method: 'POST', cookie: adminCookie, body: { confirmed: true }
     }), environment);
     assert.equal(purged.status, 200);
     assert.equal(database.prepare('SELECT application_id FROM application_spreadsheet_records WHERE application_id=?')
@@ -911,7 +844,7 @@ test('archive blocks active spreadsheet rows and permanent purge deletes the abs
     assert.equal(database.prepare('SELECT id FROM applications WHERE id=?').bind(applicationId).first(), null);
 });
 
-test('archive waits for an in-flight add and succeeds after the row is confirmed removed', async () => {
+test('permanent delete waits for an in-flight add and succeeds after the row is confirmed removed', async () => {
     const { database, environment } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'completed' });
     await database.prepare(`UPDATE applications SET submitted_at=?, first_name='Ada', last_name='Lovelace', passport_number='001'
@@ -940,26 +873,27 @@ test('archive waits for an in-flight add and succeeds after the row is confirmed
             method: 'POST', cookie: adminCookie, body: { action: 'add' }
         }), environment);
         await addStarted;
-        const blockedArchive = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-            method: 'POST', cookie: adminCookie, body: {}
+        const blockedDelete = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+            method: 'POST', cookie: adminCookie, body: { confirmed: true }
         }), environment);
-        assert.equal(blockedArchive.status, 409);
+        assert.equal(blockedDelete.status, 409);
         releaseAdd();
         assert.equal((await addPromise).status, 200);
         const removed = await worker.fetch(request(spreadsheetPath, {
             method: 'POST', cookie: adminCookie, body: { action: 'remove' }
         }), environment);
         assert.equal(removed.status, 200);
-        const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-            method: 'POST', cookie: adminCookie, body: {}
+        const deleted = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+            method: 'POST', cookie: adminCookie, body: { confirmed: true }
         }), environment);
-        assert.equal(archived.status, 200);
+        assert.equal(deleted.status, 200);
+        assert.equal(database.prepare('SELECT id FROM applications WHERE id=?').bind(applicationId).first(), null);
     } finally {
         globalThis.fetch = originalFetch;
     }
 });
 
-test('failed object removal leaves purge pending, blocks restore, and retries safely', async () => {
+test('failed object removal leaves purge pending and retries safely', async () => {
     const { database, environment } = createEnvironment();
     const applicationId = await seedApplication(database, { status: 'rejected' });
     const { fileId } = await seedReviewableDocument(database, applicationId);
@@ -969,24 +903,16 @@ test('failed object removal leaves purge pending, blocks restore, and retries sa
     environment.DOCUMENTS = {
         async delete() { if (shouldFail) throw new Error('temporary object store failure'); }
     };
-    const archived = await worker.fetch(request(`/api/staff/applications/${applicationId}/archive`, {
-        method: 'POST', cookie: staffCookie, body: {}
-    }), environment);
-    assert.equal(archived.status, 200);
 
-    const failedPurge = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
-        method: 'POST', cookie: staffCookie, body: {}
+    const failedPurge = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+        method: 'POST', cookie: staffCookie, body: { confirmed: true }
     }), environment);
     assert.equal(failedPurge.status, 503);
     assert.equal(database.prepare('SELECT state FROM application_deletions WHERE application_id=?').bind(applicationId).first().state, 'purge_pending');
-    const blockedRestore = await worker.fetch(request(`/api/staff/applications/${applicationId}/restore`, {
-        method: 'POST', cookie: staffCookie, body: {}
-    }), environment);
-    assert.equal(blockedRestore.status, 409);
 
     shouldFail = false;
-    const retried = await worker.fetch(request(`/api/staff/applications/${applicationId}/purge`, {
-        method: 'POST', cookie: staffCookie, body: {}
+    const retried = await worker.fetch(request(`/api/staff/applications/${applicationId}/delete`, {
+        method: 'POST', cookie: staffCookie, body: { confirmed: true }
     }), environment);
     assert.equal(retried.status, 200);
     assert.equal(database.prepare('SELECT id FROM applications WHERE id=?').bind(applicationId).first(), null);

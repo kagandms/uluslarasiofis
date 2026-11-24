@@ -24,7 +24,14 @@ export const CHATBOT_MESSAGES = Object.freeze({
         inquiryActionButton: 'Soru formuna git',
         chatbotOpenTracking: 'Başvurumu görüntüle',
         userRoleLabel: 'Siz',
-        assistantRoleLabel: 'Asistan'
+        assistantRoleLabel: 'Asistan',
+        feedbackPrompt: 'Yardımcı oldu mu?',
+        feedbackYes: 'Evet',
+        feedbackNo: 'Hayır',
+        feedbackYesAriaLabel: 'Bu cevap yardımcı oldu',
+        feedbackNoAriaLabel: 'Bu cevap yardımcı olmadı',
+        feedbackThanks: 'Teşekkürler, geri bildiriminiz alındı.',
+        feedbackError: 'Geri bildirim gönderilemedi. Tekrar deneyebilirsiniz.'
     }),
     en: Object.freeze({
         launcherLabel: 'Assistant',
@@ -50,7 +57,14 @@ export const CHATBOT_MESSAGES = Object.freeze({
         inquiryActionButton: 'Go to question form',
         chatbotOpenTracking: 'View my application',
         userRoleLabel: 'You',
-        assistantRoleLabel: 'Assistant'
+        assistantRoleLabel: 'Assistant',
+        feedbackPrompt: 'Was this helpful?',
+        feedbackYes: 'Yes',
+        feedbackNo: 'No',
+        feedbackYesAriaLabel: 'This answer was helpful',
+        feedbackNoAriaLabel: 'This answer was not helpful',
+        feedbackThanks: 'Thank you, your feedback has been received.',
+        feedbackError: 'Could not send feedback. You can try again.'
     }),
     ru: Object.freeze({
         launcherLabel: 'Ассистент',
@@ -76,7 +90,14 @@ export const CHATBOT_MESSAGES = Object.freeze({
         inquiryActionButton: 'Перейти к форме вопроса',
         chatbotOpenTracking: 'Посмотреть мою заявку',
         userRoleLabel: 'Вы',
-        assistantRoleLabel: 'Ассистент'
+        assistantRoleLabel: 'Ассистент',
+        feedbackPrompt: 'Это было полезно?',
+        feedbackYes: 'Да',
+        feedbackNo: 'Нет',
+        feedbackYesAriaLabel: 'Этот ответ был полезен',
+        feedbackNoAriaLabel: 'Этот ответ не помог',
+        feedbackThanks: 'Спасибо, ваш отзыв получен.',
+        feedbackError: 'Не удалось отправить отзыв. Вы можете попробовать снова.'
     }),
     tk: Object.freeze({
         launcherLabel: 'Kömekçi',
@@ -102,7 +123,14 @@ export const CHATBOT_MESSAGES = Object.freeze({
         inquiryActionButton: 'Sorag formasyna geç',
         chatbotOpenTracking: 'Arzamy gör',
         userRoleLabel: 'Siz',
-        assistantRoleLabel: 'Kömekçi'
+        assistantRoleLabel: 'Kömekçi',
+        feedbackPrompt: 'Peýdaly boldumy?',
+        feedbackYes: 'Hawa',
+        feedbackNo: 'Ýok',
+        feedbackYesAriaLabel: 'Bu jogap peýdaly boldy',
+        feedbackNoAriaLabel: 'Bu jogap peýdaly bolmady',
+        feedbackThanks: 'Sag boluň, pikiriňiz alyndy.',
+        feedbackError: 'Pikir iberilip bilmedi. Täzeden synanyşyp bilersiňiz.'
     }),
     ar: Object.freeze({
         launcherLabel: 'المساعد',
@@ -128,6 +156,13 @@ export const CHATBOT_MESSAGES = Object.freeze({
         inquiryActionButton: 'الانتقال إلى نموذج الأسئلة',
         chatbotOpenTracking: 'عرض طلبي',
         userRoleLabel: 'أنت',
-        assistantRoleLabel: 'المساعد'
+        assistantRoleLabel: 'المساعد',
+        feedbackPrompt: 'هل كان هذا مفيداً؟',
+        feedbackYes: 'نعم',
+        feedbackNo: 'لا',
+        feedbackYesAriaLabel: 'كانت هذه الإجابة مفيدة',
+        feedbackNoAriaLabel: 'لم تكن هذه الإجابة مفيدة',
+        feedbackThanks: 'شكراً لك، تم استلام ملاحظاتك.',
+        feedbackError: 'تعذر إرسال الملاحظات. يمكنك المحاولة مرة أخرى.'
     })
 });

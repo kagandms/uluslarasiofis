@@ -46,11 +46,14 @@ import { runPrintCleanup } from './services/printCleanupService.js';
 import { getScheduledWork } from './services/scheduled-work.js';
 import { readCloudflareUsage } from './services/cloudflare-usage-metrics.js';
 import { handleStaffWorkHours } from './routes/staffWorkHoursRoutes.js';
+import { handleStaffAssistant } from './routes/staffAssistantRoutes.js';
 import { handleStaffYoksisDocumentAudit } from './routes/staffYoksisDocumentAuditRoutes.js';
 import { handleStaffRecordNotes } from './routes/staffRecordNoteRoutes.js';
 import { createPublicInquiry } from './routes/inquiryRoutes.js';
 import { handlePublicChat } from './routes/chatbotRoutes.js';
+import { handlePublicChatFeedback } from './routes/chatFeedbackRoutes.js';
 import { handleStaffInquiries } from './routes/staffInquiryRoutes.js';
+import { handleStaffChatLogs } from './routes/staffChatLogRoutes.js';
 
 function apiErrorFromUnknown(error) {
     if (error instanceof ApiError) return error;
@@ -116,6 +119,7 @@ async function routeApi(request, environment, requestId, cache) {
         return readCloudflareUsage({ environment, cache });
     }
     if (pathname === '/api/staff/work-hours') return handleStaffWorkHours(request, environment, requestId);
+    if (pathname === '/api/staff/assistant') return handleStaffAssistant(request, environment, requestId);
     if (pathname.startsWith('/api/staff/yoksis-document-audit/')) {
         return handleStaffYoksisDocumentAudit(request, environment, requestId);
     }
@@ -151,12 +155,12 @@ async function routeApi(request, environment, requestId, cache) {
         return prioritizeStaffDocumentScan(request, environment, applicationId, documentCode, requestId);
     }
     if (['/api/staff/scanner/status', '/api/staff/scanner/retry'].includes(pathname)) return handleStaffScannerRequest(request, environment, requestId);
-    const deletionMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/(archive|restore|purge)$/);
+    const deletionMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/delete$/);
     if (deletionMatch) {
         let applicationId;
         try { applicationId = decodeURIComponent(deletionMatch[1]); }
         catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
-        return handleStaffApplicationDeletion(request, environment, applicationId, deletionMatch[2], requestId);
+        return handleStaffApplicationDeletion(request, environment, applicationId, requestId);
     }
     if (pathname === '/api/webhooks/whatsapp') {
         return handleMetaWhatsAppWebhook(request, environment, requestId);
@@ -213,6 +217,13 @@ async function routeApi(request, environment, requestId, cache) {
     }
     if (pathname === '/api/staff/inquiries' || pathname.startsWith('/api/staff/inquiries/')) {
         return handleStaffInquiries(request, environment, requestId);
+    }
+    if (
+        pathname === '/api/staff/chat-stats'
+        || pathname === '/api/staff/chat-sessions'
+        || pathname.startsWith('/api/staff/chat-sessions/')
+    ) {
+        return handleStaffChatLogs(request, environment, requestId);
     }
     const gocnetEventMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/gocnet-attempts\/([^/]+)\/events$/);
     if (gocnetEventMatch) {
@@ -314,6 +325,7 @@ async function routeApi(request, environment, requestId, cache) {
     if (pathname === '/api/public/applications/tracking-lookup') return lookupApplicationTracking(request, environment);
     if (pathname === '/api/public/inquiries') return createPublicInquiry(request, environment, requestId);
     if (pathname === '/api/public/chat') return handlePublicChat(request, environment, requestId);
+    if (pathname === '/api/public/chat/feedback') return handlePublicChatFeedback(request, environment, requestId);
     if (pathname === '/api/public/applications/current/submit') return submitCurrentApplication(request, environment, requestId);
     if (pathname === '/api/public/applications/current/declaration') return acceptCurrentApplicationDeclaration(request, environment, requestId);
     if (pathname === '/api/public/applications/current/contact-acknowledgement') {

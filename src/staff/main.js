@@ -16,7 +16,6 @@ import { initYknManager } from '../managers/yknManager.js';
 import { initStaffAuth } from './auth.js';
 import { initializeStaffApplicationsManager } from './applicationsManager.js';
 import { initializeStaffApplicationRatings } from './application-ratings.js';
-import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { initializeStaffPrintStatus } from './print-status.js';
@@ -25,6 +24,9 @@ import { initCloudflareUsageCard } from '../ui/cloudflare-usage-card.js';
 import { initWorkHours } from './work-hours.js';
 import { initializeYoksisDocumentAuditManager } from '../managers/yoksisDocumentAuditManager.js';
 import { mountInquiryManager } from './inquiryManager.js';
+import { initializeStaffAssistant } from './staffAssistant.js';
+import { mountChatLogManager } from './chatLogManager.js';
+import { initInquirySourceSwitch } from './inquirySourceSwitch.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -106,12 +108,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
-    try {
-        const archiveRoot = document.getElementById('staff-archive-manager');
-        if (archiveRoot) initializeStaffArchiveManager(archiveRoot);
-    } catch (error) {
-        console.error('Archive workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
-    }
     const physicalRoot = document.getElementById('staff-physical-manager');
     if (physicalRoot) initializePhysicalIntakeManager(physicalRoot);
     try {
@@ -120,10 +116,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (error) {
         console.error('Inquiries workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
+    try {
+        const chatLogsRoot = document.getElementById('staff-chat-logs-manager');
+        if (chatLogsRoot) mountChatLogManager(chatLogsRoot);
+    } catch (error) {
+        console.error('Chat logs workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
+    try { initInquirySourceSwitch(); } catch (error) {
+        console.error('Inquiry source switch failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
     try { initDocumentsManager(); } catch (error) {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
     try { initYknManager(); } catch (e) { console.error('initYknManager error:', e); }
+    try { initializeStaffAssistant(); } catch (error) {
+        console.error('Staff assistant failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
 
     try { initDraftAutoSave(); } catch (e) { console.error('initDraftAutoSave error:', e); }
     try { setActiveStep(STEP_IDS.UPLOAD); } catch (e) { console.error('setActiveStep error:', e); }

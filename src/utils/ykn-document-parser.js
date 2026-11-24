@@ -1825,6 +1825,151 @@ export function extractPassportPersonalNumber(text) {
     return '';
 }
 
+const AFGHAN_ID_LABEL_RE = /(?:^|[\s:;#\-_/\\|.,(])(?:[I1L]D\s*(?:N[O0]\.?|NUMBER|№))\s*[:.\-#]*/i;
+const AFGHAN_AUTHORITY_FALLBACK_RE = /\b(?:ISSUING\s+AUTHORITY|KABUL\s+CENTRAL)\b/i;
+
+function isAfghanPassportText(text, options = {}) {
+    const optionNationality = [
+        options?.uyruk,
+        options?.nationality,
+        options?.country,
+        options?.dogumUlkesi
+    ].filter(Boolean).join(' ');
+    if (
+        optionNationality &&
+        (/AF[GĞ]H?AN/i.test(optionNationality) ||
+            /\bAFG\b/i.test(optionNationality) ||
+            getCountryIso3Code(optionNationality) === 'AFG')
+    ) {
+        return true;
+    }
+    if (!text || typeof text !== 'string') return false;
+    const normalized = text.replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
+    if (/AF[GĞ]H?AN/i.test(normalized) || /\bAFG\b/i.test(normalized)) {
+        return true;
+    }
+    if (/KABUL\s+(?:CENTRAL|PASSPORT)/i.test(normalized)) {
+        return true;
+    }
+    const mrzText = normalized.replace(/[«‹\(\{\[\}\]\)]/g, '<').toUpperCase();
+    return /P[<A-Z0-9]AFG/.test(mrzText) || /[A-Z0-9<]{9}[0-9A-Z<]AFG[0-9OIZSB]{6}/.test(mrzText);
+}
+
+function cleanAfghanIdCandidate(rawRemainder) {
+    if (!rawRemainder) return '';
+    let candidate = convertEasternToAsciiDigits(rawRemainder)
+        .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ')
+        .replace(/[–—−]/g, '-')
+        .trim();
+    if (!candidate) return '';
+
+    const mrzIdx = candidate.search(/(?:^|\s)P<[A-Z]{3}/i);
+    if (mrzIdx !== -1) {
+        candidate = candidate.slice(0, mrzIdx).trim();
+    }
+    if (!candidate) return '';
+
+    for (const stop of PERSONAL_NO_STOP_WORDS) {
+        const stopRegex = new RegExp('(?:^|\\s)' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i');
+        const stopMatch = candidate.match(stopRegex);
+        if (stopMatch && stopMatch.index !== undefined) {
+            if (stopMatch.index === 0) return '';
+            candidate = candidate.slice(0, stopMatch.index).trim();
+        }
+    }
+    if (!candidate) return '';
+
+    if (/^\d{1,4}[./]\d{1,2}[./]\d{1,4}\b/.test(candidate)) return '';
+    if (/^(?:\d{1,2}-(?:\d{1,2}|[A-Z]{3})-(?:19|20)\d{2}|(?:19|20)\d{2}-\d{1,2}-\d{1,2})\b/i.test(candidate)) return '';
+
+    candidate = candidate.replace(/\s*-\s*/g, '-');
+    const tokens = candidate.split(/\s+/).filter(Boolean);
+    const collected = [];
+    let hasDigit = false;
+
+    for (const rawToken of tokens) {
+        const token = rawToken.replace(/^[:;#.,()\[\]{}"']+|[:;#.,()\[\]{}"']+$/g, '');
+        if (!token) continue;
+        if (!/^[A-Z0-9-]+$/i.test(token)) break;
+        const tokenHasDigit = /\d/.test(token);
+        if (!tokenHasDigit && token.replace(/-/g, '').length >= 3) break;
+        collected.push(token.toUpperCase());
+        if (tokenHasDigit) hasDigit = true;
+        if (collected.join('').length >= 20) break;
+    }
+
+    const joined = collected.join('').replace(/^-+|-+$/g, '');
+    if (!joined || !/\d/.test(joined)) return '';
+    if (!/^[A-Z0-9-]{5,20}$/.test(joined)) return '';
+    if (/^(?:\d{1,2}-\d{1,2}-(?:19|20)\d{2}|(?:19|20)\d{2}-\d{1,2}-\d{1,2})$/.test(joined)) return '';
+    if (/^\d{1,2}(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\d{2,4}$/.test(joined)) return '';
+
+    return joined;
+}
+
+/**
+ * Afganistan pasaportlarındaki "ID No." (Uyruk Kimlik No) değerini çıkarır.
+ * Pasaport Afganistan'a ait değilse boş dize döner.
+ *
+ * @param {string} text - Pasaport sayfa metni.
+ * @param {object} [options={}] - Opsiyonel uyruk/ülke ipuçları.
+ * @returns {string} Afganistan ID numarası veya boş dize.
+ */
+export function extractAfghanIdNumber(text, options = {}) {
+    if (!isAfghanPassportText(text, options)) return '';
+    if (!text || typeof text !== 'string') return '';
+
+    const normalized = convertEasternToAsciiDigits(text).replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ');
+    const lines = normalized.split(/[\r\n]+/);
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const labelMatch = line.match(AFGHAN_ID_LABEL_RE);
+        if (!labelMatch || labelMatch.index === undefined) continue;
+
+        let remainder = line.slice(labelMatch.index + labelMatch[0].length).trim();
+        remainder = remainder.replace(/^[/\\|]\s*[^0-9:\r\n]{1,40}:\s*/i, '').trim();
+        remainder = remainder.replace(/^[\s:;#\-_/\\|.,)]+/, '').trim();
+
+        const inlineVal = cleanAfghanIdCandidate(remainder);
+        if (inlineVal) return inlineVal;
+
+        for (let j = i + 1; j < lines.length; j++) {
+            const nextLine = lines[j].trim();
+            if (!nextLine) continue;
+            if (/^P<[A-Z]{3}/i.test(nextLine) || (nextLine.length >= 40 && /^[A-Z0-9<]+$/i.test(nextLine))) break;
+            if (PERSONAL_NO_STOP_WORDS.some(stop => new RegExp('^' + escapeRegex(stop) + '(?:[:;#\\-_/\\\\|\\s.,]|$)', 'i').test(nextLine))) break;
+            const nextVal = cleanAfghanIdCandidate(nextLine);
+            if (nextVal) return nextVal;
+            break;
+        }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || !AFGHAN_AUTHORITY_FALLBACK_RE.test(line)) continue;
+
+        for (let j = i + 1; j <= Math.min(i + 3, lines.length - 1); j++) {
+            const candidateLine = lines[j].trim();
+            if (!candidateLine) continue;
+            if (/^P<[A-Z]{3}/i.test(candidateLine) || /<{2,}/.test(candidateLine) || (candidateLine.length >= 30 && /^[A-Z0-9<]+$/i.test(candidateLine))) {
+                continue;
+            }
+            const tokens = candidateLine.split(/\s+/);
+            for (const rawToken of tokens) {
+                const token = rawToken.replace(/^[:;#.,()\[\]{}"']+|[:;#.,()\[\]{}"']+$/g, '');
+                if (/^\d{8,16}$/.test(token)) {
+                    return token;
+                }
+            }
+        }
+    }
+
+    return '';
+}
+
 export function extractPassportMetadata(text, options = {}) {
     const dates = extractPassportDatesFromText(text, options);
     const placeOfBirth = extractPassportPlaceOfBirth(text, options);
@@ -1834,7 +1979,10 @@ export function extractPassportMetadata(text, options = {}) {
     if (!cinsiyet && mrz.cinsiyet) {
         cinsiyet = mrz.cinsiyet;
     }
-    const uyrukKimlikNo = extractPassportPersonalNumber(text) || mrz.uyrukKimlikNo || '';
+    const uyrukKimlikNo = extractAfghanIdNumber(text, options)
+        || extractPassportPersonalNumber(text)
+        || mrz.uyrukKimlikNo
+        || '';
 
     return {
         issueDate: dates.issueDate || '',

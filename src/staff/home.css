@@ -294,6 +294,8 @@ body.dark-mode #home-screen .home-action:focus-visible {
 #home-screen.is-entering .home-action:nth-child(8) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 525ms both; }
 #home-screen.is-entering .home-action:nth-child(9) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 590ms both; }
 #home-screen.is-entering .home-action:nth-child(10) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 655ms both; }
+#home-screen.is-entering .home-action:nth-child(11) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 720ms both; }
+#home-screen.is-entering .home-action:nth-child(12) { animation: staff-home-card-enter 460ms cubic-bezier(0.18, 0.8, 0.25, 1) 785ms both; }
 
 .workspace-content.is-entering {
     animation: staff-home-content-enter 320ms cubic-bezier(0.18, 0.8, 0.25, 1) both;
@@ -433,25 +435,25 @@ body.dark-mode #home-screen .home-action:focus-visible {
 #staff-work-hours [data-work-hours-holiday]:not([hidden]) { margin: 0; padding: 0.8rem 1rem; border: 1px solid #f0d59d; border-radius: 12px; background: #fff8e8; color: #765000; }
 @media (max-width: 640px) { .work-hours-page-heading, .work-hours-section-heading { align-items: stretch; flex-direction: column; } .work-hours-date-chip { align-self: flex-start; } .work-hours-history-item { grid-template-columns: 1fr auto; } .work-hours-history-item strong { grid-column: 1; } .work-hours-history-item span { grid-column: 2; grid-row: 1 / span 2; } }
 
-.yoksis-audit-workspace { display: grid; gap: 1rem; }
-.yoksis-audit-heading, .yoksis-audit-panel { padding: clamp(1rem, 2vw, 1.5rem); border: 1px solid var(--card-border); border-radius: 18px; background: var(--card-bg); }
-.yoksis-audit-heading h3 { margin: 0.2rem 0 0.45rem; color: var(--staff-home-card-foreground); }
-.yoksis-audit-heading p:last-child { margin: 0; color: var(--staff-home-card-secondary); }
-.yoksis-audit-warning { padding: 0.85rem 1rem; border: 1px solid color-mix(in srgb, #a96b00 35%, var(--card-border)); border-radius: 12px; background: color-mix(in srgb, #ffe9b8 45%, var(--card-bg)); color: var(--text-primary); }
+.yoksis-audit-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; min-width: 0; max-width: 100%; }
+.yoksis-audit-heading, .yoksis-audit-panel { min-width: 0; max-width: 100%; padding: clamp(1rem, 2vw, 1.5rem); border: 1px solid var(--card-border); border-radius: 18px; background: var(--card-bg); }
+.yoksis-audit-panel > * { min-width: 0; max-width: 100%; }
+.yoksis-audit-heading h3 { margin: 0.2rem 0 0.45rem; color: var(--staff-home-card-foreground); overflow-wrap: anywhere; }
+.yoksis-audit-heading p:last-child { margin: 0; color: var(--staff-home-card-secondary); overflow-wrap: anywhere; }
+.yoksis-audit-warning { padding: 0.85rem 1rem; border: 1px solid color-mix(in srgb, #a96b00 35%, var(--card-border)); border-radius: 12px; background: color-mix(in srgb, #ffe9b8 45%, var(--card-bg)); color: var(--text-primary); overflow-wrap: anywhere; }
 .yoksis-audit-confirm { display: flex; align-items: center; gap: 0.6rem; margin: 1rem 0; color: var(--text-primary); }
 .yoksis-audit-controls { display: flex; flex-wrap: wrap; gap: 0.7rem; }
-#audit-status { margin: 1rem 0 0.3rem; font-weight: 700; }
-.yoksis-audit-progress { min-height: 1.4em; color: var(--staff-home-card-secondary); }
-.yoksis-audit-search { display: grid; grid-template-columns: minmax(16rem, 1fr) auto minmax(11rem, auto) auto; align-items: end; gap: 0.7rem; margin: 1rem 0; }
-.yoksis-audit-search-field, .yoksis-audit-filter-field { display: grid; min-width: 0; gap: 0.35rem; }
-.yoksis-audit-search label { font-weight: 600; line-height: 1.3; }
-.yoksis-audit-search input, .yoksis-audit-search select { min-height: 2.75rem; padding: 0.55rem 0.75rem; border: 1px solid var(--card-border); border-radius: 10px; background: var(--card-bg); color: var(--text-primary); }
-.yoksis-audit-search input { width: 100%; min-width: 0; }
-.yoksis-audit-search .btn { min-height: 2.75rem; white-space: nowrap; }
-.yoksis-audit-filter-field select { min-width: 0; }
+#audit-status { margin: 1rem 0 0.3rem; font-weight: 700; overflow-wrap: anywhere; }
+.yoksis-audit-progress { min-height: 1.4em; color: var(--staff-home-card-secondary); overflow-wrap: anywhere; }
+.yoksis-audit-search { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.7rem; margin: 1rem 0; min-width: 0; max-width: 100%; }
+.yoksis-audit-search-field, .yoksis-audit-filter-field { display: grid; flex: 1 1 min(100%, 14rem); min-width: 0; max-width: 100%; gap: 0.35rem; }
+.yoksis-audit-search-field { flex-basis: min(100%, 16rem); }
+.yoksis-audit-search label { font-weight: 600; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.yoksis-audit-search input, .yoksis-audit-search select { width: 100%; min-width: 0; max-width: 100%; min-height: 2.75rem; padding: 0.55rem 0.75rem; border: 1px solid var(--card-border); border-radius: 10px; background: var(--card-bg); color: var(--text-primary); }
+.yoksis-audit-search .btn { flex: 0 0 auto; min-height: 2.75rem; max-width: 100%; white-space: nowrap; }
 .yoksis-audit-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; margin: 1rem 0; }
-.yoksis-audit-pagination p { flex: 1 1 auto; margin: 0; color: var(--staff-home-card-secondary); }
-.yoksis-audit-table-wrap { max-width: 100%; overflow-x: auto; }
+.yoksis-audit-pagination p { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--staff-home-card-secondary); overflow-wrap: anywhere; }
+.yoksis-audit-table-wrap { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; }
 .yoksis-audit-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .yoksis-audit-table th, .yoksis-audit-table td { padding: 0.7rem; border: 1px solid var(--card-border); text-align: start; vertical-align: top; }
 .yoksis-audit-table th { background: color-mix(in srgb, var(--staff-home-rose) 28%, var(--card-bg)); }
@@ -462,9 +464,7 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .yoksis-audit-table tr[data-audit-result="unreadable"] { background: color-mix(in srgb, #ffe9b8 35%, var(--card-bg)); }
 
 @media (max-width: 760px) {
-    .yoksis-audit-search { grid-template-columns: minmax(0, 1fr) auto; }
-    .yoksis-audit-filter-field { grid-column: 1; }
-    #audit-refresh { grid-column: 2; }
+    .yoksis-audit-search-field, .yoksis-audit-filter-field { flex: 1 1 100%; }
 }
 
 #workspace-content .view-panel[hidden] { display: none !important; }
@@ -483,6 +483,67 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .work-hours-reminder-rail .work-hours-reminder:not([hidden]) { position: absolute; top: 0.5rem; right: 0.25rem; width: min(10rem, calc(100% - 0.5rem)); margin: 0; display: grid; justify-items: start; align-content: start; gap: 0.4rem; padding: 0.55rem 0.7rem; border: 1px solid color-mix(in srgb, var(--staff-home-card-foreground) 18%, var(--card-border)); border-radius: 18px; background-color: var(--staff-home-card-background); box-shadow: var(--staff-home-card-shadow); color: var(--staff-home-card-foreground); }
 .work-hours-reminder p { margin: 0; font-size: 0.72rem; line-height: 1.25; font-weight: 700; }
 .work-hours-reminder .btn { min-height: 34px; padding: 0.3rem 0.6rem; font-size: 0.7rem; }
+
+/* Başvuru kuyruğu tablosu yatay kaydırma kapsayıcısı ve sıkı 2 sütunlu işlem ızgarası */
+.staff-applications-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 901px) {
+    .staff-applications-table th {
+        white-space: normal;
+    }
+
+    .staff-applications-table td.staff-queue-actions-cell,
+    .staff-applications-table td[data-label="Detay"] {
+        white-space: normal;
+    }
+
+    .staff-applications-table .staff-queue-actions {
+        display: grid;
+        grid-template-columns: repeat(2, max-content);
+        gap: 0.25rem 0.3rem;
+        align-items: center;
+        justify-content: start;
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .staff-applications-table td.staff-queue-actions-cell .btn,
+    .staff-applications-table td.staff-queue-actions-cell button,
+    .staff-applications-table td[data-label="Detay"] .btn,
+    .staff-applications-table td[data-label="Detay"] button {
+        margin: 0;
+        min-width: 0;
+        min-height: 30px;
+        padding: 0.3rem 0.55rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
+}
+
+.staff-applications-table td.staff-queue-actions-cell .staff-gocnet-transfer-status,
+.staff-applications-table td.staff-queue-actions-cell .staff-spreadsheet-transfer-error,
+.staff-applications-table td[data-label="Detay"] .staff-gocnet-transfer-status,
+.staff-applications-table td[data-label="Detay"] .staff-spreadsheet-transfer-error {
+    display: block;
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+@media (max-width: 900px) {
+    .staff-applications-table td.staff-queue-actions-cell,
+    .staff-applications-table td[data-label="Detay"] {
+        text-align: right;
+    }
+}
 
 /* Excel aktarım düğmesi diğer satır düğmeleriyle aynı boyutları kullanır */
 #staff-applications-manager .staff-applications-table td[data-label="Detay"] .btn-spreadsheet-transfer { min-height: 30px; padding: 0.3rem 0.6rem; font-size: 0.8rem; color: #fff; background: #217346; border-color: #185c37; white-space: nowrap; }
@@ -589,6 +650,14 @@ body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #app-content > m
     flex-direction: column;
     margin: 0 auto;
     padding-block: 0.25rem 0;
+}
+
+/* Çalışma alanı açıkken masaüstü kapsayıcısı genişler; ana ekran, genel site ve mobil (<=900px) değişmez */
+@media (min-width: 901px) {
+    body:has(#app-content:not([hidden]) #workspace-content:not([hidden])) #app-content > main.container {
+        max-width: min(1600px, calc(100vw - 2rem));
+        padding-inline: 1rem;
+    }
 }
 
 body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #app-content > .app-footer {

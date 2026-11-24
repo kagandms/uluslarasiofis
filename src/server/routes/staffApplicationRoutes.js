@@ -24,9 +24,7 @@ const APPLICATION_STATUS_FILTERS = Object.freeze({
     completed: Object.freeze(['completed']),
     terminal: Object.freeze(['completed', 'cancelled', 'rejected']),
     cancelled: Object.freeze(['cancelled']),
-    rejected: Object.freeze(['rejected']),
-    archive_all: Object.freeze(['completed', 'cancelled']),
-    deleted: Object.freeze([])
+    rejected: Object.freeze(['rejected'])
 });
 const MAX_PAGE_SIZE = 100;
 const MAX_SEARCH_LENGTH = 120;
@@ -100,8 +98,6 @@ function readApplicationQuery(body) {
         searchTerm: readSearchTerm(body.q),
         statuses: APPLICATION_STATUS_FILTERS[statusFilter],
         isDraft: statusFilter === 'draft',
-        isDeleted: statusFilter === 'deleted',
-        includeDeleted: statusFilter === 'archive_all',
         submittedAtFrom: fromDate ? istanbulMidnightUtc(fromDate) : null,
         submittedAtUntil: toDate ? istanbulMidnightUtc(nextCalendarDate(toDate)) : null,
         hasNote: noteFilter === 'all' ? null : noteFilter,
@@ -111,26 +107,6 @@ function readApplicationQuery(body) {
 }
 
 function createQueueItemDto(application) {
-    if (application.kind === 'physical') {
-        return {
-            kind: 'physical',
-            note_kind: 'physical',
-            id: application.id,
-            student_number: application.student_number ?? '',
-            passport_number: application.passport_number ?? null,
-            first_name: application.first_name,
-            last_name: application.last_name,
-            application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
-            status: application.status,
-            submitted_at: application.submitted_at,
-            created_at: application.created_at ?? application.submitted_at,
-            updated_at: application.updated_at,
-            deleted_at: application.deleted_at ?? null,
-            deletion_state: application.deletion_state ?? 'soft_deleted',
-            lock_version: application.lock_version ?? null,
-            tracking_reference: application.tracking_reference ?? null
-        };
-    }
     return {
         kind: 'online',
         id: application.id,
@@ -225,7 +201,9 @@ function createDocumentDetailDtos(application, storedRequirements) {
                 && (requirement.review_status == null || ['pending', 'under_review'].includes(requirement.review_status))
                 || hasFinalizedCurrentDocument
                 && ['clean', 'unsafe', 'failed'].includes(requirement.scan_status) && requirement.revision_status === 'submitted'
-                && ['pending', 'under_review'].includes(requirement.review_status))
+                && ['pending', 'under_review'].includes(requirement.review_status)
+                || hasSafeCurrentDocument && requirement.revision_status === 'approved'
+                && requirement.review_status === 'approved')
                 && ['under_review', 'resubmission_required'].includes(application.status),
             revision_number: requirement.revision_number ?? null,
             review_status: requirement.review_status ?? null,
@@ -276,8 +254,6 @@ export async function queryStaffApplications(request, environment) {
     const result = await createD1Repositories(environment.DB).applications.queryStaffApplications({
         statuses: query.statuses,
         isDraft: query.isDraft,
-        isDeleted: query.isDeleted,
-        includeDeleted: query.includeDeleted,
         submittedAtFrom: query.submittedAtFrom,
         submittedAtUntil: query.submittedAtUntil,
         searchPattern: query.searchTerm ? escapeLikeTerm(query.searchTerm) : null,

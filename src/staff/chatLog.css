@@ -1,0 +1,494 @@
+/* Staff "Gelen Sorular" source switch and "Topi ile sohbet geçmişleri" section — reuses inquiries.css tokens and layout patterns */
+
+.staff-source-switch {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.35rem;
+    max-width: 100%;
+    margin-bottom: 1rem;
+    padding: 0.3rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+}
+
+.staff-source-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.95rem;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.staff-source-tab:hover {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.staff-source-tab.is-active,
+.staff-source-tab[aria-selected="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+body.dark-mode .staff-source-tab.is-active,
+body.dark-mode .staff-source-tab[aria-selected="true"] {
+    color: #16181c;
+}
+
+.staff-source-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.staff-source-tab-badge {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding-inline: 0.38rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.staff-source-tab.is-active .staff-source-tab-badge,
+.staff-source-tab[aria-selected="true"] .staff-source-tab-badge {
+    background: rgba(255, 255, 255, 0.22);
+    color: inherit;
+}
+
+body.dark-mode .staff-source-tab-badge {
+    color: #16181c;
+}
+
+body.dark-mode .staff-source-tab.is-active .staff-source-tab-badge,
+body.dark-mode .staff-source-tab[aria-selected="true"] .staff-source-tab-badge {
+    background: rgba(22, 24, 28, 0.18);
+    color: #16181c;
+}
+
+.staff-source-tab-badge[hidden] {
+    display: none !important;
+}
+
+.staff-chat-history-section {
+    min-width: 0;
+    width: 100%;
+}
+
+.staff-chatlog-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+    gap: 0.75rem;
+}
+
+.staff-chatlog-stat-card {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.9rem 1.05rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+}
+
+.staff-chatlog-stat-title {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.staff-chatlog-stat-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.staff-chatlog-stat-metric {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.staff-chatlog-stat-metric dt {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.staff-chatlog-stat-metric dd {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-chatlog-stat-metric.is-up dd {
+    color: #145a32;
+}
+
+.staff-chatlog-stat-metric.is-down dd {
+    color: #9b1c1c;
+}
+
+body.dark-mode .staff-chatlog-stat-metric.is-up dd {
+    color: #9ae6b4;
+}
+
+body.dark-mode .staff-chatlog-stat-metric.is-down dd {
+    color: #f2bac5;
+}
+
+.staff-chatlog-bulk-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+}
+
+.staff-chatlog-bulk-label {
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.staff-chatlog-days-input {
+    width: 5.5rem;
+    min-height: 2.35rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--bg-color);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-chatlog-filters {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.staff-chatlog-lang-chip {
+    min-height: 2.2rem;
+    padding: 0.32rem 0.72rem;
+    font-size: 0.84rem;
+}
+
+.staff-chatlog-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.staff-chatlog-select,
+.staff-chatlog-search-input {
+    min-height: 2.45rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+}
+
+.staff-chatlog-select {
+    flex: 0 1 auto;
+    max-width: 100%;
+    cursor: pointer;
+}
+
+.staff-chatlog-search-field {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.staff-chatlog-search-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.staff-chatlog-select:focus-visible,
+.staff-chatlog-search-input:focus-visible,
+.staff-chatlog-clear-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.staff-chatlog-clear-btn[hidden] {
+    display: none;
+}
+
+.staff-chatlog-result-count {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-chatlog-item {
+    min-width: 0;
+}
+
+.staff-chatlog-item-btn {
+    display: grid;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.95rem 1.1rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.staff-chatlog-item-btn:hover,
+.staff-chatlog-item-btn:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.staff-chatlog-item-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.staff-chatlog-item-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem 0.75rem;
+}
+
+.staff-chatlog-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.staff-chatlog-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.14rem 0.5rem;
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    background: var(--bg-color);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 650;
+}
+
+.staff-chatlog-badge.is-source-topi {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--card-border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--card-bg));
+    color: var(--accent);
+}
+
+.staff-chatlog-badge.is-up {
+    border-color: #1c7c45;
+    background: #eff9f3;
+    color: #145a32;
+}
+
+.staff-chatlog-badge.is-down {
+    border-color: #e8b4b4;
+    background: #fdf2f2;
+    color: #9b1c1c;
+}
+
+.staff-chatlog-badge.is-outcome-handoff {
+    border-color: #d97706;
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.staff-chatlog-badge.is-outcome-refusal,
+.staff-chatlog-badge.is-outcome-fallback {
+    border-color: #e8b4b4;
+    background: #fdf2f2;
+    color: #9b1c1c;
+}
+
+body.dark-mode .staff-chatlog-badge.is-up {
+    border-color: #2d6544;
+    background: #173326;
+    color: #b7e4c7;
+}
+
+body.dark-mode .staff-chatlog-badge.is-down,
+body.dark-mode .staff-chatlog-badge.is-outcome-refusal,
+body.dark-mode .staff-chatlog-badge.is-outcome-fallback {
+    border-color: #70404c;
+    background: #3d222a;
+    color: #f2bac5;
+}
+
+body.dark-mode .staff-chatlog-badge.is-outcome-handoff {
+    border-color: #78491b;
+    background: #3b2612;
+    color: #fcd34d;
+}
+
+.staff-chatlog-preview {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.94rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.staff-chatlog-more-btn {
+    justify-self: center;
+}
+
+.staff-chatlog-detail {
+    display: grid;
+    gap: 0.85rem;
+    min-width: 0;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    background: var(--card-bg);
+}
+
+.staff-chatlog-detail-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.staff-chatlog-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.staff-chatlog-thread {
+    display: grid;
+    gap: 0.9rem;
+    min-width: 0;
+}
+
+.staff-chatlog-turn {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.staff-chatlog-bubble {
+    display: grid;
+    gap: 0.4rem;
+    max-width: 92%;
+    min-width: 0;
+    padding: 0.8rem 0.95rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+}
+
+.staff-chatlog-bubble-user {
+    justify-self: end;
+    background: color-mix(in srgb, var(--accent) 10%, var(--card-bg));
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--card-border));
+}
+
+.staff-chatlog-bubble-assistant {
+    justify-self: start;
+    background: var(--bg-color);
+}
+
+.staff-chatlog-bubble-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.staff-chatlog-bubble-meta strong {
+    color: var(--text-primary);
+}
+
+.staff-chatlog-bubble-text {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.93rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+    .staff-source-switch {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+        width: 100%;
+    }
+
+    .staff-source-tab {
+        padding: 0.45rem 0.65rem;
+        font-size: 0.86rem;
+    }
+
+    .staff-chatlog-select,
+    .staff-chatlog-search-field,
+    .staff-chatlog-clear-btn {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+
+    .staff-chatlog-detail,
+    .staff-chatlog-item-btn,
+    .staff-chatlog-bulk-bar,
+    .staff-chatlog-stat-card {
+        padding: 0.8rem;
+    }
+
+    .staff-chatlog-bubble {
+        max-width: 100%;
+    }
+
+    .staff-chatlog-bulk-bar > button,
+    .staff-chatlog-detail-header > button {
+        flex: 1 1 auto;
+    }
+}
