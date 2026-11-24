@@ -2,9 +2,10 @@
  * @fileoverview Pasaport görüntüsünden baş + omuz paylı otomatik yüz kırpma kutusu hesaplayıcısı.
  */
 
-const FACE_WIDTH_EXPANSION = 2.2;
-const FACE_TOP_MARGIN_RATIO = 0.6;
-const MIN_FACE_HEIGHT_MULTIPLIER = 1.8;
+const CROP_HEIGHT_FACE_MULTIPLIER = 1.75;
+const MIN_FACE_WIDTH_MULTIPLIER = 1.6;
+const TOP_HAIR_MARGIN_RATIO = 0.45;
+const MAX_BOTTOM_FACE_RATIO = 1.5;
 const DOMINANT_FACE_AREA_RATIO = 2.5;
 
 function isValidBoundingBox(box) {
@@ -63,13 +64,13 @@ function computeCropBox(faceBox, imgWidth, imgHeight, aspectRatio) {
     const { x: fx, y: fy, width: fw, height: fh } = faceBox;
     const centerX = fx + fw / 2;
 
-    let cropW = fw * FACE_WIDTH_EXPANSION;
-    let cropH = cropW / aspectRatio;
+    let cropH = fh * CROP_HEIGHT_FACE_MULTIPLIER;
+    let cropW = cropH * aspectRatio;
 
-    const minHeight = fh * MIN_FACE_HEIGHT_MULTIPLIER;
-    if (cropH < minHeight) {
-        cropH = minHeight;
-        cropW = cropH * aspectRatio;
+    const minWidth = fw * MIN_FACE_WIDTH_MULTIPLIER;
+    if (cropW < minWidth) {
+        cropW = minWidth;
+        cropH = cropW / aspectRatio;
     }
 
     if (cropW > imgWidth) {
@@ -81,13 +82,17 @@ function computeCropBox(faceBox, imgWidth, imgHeight, aspectRatio) {
         cropW = cropH * aspectRatio;
     }
 
+    const maxBottom = fy + fh * MAX_BOTTOM_FACE_RATIO;
     let rawX = centerX - cropW / 2;
-    let rawY = fy - fh * FACE_TOP_MARGIN_RATIO;
+    let rawY = Math.min(fy - fh * TOP_HAIR_MARGIN_RATIO, maxBottom - cropH);
 
     rawX = Math.max(0, Math.min(rawX, imgWidth - cropW));
     rawY = Math.max(0, Math.min(rawY, imgHeight - cropH));
 
     let width = Math.max(1, Math.min(imgWidth, Math.round(cropW)));
+    if (cropW >= minWidth && width < minWidth && Math.ceil(minWidth) <= imgWidth) {
+        width = Math.ceil(minWidth);
+    }
     let height = Math.max(1, Math.round(width / aspectRatio));
 
     if (height > imgHeight) {
@@ -100,7 +105,8 @@ function computeCropBox(faceBox, imgWidth, imgHeight, aspectRatio) {
     }
 
     const x = Math.max(0, Math.min(Math.round(rawX), imgWidth - width));
-    const y = Math.max(0, Math.min(Math.round(rawY), imgHeight - height));
+    const maxY = Math.floor(maxBottom - height);
+    const y = Math.max(0, Math.min(Math.round(rawY), imgHeight - height, maxY));
 
     return { x, y, width, height };
 }

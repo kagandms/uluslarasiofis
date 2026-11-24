@@ -46,6 +46,85 @@ test('detectFaceCrop returns an integer head-and-shoulders box within image boun
     assert.ok(relativeDiff <= 0.02, `Expected ratio ${actualRatio} within 2% of ${aspectRatio}`);
 });
 
+test('detectFaceCrop tightens 3:4 crop around head and upper shoulders without reaching MRZ area', async () => {
+    const aspectRatio = 3 / 4;
+    const face = { x: 200, y: 300, width: 150, height: 180 };
+    const result = await detectFaceCrop(FAKE_DATA_URL, aspectRatio, {
+        loadImage: createFakeLoader(1000, 1400),
+        detector: createFakeDetector([{ boundingBox: face }])
+    });
+
+    assert.equal('error' in result, false);
+    assert.equal(Number.isInteger(result.x), true);
+    assert.equal(Number.isInteger(result.y), true);
+    assert.equal(Number.isInteger(result.width), true);
+    assert.equal(Number.isInteger(result.height), true);
+
+    // Box fully contains the face
+    assert.ok(result.x <= face.x);
+    assert.ok(result.x + result.width >= face.x + face.width);
+    assert.ok(result.y <= face.y);
+    assert.ok(result.y + result.height >= face.y + face.height);
+
+    // Horizontally centred on face centre x within 2 px
+    const faceCenterX = face.x + face.width / 2;
+    const boxCenterX = result.x + result.width / 2;
+    assert.ok(Math.abs(boxCenterX - faceCenterX) <= 2);
+
+    // Tight vertical bounds: head + hair top margin, bottom never lower than fy + 1.5*fh
+    assert.ok(result.y <= face.y - face.height * 0.3);
+    assert.ok(result.y + result.height <= face.y + face.height * 1.5);
+
+    const actualRatio = result.width / result.height;
+    const relativeDiff = Math.abs(actualRatio - aspectRatio) / aspectRatio;
+    assert.ok(relativeDiff <= 0.02, `Expected ratio ${actualRatio} within 2% of ${aspectRatio}`);
+});
+
+test('detectFaceCrop keeps box inside image with face fully inside when face is near top edge', async () => {
+    const aspectRatio = 3 / 4;
+    const face = { x: 200, y: 15, width: 150, height: 180 };
+    const result = await detectFaceCrop(FAKE_DATA_URL, aspectRatio, {
+        loadImage: createFakeLoader(1000, 1400),
+        detector: createFakeDetector([{ boundingBox: face }])
+    });
+
+    assert.equal('error' in result, false);
+    assert.ok(result.x >= 0);
+    assert.ok(result.y >= 0);
+    assert.ok(result.x + result.width <= 1000);
+    assert.ok(result.y + result.height <= 1400);
+
+    assert.ok(result.x <= face.x);
+    assert.ok(result.x + result.width >= face.x + face.width);
+    assert.ok(result.y <= face.y);
+    assert.ok(result.y + result.height >= face.y + face.height);
+
+    const actualRatio = result.width / result.height;
+    const relativeDiff = Math.abs(actualRatio - aspectRatio) / aspectRatio;
+    assert.ok(relativeDiff <= 0.02, `Expected ratio ${actualRatio} within 2% of ${aspectRatio}`);
+});
+
+test('detectFaceCrop expands crop width to at least 1.6x face width for wide faces', async () => {
+    const aspectRatio = 3 / 4;
+    const face = { x: 200, y: 300, width: 216, height: 180 }; // fw = 1.2 * fh
+    const result = await detectFaceCrop(FAKE_DATA_URL, aspectRatio, {
+        loadImage: createFakeLoader(1000, 1400),
+        detector: createFakeDetector([{ boundingBox: face }])
+    });
+
+    assert.equal('error' in result, false);
+    assert.ok(result.width >= face.width * 1.6);
+    assert.ok(result.x <= face.x);
+    assert.ok(result.x + result.width >= face.x + face.width);
+    assert.ok(result.y <= face.y);
+    assert.ok(result.y + result.height >= face.y + face.height);
+    assert.ok(result.y + result.height <= face.y + face.height * 1.5);
+
+    const actualRatio = result.width / result.height;
+    const relativeDiff = Math.abs(actualRatio - aspectRatio) / aspectRatio;
+    assert.ok(relativeDiff <= 0.02, `Expected ratio ${actualRatio} within 2% of ${aspectRatio}`);
+});
+
 test('detectFaceCrop clamps and shrinks box inside small image bounds while preserving aspectRatio', async () => {
     const aspectRatio = 3 / 4;
     const result = await detectFaceCrop(FAKE_DATA_URL, aspectRatio, {
