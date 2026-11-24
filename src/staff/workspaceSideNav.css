@@ -41,6 +41,7 @@
     .workspace-content .view-panel {
         grid-area: views;
         min-width: 0;
+        max-width: 100%;
     }
 
     .workspace-content .workspace-nav {

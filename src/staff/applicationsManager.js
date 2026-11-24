@@ -493,7 +493,9 @@ function renderQueue(root, state, handlers) {
             panel.append(message);
         }
     } else if (state.result) {
-        panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'staff-applications-table-wrap';
+        tableWrap.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
             handlers.onDownloadArchive, handlers.onDeleteApplication, state.archiveApplicationId, state.deletingApplicationId, handlers.onSendToMigration,
             handlers.onRevertFromMigration, handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
             state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer, {
@@ -501,6 +503,7 @@ function renderQueue(root, state, handlers) {
                 shouldLoad: !state.loading && state.recordNotesResult !== state.result,
                 onLoadStarted: () => { state.recordNotesResult = state.result; }
             }));
+        panel.append(tableWrap);
         if (state.archiveMessage) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveMessage));
         if (state.archiveError) panel.append(createText(document, 'p', 'staff-applications-state', state.archiveError));
         if (state.archiveMessage || state.archiveError) {
