@@ -290,6 +290,63 @@ export function getCropperGender() {
     return String(cropperSelectGender?.value || '').trim();
 }
 
+const CROPPER_PAGE_SWITCH_TIMEOUT_MS = 5000;
+
+/**
+ * Kırpıcıyı belirtilen sayfa dizinine geçirir ve yeni sayfanın hazır olmasını bekler.
+ *
+ * @param {number} index - Hedef sayfa dizini (0 tabanlı).
+ * @returns {Promise<boolean>} Sayfa başarıyla değiştirildiyse `true`, aksi halde `false`.
+ */
+export function selectCropperPage(index) {
+    if (!Number.isInteger(index) || !cropperPages || index < 0 || index >= cropperPages.length) {
+        return Promise.resolve(false);
+    }
+    const pageItem = cropperPages[index];
+    const src = typeof pageItem === 'string' ? pageItem : pageItem?.dataUrl;
+    if (!src) {
+        return Promise.resolve(false);
+    }
+    const { image } = getElements();
+    if (!passportCropperInstance && !image) {
+        return Promise.resolve(false);
+    }
+    if (index === currentCropperPageIndex && passportCropperInstance) {
+        return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = (ok) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            window.removeEventListener('ykn:cropper-ready', onReady);
+            window.removeEventListener('ykn:cropper-closed', onClosed);
+            resolve(ok);
+        };
+        const onReady = (event) => {
+            if (event?.detail?.pageIndex === index) {
+                finish(true);
+            }
+        };
+        const onClosed = () => {
+            finish(false);
+        };
+        const timer = setTimeout(() => {
+            finish(false);
+        }, CROPPER_PAGE_SWITCH_TIMEOUT_MS);
+
+        window.addEventListener('ykn:cropper-ready', onReady);
+        window.addEventListener('ykn:cropper-closed', onClosed);
+        try {
+            switchToPage(index);
+        } catch {
+            finish(false);
+        }
+    });
+}
+
 function formatDateDisplay(isoDate) {
     if (!isoDate || typeof isoDate !== 'string') return '';
     const clean = isoDate.trim();

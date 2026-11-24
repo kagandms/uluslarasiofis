@@ -45,6 +45,7 @@ function faceErrorMessage(errorCode) {
  * @param {(id: 'read-acceptance' | 'copy') => void} deps.click - İlgili adım düğmesini tetikler.
  * @param {() => Array<{ dataUrl: string, text: string }>} deps.getPages - Kırpıcıdaki mevcut belge sayfalarını döndürür.
  * @param {() => number} deps.getPageIndex - Seçili sayfa dizinini döndürür.
+ * @param {(index: number) => Promise<boolean>} [deps.selectPage] - Kırpıcıyı belirtilen sayfa dizinine geçirir; başarısızsa `false` döner.
  * @param {() => Promise<boolean>} deps.selectNextSource - Bir sonraki belge kaynağına geçer; kaynak yoksa `false` döner.
  * @param {(imageDataUrl: string, aspectRatio: number) => Promise<{ x: number, y: number, width: number, height: number } | { error: string }>} deps.detectFace - Yüz kırpma kutusunu hesaplar.
  * @param {(input: { text: string, studentName: string, passportNo: string }) => { isPassport: boolean, reason?: string }} deps.evaluatePage - Pasaport sayfası doğrulamasını yapar.
@@ -198,51 +199,83 @@ export function createYknAutoFlow(deps) {
 
         try {
             let validPage = null;
+            let validPageIndex = 0;
+            let shownPageIndex = 0;
             let lastRejectReason = 'Seçilen belge pasaport kimlik sayfası değil.';
+            let attempts = 0;
+            let sourceIndex = 0;
 
-            for (let attempt = 0; attempt < MAX_SOURCE_ATTEMPTS; attempt += 1) {
+            while (attempts < MAX_SOURCE_ATTEMPTS && !validPage) {
                 if (!isRunCurrent(myRunId)) return;
 
                 const pages = deps.getPages?.() || [];
                 const rawIndex = typeof deps.getPageIndex === 'function'
                     ? deps.getPageIndex()
-                    : ctx?.pageIndex;
-                const pageIndex = typeof rawIndex === 'number' && Number.isInteger(rawIndex) ? rawIndex : 0;
-                const page = pages[pageIndex];
+                    : (sourceIndex === 0 ? ctx?.pageIndex : 0);
+                const startIndex = typeof rawIndex === 'number'
+                    && Number.isInteger(rawIndex)
+                    && rawIndex >= 0
+                    && rawIndex < pages.length
+                    ? rawIndex
+                    : 0;
 
-                if (page) {
-                    let pageText = typeof page.text === 'string' ? page.text : '';
-                    if (!pageText.trim()) {
-                        const cacheKey = typeof page.dataUrl === 'string' && page.dataUrl ? page.dataUrl : '';
-                        if (cacheKey && pageTextCache.has(cacheKey)) {
-                            pageText = pageTextCache.get(cacheKey);
-                        } else {
-                            try {
-                                const ensured = await ensurePageText(page);
-                                pageText = typeof ensured === 'string' ? ensured : '';
-                            } catch {
-                                pageText = '';
+                if (pages.length === 0) {
+                    attempts += 1;
+                    lastRejectReason = 'Kırpıcıda pasaport sayfası bulunamadı.';
+                } else {
+                    for (let offset = 0; offset < pages.length && attempts < MAX_SOURCE_ATTEMPTS; offset += 1) {
+                        if (!isRunCurrent(myRunId)) return;
+
+                        const pageIndex = (startIndex + offset) % pages.length;
+                        const page = pages[pageIndex];
+                        attempts += 1;
+
+                        if (!page) {
+                            lastRejectReason = 'Kırpıcıda pasaport sayfası bulunamadı.';
+                            continue;
+                        }
+
+                        let pageText = typeof page.text === 'string' ? page.text : '';
+                        if (!pageText.trim()) {
+                            const cacheKey = typeof page.dataUrl === 'string' && page.dataUrl ? page.dataUrl : '';
+                            if (cacheKey && pageTextCache.has(cacheKey)) {
+                                pageText = pageTextCache.get(cacheKey);
+                            } else {
+                                try {
+                                    const ensured = await ensurePageText(page);
+                                    pageText = typeof ensured === 'string' ? ensured : '';
+                                } catch {
+                                    pageText = '';
+                                }
+                                if (cacheKey) {
+                                    pageTextCache.set(cacheKey, pageText);
+                                }
+                                if (!isRunCurrent(myRunId)) return;
                             }
-                            if (cacheKey) {
-                                pageTextCache.set(cacheKey, pageText);
-                            }
-                            if (!isRunCurrent(myRunId)) return;
+                        }
+
+                        const evaluation = deps.evaluatePage({
+                            text: pageText,
+                            studentName: currentStudentName,
+                            passportNo: currentPassportNo
+                        });
+                        if (evaluation?.isPassport) {
+                            validPage = page;
+                            validPageIndex = pageIndex;
+                            shownPageIndex = startIndex;
+                            break;
+                        }
+                        if (evaluation?.reason) {
+                            lastRejectReason = evaluation.reason;
                         }
                     }
-                    const evaluation = deps.evaluatePage({
-                        text: pageText,
-                        studentName: currentStudentName,
-                        passportNo: currentPassportNo
-                    });
-                    if (evaluation?.isPassport) {
-                        validPage = page;
-                        break;
-                    }
-                    if (evaluation?.reason) {
-                        lastRejectReason = evaluation.reason;
-                    }
-                } else {
-                    lastRejectReason = 'Kırpıcıda pasaport sayfası bulunamadı.';
+                }
+
+                if (validPage) {
+                    break;
+                }
+                if (attempts >= MAX_SOURCE_ATTEMPTS) {
+                    break;
                 }
 
                 const hasNext = typeof deps.selectNextSource === 'function'
@@ -255,11 +288,23 @@ export function createYknAutoFlow(deps) {
                     cancel(`${lastRejectReason} Lütfen doğru pasaport belgesini elle seçip kırpın.`);
                     return;
                 }
+                sourceIndex += 1;
             }
 
             if (!validPage) {
                 cancel('Geçerli pasaport sayfası bulunamadı. Lütfen pasaport belgesini elle seçip kırpın.');
                 return;
+            }
+
+            if (validPageIndex !== shownPageIndex) {
+                const switched = typeof deps.selectPage === 'function'
+                    ? await deps.selectPage(validPageIndex)
+                    : false;
+                if (!isRunCurrent(myRunId)) return;
+                if (!switched) {
+                    cancel('Lütfen doğru pasaport belgesini elle seçip kırpın.');
+                    return;
+                }
             }
 
             const faceResult = await deps.detectFace(validPage.dataUrl, aspectRatio);

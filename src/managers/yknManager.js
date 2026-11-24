@@ -23,7 +23,8 @@ import {
     applyCropBox,
     submitCropperTransfer,
     setCropperDefaults,
-    getCropperGender
+    getCropperGender,
+    selectCropperPage
 } from '../ui/passportCropperModal.js';
 import { scorePassportPageText } from '../utils/passportPageScore.js';
 import { evaluatePassportPage } from '../services/passportDocumentGuard.js';
@@ -950,6 +951,7 @@ export function initYknManager() {
                 : (currentStudentData?.passportPages || [])
         ),
         getPageIndex: () => latestCropperPageIndex,
+        selectPage: selectCropperPage,
         selectNextSource: selectNextAutoCropSource,
         detectFace: detectFaceCrop,
         evaluatePage: evaluatePassportPage,
