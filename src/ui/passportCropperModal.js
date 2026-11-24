@@ -183,6 +183,7 @@ export function closePassportCropper() {
     }
     const { modal, image, slider, angleLabel, pageSelector, sourceSelectorWrapper, sourceSelector } = getElements();
     if (modal) modal.classList.remove('show');
+    syncPassportCropperSilentState(false);
     if (image) image.src = '';
     if (slider) slider.value = 0;
     if (angleLabel) angleLabel.textContent = '0°';
@@ -194,6 +195,27 @@ export function closePassportCropper() {
     cropSources = [];
     currentCropperPageIndex = 0;
     window.dispatchEvent(new CustomEvent('ykn:cropper-closed'));
+}
+
+function isSilentModeActive() {
+    return document.documentElement?.dataset?.yknSilent === 'true';
+}
+
+/**
+ * YKN sessiz akışı etkinken kırpıcı penceresini yerleşimde tutup görsel ve erişilebilirlik olarak gizler.
+ *
+ * @param {boolean} [silent=isSilentModeActive()] - Sessiz gizleme etkinleştirilsin mi.
+ */
+export function syncPassportCropperSilentState(silent = isSilentModeActive()) {
+    const { modal } = getElements();
+    if (!modal) return;
+    if (silent && modal.classList.contains('show')) {
+        modal.setAttribute('aria-hidden', 'true');
+        modal.classList.add('is-ykn-silent');
+    } else {
+        modal.removeAttribute('aria-hidden');
+        modal.classList.remove('is-ykn-silent');
+    }
 }
 
 export function isPassportCropperOpen() {
@@ -443,6 +465,7 @@ export function openPassportCropper({ imageSrc, pages = [], initialPageIndex = 0
 
     image.src = activeSrc;
     modal.classList.add('show');
+    syncPassportCropperSilentState();
 
     initCropperInstance();
 }

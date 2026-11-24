@@ -24,7 +24,8 @@ import {
     submitCropperTransfer,
     setCropperDefaults,
     getCropperGender,
-    selectCropperPage
+    selectCropperPage,
+    syncPassportCropperSilentState
 } from '../ui/passportCropperModal.js';
 import { scorePassportPageText } from '../utils/passportPageScore.js';
 import { evaluatePassportPage } from '../services/passportDocumentGuard.js';
@@ -808,8 +809,27 @@ export function initYknManager() {
     const buttonActionTimers = new Map();
     let latestCropperPageIndex = 0;
     let isAutoRunSearchClick = false;
+    let isSilentAutoRun = false;
     let pendingAutoSourceSwitch = null;
     const triedCropSourceUrls = new Set();
+
+    function setYknSilentMode(active) {
+        isSilentAutoRun = Boolean(active);
+        if (document.documentElement) {
+            if (isSilentAutoRun) {
+                document.documentElement.dataset.yknSilent = 'true';
+            } else {
+                delete document.documentElement.dataset.yknSilent;
+            }
+        }
+        syncPassportCropperSilentState(isSilentAutoRun);
+    }
+
+    function revealYknWorkspaceView() {
+        document.querySelector('button[data-workspace-view="ykn"]')?.click();
+    }
+
+    setYknSilentMode(false);
 
     function readAutoFlowEnabled() {
         try {
@@ -965,6 +985,15 @@ export function initYknManager() {
             const flowState = level === 'success'
                 ? 'DONE'
                 : (level === 'error' ? 'STOPPED' : 'RUNNING');
+            if (flowState === 'DONE') {
+                setYknSilentMode(false);
+            } else if (flowState === 'STOPPED') {
+                const wasSilent = isSilentAutoRun;
+                setYknSilentMode(false);
+                if (wasSilent) {
+                    revealYknWorkspaceView();
+                }
+            }
             window.dispatchEvent(new CustomEvent('ykn:auto-flow-status', {
                 detail: {
                     state: flowState,
@@ -2911,6 +2940,7 @@ export function initYknManager() {
     });
 
     window.addEventListener('ykn:cropper-closed', () => {
+        setYknSilentMode(false);
         resolvePendingAutoSourceSwitch(false);
         if (isOneClickActive(ONE_CLICK_STAGE.CROPPER_WAITING)) {
             addStatus('Tek Tık beklemede: fotoğrafı kırpmak için mevcut pasaport cropper’ını yeniden açabilirsiniz.', 'warning');
@@ -2967,10 +2997,15 @@ export function initYknManager() {
             }));
             return;
         }
+        const isSilent = event?.detail?.silent === true;
+        setYknSilentMode(false);
         if (inputPassport) {
             inputPassport.value = rawPassport;
         }
-        autoFlow.start(rawPassport, { force: true });
+        const started = autoFlow.start(rawPassport, { force: true });
+        if (started && isSilent) {
+            setYknSilentMode(true);
+        }
         if (btnSearch) {
             isAutoRunSearchClick = true;
             try {
