@@ -150,8 +150,8 @@ function readGocnetQueryResult(rootDocument, applicationNumber) {
         || 'unknown';
 }
 
-function acknowledgeGocnetQuery(rootDocument, applicationNumber) {
-    if (readGocnetQueryResult(rootDocument, applicationNumber) !== 'student_data_filled') return false;
+function acknowledgeGocnetQuery(rootDocument, applicationNumber, allowedStates = ['student_data_filled']) {
+    if (!allowedStates.includes(readGocnetQueryResult(rootDocument, applicationNumber))) return false;
     const dialogs = [...rootDocument.querySelectorAll('[role="dialog"], .z-window-modal')].filter(isVisible);
     if (dialogs.length !== 1) return false;
     const buttons = [...dialogs[0].querySelectorAll('button.z-messagebox-button, button')]
@@ -271,9 +271,14 @@ function normalizeFieldLabel(value) {
     return normalizeText(value).replace(/[():*]/g, '').trim();
 }
 
-function findFieldValue(rootDocument, labelText) {
-    const labels = [...rootDocument.querySelectorAll('.z-label, label, th, dt, strong, b')]
+/** Returns visible label elements matching the normalized field label. */
+function findVisibleFieldLabels(rootDocument, labelText) {
+    return [...rootDocument.querySelectorAll('.z-label, label, th, dt, strong, b')]
         .filter((label) => isVisible(label) && normalizeFieldLabel(label.textContent) === normalizeFieldLabel(labelText));
+}
+
+function findFieldValue(rootDocument, labelText) {
+    const labels = findVisibleFieldLabels(rootDocument, labelText);
     if (labels.length !== 1) return null;
     const cell = labels[0].closest('td, th, dt');
     if (!cell) return null;
@@ -564,10 +569,71 @@ function dispatchGocnetPdfUpload(rootDocument, pdfFile) {
     }
 }
 
+/** Extracts a 1-12 digit GöçNet process record number from section 3 info bar text, or null. */
+function parseIslemKayitNo(rawValue) {
+    if (typeof rawValue !== 'string') return null;
+    const match = /^(\d{1,12})(?:\s*\([^)]+\))?$/.exec(rawValue.trim());
+    return match && /^\d{1,12}$/.test(match[1]) ? match[1] : null;
+}
+
+/** Runs a strictly read-only Başvuru Sorgula lookup and reads Başvuru Kayıt No and İşlem Kayıt No. */
+async function lookupGocnetRecord(rootDocument, applicationNumber, { signal, timeoutMs = 20_000, requestId } = {}) {
+    if (!rootDocument || typeof applicationNumber !== 'string' || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber)) {
+        return { state: 'unknown', reason: 'bad_input' };
+    }
+    if (queryInProgress || transferContexts.size > 0) {
+        return { state: 'unknown', reason: 'busy' };
+    }
+    queryInProgress = true;
+    lastReason = '';
+    try {
+        const queryState = await queryGocnetRegistration(rootDocument, applicationNumber, { signal, timeoutMs, requestId });
+        if (queryState === 'no_match') {
+            acknowledgeGocnetQuery(rootDocument, applicationNumber, ['no_match']);
+            return { state: 'no_match' };
+        }
+        if (queryState !== 'student_data_filled' && queryState !== 'existing_record') {
+            return { state: 'unknown', reason: lastReason || 'query_unknown' };
+        }
+        if (!isExactSearchField(rootDocument, applicationNumber)) {
+            return { state: 'unknown', reason: 'form_search_value_mismatch' };
+        }
+        acknowledgeGocnetQuery(rootDocument, applicationNumber, ['student_data_filled', 'existing_record']);
+
+        const basvuruCount = findVisibleFieldLabels(rootDocument, 'Başvuru Kayıt No').length;
+        if (basvuruCount !== 1) {
+            return { state: 'unknown', reason: basvuruCount > 1 ? 'ambiguous_fields' : 'basvuru_kayit_no_missing' };
+        }
+        const islemCount = findVisibleFieldLabels(rootDocument, 'Mevcut GöçNet İşlem Kayıt No').length;
+        if (islemCount > 1) {
+            return { state: 'unknown', reason: 'ambiguous_fields' };
+        }
+        const rawBasvuru = findFieldValue(rootDocument, 'Başvuru Kayıt No');
+        if (typeof rawBasvuru !== 'string' || !/^\d{1,12}$/.test(rawBasvuru.trim())) {
+            return { state: 'unknown', reason: 'basvuru_kayit_no_invalid' };
+        }
+        const basvuruKayitNo = rawBasvuru.trim();
+        const rawIslem = islemCount === 1 ? findFieldValue(rootDocument, 'Mevcut GöçNet İşlem Kayıt No') : null;
+        const islemKayitNo = parseIslemKayitNo(rawIslem);
+        return {
+            state: 'found',
+            basvuruKayitNo,
+            ...(islemKayitNo ? { islemKayitNo } : {})
+        };
+    } catch {
+        return { state: 'unknown', reason: 'form_query_exception' };
+    } finally {
+        lastReason = '';
+        queryInProgress = false;
+    }
+}
+
 globalThis.YoksisGocnetTransferController = Object.freeze({
     dispatchGocnetPdfUpload,
     findGocnetApplicationDocumentUploadTarget,
     getLastReason: () => lastReason,
+    lookupGocnetRecord,
+    parseIslemKayitNo,
     queryGocnetRegistration,
     queryGocnetRecordList,
     readGocnetUploadResult,
@@ -582,6 +648,10 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
             || !Number.isInteger(request.portalTabId) || request.portalTabId < 0
             || (request.applicationNumber !== undefined && (typeof request.applicationNumber !== 'string'
                 || !/^20\d{2}-\d{2}-\d{5,8}$/.test(request.applicationNumber)))) return false;
+        if (request.action === 'YOKSIS_GOCNET_LOOKUP' && (queryInProgress || transferContexts.size > 0)) {
+            sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'busy' });
+            return false;
+        }
         if (queryInProgress) {
             sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'controller_busy' });
             return false;
@@ -589,6 +659,14 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
         if (globalThis.YoksisDocumentAuditController?.isActive?.()) {
             sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'document_audit_active' });
             return false;
+        }
+        if (request.action === 'YOKSIS_GOCNET_LOOKUP' && typeof request.applicationNumber === 'string') {
+            void lookupGocnetRecord(document, request.applicationNumber, {
+                requestId: request.requestId,
+                timeoutMs: 120_000
+            }).then((result) => sendResponse({ requestId: request.requestId, ...result }))
+              .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'form_query_exception' }));
+            return true;
         }
         if (request.action === 'YOKSIS_GOCNET_QUERY' && ['form', 'history'].includes(request.phase || 'form')
             && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.attemptId || '')) {
