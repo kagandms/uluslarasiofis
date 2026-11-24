@@ -431,3 +431,260 @@ test('each image-only page is OCRd at most once via cache and pages with text sk
     assert.equal(textPageOcrCalls, 0);
     assert.equal(hWithText.getSubmitCount(), 1);
 });
+
+test('5-page source with passport on page 5 calls selectPage(4) once, then detectFace, applyCrop, and submit', async () => {
+    const selectPageCalls = [];
+    const detectFaceUrls = [];
+    const expectedBox = { x: 20, y: 30, width: 160, height: 205 };
+    const pages = [
+        { dataUrl: 'data:image/jpeg;base64,p1', text: 'TRANSKRIPT BELGESI SAYFA 1' },
+        { dataUrl: 'data:image/jpeg;base64,p2', text: 'TRANSKRIPT BELGESI SAYFA 2' },
+        { dataUrl: 'data:image/jpeg;base64,p3', text: 'DIPLOMA EKI SAYFA 3' },
+        { dataUrl: 'data:image/jpeg;base64,p4', text: 'KABUL MEKTUBU SAYFA 4' },
+        { dataUrl: 'data:image/jpeg;base64,p5', text: 'P<EXMYILMAZ<<AHMET<<<<<<<<<<<<<<<<<<<\nAB12345670EXM9001011M3001015<<<<<<<<<<<<<<04' }
+    ];
+
+    const order = [];
+    const h = createHarness({
+        getPages: () => pages,
+        getPageIndex: () => 0,
+        evaluatePage: evaluatePassportPage,
+        selectPage: async (index) => {
+            selectPageCalls.push(index);
+            order.push(`selectPage:${index}`);
+            return true;
+        },
+        detectFace: async (imageDataUrl) => {
+            detectFaceUrls.push(imageDataUrl);
+            order.push('detectFace');
+            return expectedBox;
+        },
+        applyCrop: (box) => {
+            order.push('applyCrop');
+            return Boolean(box);
+        },
+        submit: () => {
+            order.push('submit');
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.deepEqual(selectPageCalls, [4]);
+    assert.equal(h.getSelectNextCalls(), 0);
+    assert.deepEqual(detectFaceUrls, ['data:image/jpeg;base64,p5']);
+    assert.deepEqual(order, ['selectPage:4', 'detectFace', 'applyCrop', 'submit']);
+    assert.equal(h.flow.isActive(), false);
+});
+
+test('multi-page source with all non-passport pages tries next source, then cancels when no next source remains', async () => {
+    let sourceIdx = 0;
+    const sources = [
+        [
+            { dataUrl: 'data:image/jpeg;base64,s0p0', text: 'S0-P0' },
+            { dataUrl: 'data:image/jpeg;base64,s0p1', text: 'S0-P1' },
+            { dataUrl: 'data:image/jpeg;base64,s0p2', text: 'S0-P2' }
+        ],
+        [
+            { dataUrl: 'data:image/jpeg;base64,s1p0', text: 'S1-P0' },
+            { dataUrl: 'data:image/jpeg;base64,s1p1', text: 'S1-P1' }
+        ]
+    ];
+    const events = [];
+    const selectPageCalls = [];
+    let nextCalls = 0;
+
+    const h = createHarness({
+        getPages: () => sources[sourceIdx],
+        getPageIndex: () => 0,
+        selectPage: async (index) => {
+            selectPageCalls.push(index);
+            return true;
+        },
+        selectNextSource: async () => {
+            nextCalls += 1;
+            events.push(`nextSource:${nextCalls}`);
+            if (sourceIdx + 1 < sources.length) {
+                sourceIdx += 1;
+                return true;
+            }
+            return false;
+        },
+        evaluatePage: ({ text }) => {
+            events.push(`eval:${text}`);
+            return {
+                isPassport: false,
+                reason: 'Sayfada pasaport MRZ alanı bulunamadı.'
+            };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.deepEqual(events, [
+        'eval:S0-P0',
+        'eval:S0-P1',
+        'eval:S0-P2',
+        'nextSource:1',
+        'eval:S1-P0',
+        'eval:S1-P1',
+        'nextSource:2'
+    ]);
+    assert.deepEqual(selectPageCalls, []);
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(
+        h.reports.some(
+            (r) => r.level === 'error'
+                && r.message.includes('Lütfen doğru pasaport belgesini elle seçip kırpın.')
+        )
+    );
+});
+
+test('multi-page source wraps from shown page index to 0 and evaluates each page at most once per source', async () => {
+    const pages = [
+        { dataUrl: 'data:image/jpeg;base64,p0', text: 'PAGE-0' },
+        { dataUrl: 'data:image/jpeg;base64,p1', text: 'PAGE-1' },
+        { dataUrl: 'data:image/jpeg;base64,p2', text: 'PAGE-2' },
+        { dataUrl: 'data:image/jpeg;base64,p3', text: 'PAGE-3' },
+        { dataUrl: 'data:image/jpeg;base64,p4', text: 'PAGE-4' }
+    ];
+    const evaluated = [];
+    const selectPageCalls = [];
+
+    const h = createHarness({
+        getPages: () => pages,
+        getPageIndex: () => 2,
+        selectPage: async (index) => {
+            selectPageCalls.push(index);
+            return true;
+        },
+        evaluatePage: ({ text }) => {
+            evaluated.push(text);
+            return {
+                isPassport: text === 'PAGE-1',
+                reason: 'Pasaport değil.'
+            };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.deepEqual(evaluated, ['PAGE-2', 'PAGE-3', 'PAGE-4', 'PAGE-0', 'PAGE-1']);
+    assert.equal(new Set(evaluated).size, evaluated.length);
+    assert.deepEqual(selectPageCalls, [1]);
+    assert.equal(h.getSubmitCount(), 1);
+});
+
+test('selectPage returning false cancels with existing message and skips detectFace, applyCrop, and submit', async () => {
+    const pages = [
+        { dataUrl: 'data:image/jpeg;base64,p0', text: 'TRANSKRIPT' },
+        { dataUrl: 'data:image/jpeg;base64,p1', text: 'P<EXMYILMAZ<<AHMET<<<<<<<<<<<<<<<<<<<\nAB12345670EXM9001011M3001015<<<<<<<<<<<<<<04' }
+    ];
+    const selectPageCalls = [];
+    let detectCalls = 0;
+
+    const h = createHarness({
+        getPages: () => pages,
+        getPageIndex: () => 0,
+        evaluatePage: evaluatePassportPage,
+        selectPage: async (index) => {
+            selectPageCalls.push(index);
+            return false;
+        },
+        detectFace: async () => {
+            detectCalls += 1;
+            return { x: 10, y: 20, width: 100, height: 130 };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.deepEqual(selectPageCalls, [1]);
+    assert.equal(detectCalls, 0);
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(
+        h.reports.some(
+            (r) => r.level === 'error'
+                && r.message === 'Lütfen doğru pasaport belgesini elle seçip kırpın.'
+        )
+    );
+});
+
+test('stale run cancelled during selectPage does not detectFace, applyCrop, or submit', async () => {
+    let resolveSelectPage;
+    let detectCalls = 0;
+    const pages = [
+        { dataUrl: 'data:image/jpeg;base64,p0', text: 'TRANSKRIPT' },
+        { dataUrl: 'data:image/jpeg;base64,p1', text: 'P<EXMYILMAZ<<AHMET<<<<<<<<<<<<<<<<<<<\nAB12345670EXM9001011M3001015<<<<<<<<<<<<<<04' }
+    ];
+
+    const h = createHarness({
+        getPages: () => pages,
+        getPageIndex: () => 0,
+        evaluatePage: evaluatePassportPage,
+        selectPage: () => new Promise((resolve) => {
+            resolveSelectPage = resolve;
+        }),
+        detectFace: async () => {
+            detectCalls += 1;
+            return { x: 10, y: 20, width: 100, height: 130 };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    const cropPromise = h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    h.flow.cancel('Kullanıcı durdurdu.');
+    resolveSelectPage(true);
+    await cropPromise;
+
+    assert.equal(detectCalls, 0);
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+});
+
+test('global MAX_SOURCE_ATTEMPTS caps evaluations across many pages so loop cannot run forever', async () => {
+    const pages = Array.from({ length: 25 }, (_, i) => ({
+        dataUrl: `data:image/jpeg;base64,p${i}`,
+        text: `NON-PASSPORT-${i}`
+    }));
+    let evalCount = 0;
+
+    const h = createHarness({
+        getPages: () => pages,
+        getPageIndex: () => 0,
+        selectNextSource: async () => true,
+        evaluatePage: () => {
+            evalCount += 1;
+            return { isPassport: false, reason: 'Pasaport değil.' };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.equal(evalCount, 20);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(h.reports.some((r) => r.level === 'error'));
+});

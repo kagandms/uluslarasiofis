@@ -732,3 +732,88 @@ test('OCR fallback sözleşmesi: yknManager.js ensurePageText bağımlılığın
         /async\s+function\s+ensureAutoFlowPageText\s*\([\s\S]*?import\s*\(\s*['"]\.\.\/services\/ocrService\.js['"]\s*\)[\s\S]*?runOCR\s*\(\s*canvas\s*,\s*true\s*,\s*false\s*,\s*true\s*\)/
     );
 });
+
+test('Çok sayfalı kırpıcı sözleşmesi: passportCropperModal selectCropperPage dışa aktarır ve yknManager selectPage olarak bağlar', () => {
+    assert.match(cropperModalSource, /export\s+function\s+selectCropperPage\s*\(/);
+    assert.match(
+        yknManagerSource,
+        /import\s*\{[\s\S]*?\bselectCropperPage\b[\s\S]*?\}\s*from\s*['"]\.\.\/ui\/passportCropperModal\.js['"]/
+    );
+    assert.match(
+        yknManagerSource,
+        /createYknAutoFlow\s*\(\s*\{[\s\S]*?selectPage\s*:\s*selectCropperPage/
+    );
+});
+
+test('selectCropperPage mevcut sayfa değiştirme akışını kullanarak hedef sayfaya geçer ve geçersiz dizinlerde false döner', async () => {
+    const env = createDomEnvironment();
+    try {
+        const {
+            openPassportCropper,
+            closePassportCropper,
+            selectCropperPage
+        } = await import('../src/ui/passportCropperModal.js');
+
+        // Kırpıcı kapalıyken false döner
+        assert.equal(await selectCropperPage(0), false);
+
+        const replacedUrls = [];
+        const readyEvents = [];
+        env.window.addEventListener('ykn:cropper-ready', (e) => readyEvents.push(e.detail));
+
+        env.window.Cropper = class MockCropper {
+            constructor(_image, options) {
+                this.options = options;
+                queueMicrotask(() => {
+                    this.options.ready?.();
+                });
+            }
+            getImageData() { return { rotate: 0 }; }
+            rotateTo() {}
+            replace(src) {
+                replacedUrls.push(src);
+                queueMicrotask(() => {
+                    this.options.ready?.();
+                });
+            }
+            destroy() {}
+        };
+
+        const pages = Array.from({ length: 5 }, (_, i) => ({
+            dataUrl: `data:image/jpeg;base64,PAGE_${i + 1}`,
+            pageNumber: i + 1
+        }));
+
+        openPassportCropper({
+            imageSrc: pages[0].dataUrl,
+            pages,
+            initialPageIndex: 0,
+            studentName: 'TEST OGRENCI',
+            passportNo: 'AB12345'
+        });
+
+        await Promise.resolve();
+        assert.equal(readyEvents.length, 1);
+        assert.equal(readyEvents[0].pageIndex, 0);
+
+        // Hedef sayfa 5 (dizin 4) için switchToPage + replace tetiklenir
+        assert.equal(await selectCropperPage(4), true);
+        assert.deepEqual(replacedUrls, ['data:image/jpeg;base64,PAGE_5']);
+        assert.equal(env.document.getElementById('passport-page-info').textContent, 'Sayfa 5 / 5');
+        assert.equal(readyEvents.at(-1).pageIndex, 4);
+
+        // Zaten seçili sayfada tekrar replace yapmadan true döner
+        assert.equal(await selectCropperPage(4), true);
+        assert.equal(replacedUrls.length, 1);
+
+        // Geçersiz dizinlerde false döner
+        assert.equal(await selectCropperPage(-1), false);
+        assert.equal(await selectCropperPage(5), false);
+        assert.equal(await selectCropperPage(1.5), false);
+
+        closePassportCropper();
+        assert.equal(await selectCropperPage(0), false);
+    } finally {
+        env.cleanup();
+    }
+});
