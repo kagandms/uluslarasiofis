@@ -63,26 +63,37 @@
 .staff-assistant-launcher .topi,
 .staff-assistant-launcher .staff-assistant-launcher-text {
     position: relative;
-    z-index: 2;
+    z-index: 1;
+}
+
+.staff-assistant-launcher .topi {
+    transform-origin: 50% 85%;
+}
+
+.staff-assistant-launcher.is-playing .topi {
+    animation: staff-topi-cat-react 6s ease-in-out infinite;
+}
+
+.staff-assistant-launcher.is-playing .topi .R {
+    transform-origin: 50% 50%;
+    animation: staff-topi-paw-tap 6s ease-in-out infinite;
 }
 
 .staff-assistant-launcher .topi-playtime {
     position: absolute;
     inset: 0;
-    z-index: 1;
+    z-index: 3;
     overflow: hidden;
     border-radius: inherit;
     pointer-events: none;
 }
 
 .staff-assistant-launcher .topi-mouse,
-.staff-assistant-launcher .topi-yarn,
-.staff-assistant-launcher .topi-ball,
-.staff-assistant-launcher .topi-feather {
+.staff-assistant-launcher .topi-yarn {
     position: absolute;
     inset-block-end: 0.12rem;
     inset-inline-start: 0.45rem;
-    z-index: 1;
+    z-index: 3;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -94,196 +105,219 @@
 }
 
 .staff-assistant-launcher .topi-mouse {
-    animation: staff-topi-mouse-chase 7s linear infinite;
+    animation: staff-topi-mouse-play 6s cubic-bezier(0.36, 0.08, 0.24, 1) infinite;
 }
 
 .staff-assistant-launcher .topi-yarn {
-    transform-origin: center center;
-    animation: staff-topi-yarn-roll 7s linear infinite;
-}
-
-.staff-assistant-launcher .topi-ball {
-    transform-origin: center center;
-    animation: staff-topi-ball-bounce 7s ease-in-out infinite;
-}
-
-.staff-assistant-launcher .topi-feather {
-    inset-block-end: 0.25rem;
-    transform-origin: center center;
-    animation: staff-topi-feather-drift 8s ease-in-out infinite;
+    animation: staff-topi-yarn-roll 6s cubic-bezier(0.33, 0.06, 0.28, 1) infinite;
 }
 
 .staff-assistant-launcher .topi-mouse svg,
-.staff-assistant-launcher .topi-yarn svg,
-.staff-assistant-launcher .topi-ball svg,
-.staff-assistant-launcher .topi-feather svg {
+.staff-assistant-launcher .topi-yarn svg {
     display: block;
     inline-size: 18px;
     block-size: 18px;
 }
 
-@keyframes staff-topi-mouse-chase {
+.staff-assistant-launcher .topi-yarn .yarn-core {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: staff-topi-yarn-spin 6s linear infinite;
+}
+
+@keyframes staff-topi-mouse-play {
     0% {
         opacity: 0;
-        transform: translateX(-0.4rem) translateY(0);
+        transform: translateX(-0.5rem) translateY(0) scaleX(1) rotate(0deg);
     }
-    5% {
+    8% {
         opacity: 1;
-        transform: translateX(0.2rem) translateY(-2px);
+        transform: translateX(0.15rem) translateY(0) scaleX(1) rotate(0deg);
     }
-    13% {
+    14% {
         opacity: 1;
-        transform: translateX(1.3rem) translateY(0);
+        transform: translateX(0.4rem) translateY(-1px) scaleX(1) rotate(-6deg);
     }
-    21% {
+    19% {
         opacity: 1;
-        transform: translateX(2.4rem) translateY(-3px);
+        transform: translateX(0.45rem) translateY(0) scaleX(1) rotate(4deg);
+    }
+    24% {
+        opacity: 1;
+        transform: translateX(0.5rem) translateY(-1px) scaleX(1) rotate(-5deg);
     }
     29% {
         opacity: 1;
-        transform: translateX(3.5rem) translateY(0);
+        transform: translateX(0.55rem) translateY(0) scaleX(1) rotate(0deg);
     }
-    37% {
+    36% {
         opacity: 1;
-        transform: translateX(4.6rem) translateY(-4px);
+        transform: translateX(1.8rem) translateY(-1px) scaleX(1) rotate(-3deg);
     }
-    43% {
+    44% {
+        opacity: 1;
+        transform: translateX(3.1rem) translateY(-5px) scaleX(1) rotate(-7deg);
+    }
+    52% {
+        opacity: 1;
+        transform: translateX(4.2rem) translateY(0) scaleX(1) rotate(2deg);
+    }
+    58% {
+        opacity: 1;
+        transform: translateX(4.5rem) translateY(0) scaleX(1) rotate(0deg);
+    }
+    65% {
+        opacity: 1;
+        transform: translateX(4.5rem) translateY(0) scaleX(1) rotate(-4deg);
+    }
+    70% {
+        opacity: 1;
+        transform: translateX(4.3rem) translateY(0) scaleX(-1) rotate(0deg);
+    }
+    78% {
+        opacity: 1;
+        transform: translateX(1.9rem) translateY(-3px) scaleX(-1) rotate(-4deg);
+    }
+    86% {
         opacity: 0;
-        transform: translateX(5.4rem) translateY(-1px);
+        transform: translateX(-0.5rem) translateY(0) scaleX(-1) rotate(0deg);
     }
     100% {
         opacity: 0;
-        transform: translateX(5.4rem) translateY(0);
+        transform: translateX(-0.5rem) translateY(0) scaleX(1) rotate(0deg);
     }
 }
 
 @keyframes staff-topi-yarn-roll {
     0% {
         opacity: 0;
-        transform: translateX(5.2rem) translateY(0) rotate(360deg);
+        transform: translateX(4.6rem) translateY(0) scale(1, 1);
     }
-    6% {
+    8% {
         opacity: 1;
-        transform: translateX(4.1rem) translateY(-2px) rotate(240deg);
-    }
-    16% {
-        opacity: 1;
-        transform: translateX(1.8rem) translateY(0) rotate(90deg);
-    }
-    22% {
-        opacity: 1;
-        transform: translateX(0.4rem) translateY(-1px) rotate(0deg);
-    }
-    29% {
-        opacity: 1;
-        transform: translateX(1.8rem) translateY(-4px) rotate(110deg);
-    }
-    36% {
-        opacity: 1;
-        transform: translateX(3.4rem) translateY(0) rotate(220deg);
-    }
-    44% {
-        opacity: 0;
-        transform: translateX(5.2rem) translateY(-2px) rotate(360deg);
-    }
-    100% {
-        opacity: 0;
-        transform: translateX(5.2rem) translateY(0) rotate(360deg);
-    }
-}
-
-@keyframes staff-topi-ball-bounce {
-    0% {
-        opacity: 0;
-        transform: translateX(0) translateY(0) rotate(0deg);
-    }
-    6% {
-        opacity: 1;
-        transform: translateX(0.5rem) translateY(0) rotate(50deg);
-    }
-    15% {
-        opacity: 1;
-        transform: translateX(1.6rem) translateY(-6px) rotate(140deg);
-    }
-    23% {
-        opacity: 1;
-        transform: translateX(2.6rem) translateY(0) rotate(220deg);
-    }
-    31% {
-        opacity: 1;
-        transform: translateX(3.7rem) translateY(-5px) rotate(310deg);
-    }
-    39% {
-        opacity: 1;
-        transform: translateX(4.8rem) translateY(0) rotate(390deg);
-    }
-    49% {
-        opacity: 1;
-        transform: translateX(2.9rem) translateY(-4px) rotate(230deg);
-    }
-    57% {
-        opacity: 1;
-        transform: translateX(1rem) translateY(0) rotate(80deg);
-    }
-    65% {
-        opacity: 0;
-        transform: translateX(0.2rem) translateY(0) rotate(0deg);
-    }
-    100% {
-        opacity: 0;
-        transform: translateX(0.2rem) translateY(0) rotate(0deg);
-    }
-}
-
-@keyframes staff-topi-feather-drift {
-    0% {
-        opacity: 0;
-        transform: translateX(4.8rem) translateY(-6px) rotate(-14deg);
-    }
-    10% {
-        opacity: 1;
-        transform: translateX(4.1rem) translateY(-4px) rotate(12deg);
+        transform: translateX(3.8rem) translateY(0) scale(1, 1);
     }
     24% {
         opacity: 1;
-        transform: translateX(3.2rem) translateY(-1px) rotate(-10deg);
+        transform: translateX(2.1rem) translateY(0) scale(1, 1);
     }
-    38% {
+    42% {
         opacity: 1;
-        transform: translateX(2.2rem) translateY(-5px) rotate(14deg);
+        transform: translateX(0.4rem) translateY(0) scale(1, 1);
+    }
+    45% {
+        opacity: 1;
+        transform: translateX(0.35rem) translateY(1px) scale(1.18, 0.82);
     }
     52% {
         opacity: 1;
-        transform: translateX(1.3rem) translateY(-1px) rotate(-12deg);
+        transform: translateX(1.7rem) translateY(-6px) scale(0.94, 1.06);
     }
-    66% {
+    60% {
         opacity: 1;
-        transform: translateX(0.6rem) translateY(-3px) rotate(10deg);
+        transform: translateX(2.9rem) translateY(0) scale(1.06, 0.94);
     }
-    78% {
+    70% {
+        opacity: 1;
+        transform: translateX(3.9rem) translateY(0) scale(1, 1);
+    }
+    82% {
         opacity: 0;
-        transform: translateX(0.1rem) translateY(0) rotate(-8deg);
+        transform: translateX(5rem) translateY(0) scale(1, 1);
     }
     100% {
         opacity: 0;
-        transform: translateX(0.1rem) translateY(0) rotate(-8deg);
+        transform: translateX(5rem) translateY(0) scale(1, 1);
+    }
+}
+
+@keyframes staff-topi-yarn-spin {
+    0% {
+        transform: rotate(685deg);
+    }
+    8% {
+        transform: rotate(555deg);
+    }
+    24% {
+        transform: rotate(278deg);
+    }
+    42%,
+    45% {
+        transform: rotate(0deg);
+    }
+    52% {
+        transform: rotate(212deg);
+    }
+    60% {
+        transform: rotate(407deg);
+    }
+    70% {
+        transform: rotate(570deg);
+    }
+    82%,
+    100% {
+        transform: rotate(750deg);
+    }
+}
+
+@keyframes staff-topi-cat-react {
+    0%,
+    8%,
+    86%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+    22% {
+        transform: translate(-1px, 0) rotate(-3deg);
+    }
+    38% {
+        transform: translate(1px, 1px) rotate(3deg);
+    }
+    45% {
+        transform: translate(1.5px, 1.5px) rotate(5deg);
+    }
+    56% {
+        transform: translate(1px, 0) rotate(3deg);
+    }
+    72% {
+        transform: translate(0, 0) rotate(-2deg);
+    }
+}
+
+@keyframes staff-topi-paw-tap {
+    0%,
+    36%,
+    56%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+    41% {
+        transform: translate(1.2px, -3px) rotate(-12deg);
+    }
+    45% {
+        transform: translate(2px, 1px) rotate(10deg);
+    }
+    50% {
+        transform: translate(0.6px, -1px) rotate(-4deg);
     }
 }
 
 .staff-assistant-root.is-panel-open .staff-assistant-launcher .topi-playtime,
 .staff-assistant-root.is-panel-open .staff-assistant-launcher .topi-mouse,
-.staff-assistant-root.is-panel-open .staff-assistant-launcher .topi-yarn,
-.staff-assistant-root.is-panel-open .staff-assistant-launcher .topi-ball,
-.staff-assistant-root.is-panel-open .staff-assistant-launcher .topi-feather {
+.staff-assistant-root.is-panel-open .staff-assistant-launcher .topi-yarn {
     display: none;
+    animation: none;
+}
+
+.staff-assistant-root.is-panel-open .staff-assistant-launcher .topi,
+.staff-assistant-root.is-panel-open .staff-assistant-launcher .topi .R,
+.staff-assistant-root.is-panel-open .staff-assistant-launcher .topi-yarn .yarn-core {
     animation: none;
 }
 
 .staff-assistant-launcher .topi-playtime[hidden],
 .staff-assistant-launcher .topi-mouse[hidden],
-.staff-assistant-launcher .topi-yarn[hidden],
-.staff-assistant-launcher .topi-ball[hidden],
-.staff-assistant-launcher .topi-feather[hidden] {
+.staff-assistant-launcher .topi-yarn[hidden] {
     display: none;
 }
 
@@ -589,12 +623,8 @@ body.dark-mode .staff-assistant-badge-stale {
 
     .staff-assistant-launcher .topi-mouse,
     .staff-assistant-launcher .topi-yarn,
-    .staff-assistant-launcher .topi-ball,
-    .staff-assistant-launcher .topi-feather,
     .staff-assistant-launcher .topi-mouse svg,
-    .staff-assistant-launcher .topi-yarn svg,
-    .staff-assistant-launcher .topi-ball svg,
-    .staff-assistant-launcher .topi-feather svg {
+    .staff-assistant-launcher .topi-yarn svg {
         inline-size: 16px;
         block-size: 16px;
     }
@@ -623,9 +653,7 @@ body.dark-mode .staff-assistant-badge-stale {
 
     .staff-assistant-launcher .topi-playtime,
     .staff-assistant-launcher .topi-mouse,
-    .staff-assistant-launcher .topi-yarn,
-    .staff-assistant-launcher .topi-ball,
-    .staff-assistant-launcher .topi-feather {
+    .staff-assistant-launcher .topi-yarn {
         display: none;
     }
 }
@@ -638,8 +666,6 @@ body.dark-mode .staff-assistant-badge-stale {
 
 .staff-assistant-root.is-reduced-motion .staff-assistant-launcher .topi-playtime,
 .staff-assistant-root.is-reduced-motion .staff-assistant-launcher .topi-mouse,
-.staff-assistant-root.is-reduced-motion .staff-assistant-launcher .topi-yarn,
-.staff-assistant-root.is-reduced-motion .staff-assistant-launcher .topi-ball,
-.staff-assistant-root.is-reduced-motion .staff-assistant-launcher .topi-feather {
+.staff-assistant-root.is-reduced-motion .staff-assistant-launcher .topi-yarn {
     display: none;
 }

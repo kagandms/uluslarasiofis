@@ -792,6 +792,7 @@ test('staff launcher mounts one aria-hidden playtime element, hides it while pan
     assert.equal(playtime.getAttribute('aria-hidden'), 'true');
     assert.equal(playtime.hidden, false);
     assert.equal(playtime.children.length, 1);
+    assert.equal(launcher.classList.contains('is-playing'), true);
 
     const initialToy = playtime.firstElementChild;
     assert.equal(initialToy.className, 'topi-mouse');
@@ -800,15 +801,18 @@ test('staff launcher mounts one aria-hidden playtime element, hides it while pan
 
     controller.open();
     assert.equal(root.classList.contains('is-panel-open'), true);
+    assert.equal(launcher.classList.contains('is-playing'), false);
     assert.equal(playtime.hidden, true);
     assert.equal(initialToy.hidden, true);
 
     controller.close();
     assert.equal(root.classList.contains('is-panel-open'), false);
+    assert.equal(launcher.classList.contains('is-playing'), true);
     assert.equal(playtime.hidden, false);
     assert.equal(initialToy.hidden, false);
 
     controller.destroy();
+    assert.equal(launcher.classList.contains('is-playing'), false);
     initialToy.dispatchEvent(new window.Event('animationiteration'));
     assert.equal(playtime.firstElementChild, initialToy);
     assert.equal(doc.getElementById('staff-assistant-launcher'), null);
@@ -831,6 +835,7 @@ test('staff launcher omits playtime and toy elements when prefers-reduced-motion
     const launcher = doc.getElementById('staff-assistant-launcher');
 
     assert.equal(root.classList.contains('is-reduced-motion'), true);
+    assert.equal(launcher.classList.contains('is-playing'), false);
     assert.equal(launcher.querySelector('.topi-playtime'), null);
-    assert.equal(launcher.querySelector('.topi-mouse, .topi-yarn, .topi-ball, .topi-feather'), null);
+    assert.equal(launcher.querySelector('.topi-mouse, .topi-yarn'), null);
 });
