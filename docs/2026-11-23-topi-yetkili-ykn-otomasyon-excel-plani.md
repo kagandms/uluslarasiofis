@@ -544,3 +544,9 @@ Paylaşılan dosyalar tek sahipli çalışır: `src/server/worker.js` (rota sat�
 - **Etiket:** `milestone/topi-ykn-excel-chatlog-2026-11-24` (açıklamalı, yerel; `test/combined-2026-11-23` ba7bd02). İçindeki dal SHA'ları etiket mesajında yazılı. Durum: `production`'a merge/push/yayın yok; 2140 test, build ve dry-run geçti.
 - **Neden:** Kullanıcı kararı: YÖKSİS bağlantısı denemesinde sorun çıkmazsa büyük olasılıkla bu sürüm canlıya alınacak; sonraki arayüz değişiklikleri (yan menü) bu noktadan sonradır. Geri dönmek için `git checkout milestone/topi-ykn-excel-chatlog-2026-11-24` (birleşik dal da bu etiketten açılabilir).
 - **Canlıya alma adayı = bu milestone** (yan menü eklenirse ayrıca karar): tam yol (0046 + 0047 migration, package.json), her adım kullanıcı isteğiyle.
+
+### 15.7 Yan menü (2026-11-24, milestone'dan sonra)
+
+- **Kullanıcı isteği:** Çalışma alanındaki yatay sekme şeridi (son sekmeler kesiliyordu) dikey menüye çevrilsin; önce milestone kaydedilsin. **Yapıldı:** milestone etiketi 15.6'da; değişiklik etiketten açılan `task/staff-side-nav` e541f0a (yalnız `src/staff/workspaceSideNav.css` + bir `<link>` + test; JS ve HTML yapısı değişmedi). Masaüstünde (≥ 901 px) menü solda, yapışkan, 10 madde tam okunur, etkin olan dolgulu, ilk 9 maddede klavye kısayol rozeti (1–9, ana ekran kart sırasıyla aynı); dar ekranda eski yatay kaydırılabilir şerit. Sağa almak için `--workspace-nav-columns` ve `--workspace-nav-areas` değişkenlerinin dosyadaki yorumlu örnekle değiştirilmesi yeter.
+- Entegrasyon 4b15caa: 2144 test, 0 başarısız; build ve dry-run geçti. Görsel kontrol (giriş kapalı olduğu için yalnız yerleşim; veri çağrısı yok): 1280 px açık/koyu mod ve 390 px.
+- **Milestone ile ilişki:** Etiket yan menüsüz hâldir. Canlıya alma adayı etiket mi, birleşik dal mı (yan menü dahil) sorusu kullanıcıya bırakıldı.
