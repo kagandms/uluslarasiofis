@@ -50,7 +50,6 @@ test('contract constants are frozen and match expected values', () => {
     assert.deepEqual(STAFF_ASSISTANT_STATES, TOPI_STATES);
     assert.deepEqual(STAFF_ASSISTANT_VIEWS, [
         'applications',
-        'archive',
         'cover',
         'documents',
         'inquiries',
@@ -154,6 +153,7 @@ test('validateStaffAssistantAction rejects out-of-range, invalid, and unknown-ke
         {},
         { type: 'unknown' },
         { type: 'navigate', view: 'admin' },
+        { type: 'navigate', view: 'archive' },
         { type: 'navigate', view: 'applications', extra: 1 },
         { type: 'ykn.run', passportNo: 'a b' },
         { type: 'ykn.run', passportNo: 'ab1234' },

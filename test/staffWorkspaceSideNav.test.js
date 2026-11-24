@@ -14,7 +14,6 @@ const SIDE_NAV_CSS = readFileSync(SIDE_NAV_CSS_URL, 'utf8');
 
 const EXPECTED_NAV_BUTTONS = [
     { view: 'applications', controls: 'view-applications', intakeEntry: true, label: 'İkamet Başvuruları' },
-    { view: 'archive', controls: 'view-archive', intakeEntry: false, label: 'Arşiv' },
     { view: 'ykn', controls: 'view-ykn', intakeEntry: false, label: 'YKN' },
     { view: 'cover', controls: 'view-cover', intakeEntry: false, label: 'Kapak Hazırla' },
     { view: 'teblig', controls: 'view-teblig', intakeEntry: false, label: 'Tebliğ Bul' },
@@ -76,11 +75,11 @@ test('workspaceSideNav.css yapışkan dikey liste, satır kaydırma, karanlık m
     assert.match(SIDE_NAV_CSS, /@media\s*\(\s*max-width:\s*900px\s*\)/);
 });
 
-test('yetkili/index.html içindeki nav.workspace-nav hâlâ değişmemiş niteliklerle tam olarak 10 düğme içerir', () => {
+test('yetkili/index.html içindeki nav.workspace-nav hâlâ değişmemiş niteliklerle tam olarak 9 düğme içerir', () => {
     const dom = new JSDOM(STAFF_HTML);
     const navButtons = [...dom.window.document.querySelectorAll('#workspace-content nav.workspace-nav button')];
 
-    assert.equal(navButtons.length, EXPECTED_NAV_BUTTONS.length, 'nav.workspace-nav tam olarak 10 düğme içermelidir');
+    assert.equal(navButtons.length, EXPECTED_NAV_BUTTONS.length, 'nav.workspace-nav tam olarak 9 düğme içermelidir');
 
     navButtons.forEach((button, index) => {
         const expected = EXPECTED_NAV_BUTTONS[index];

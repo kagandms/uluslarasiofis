@@ -639,6 +639,11 @@ test('run_ykn_flow, search_tebligat, and navigate return validated actions and Y
     const navPayload = validateStaffAssistantResponse(await navResp.json());
     assert.equal(navResp.status, 200);
     assert.deepEqual(navPayload.action, { type: 'navigate', view: 'documents' });
+
+    const archiveResp = await worker.fetch(createAssistantRequest({ message: 'Arşive git' }), environment, {});
+    const archivePayload = validateStaffAssistantResponse(await archiveResp.json());
+    assert.equal(archiveResp.status, 200);
+    assert.equal(archivePayload.action, undefined);
 });
 
 test('POST /api/staff/assistant enforces per-staff rate limits (429) and logs no message text or personal data', async (context) => {

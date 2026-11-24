@@ -16,7 +16,6 @@ import { initYknManager } from '../managers/yknManager.js';
 import { initStaffAuth } from './auth.js';
 import { initializeStaffApplicationsManager } from './applicationsManager.js';
 import { initializeStaffApplicationRatings } from './application-ratings.js';
-import { initializeStaffArchiveManager } from './archiveManager.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
 import { initializeStaffPrintStatus } from './print-status.js';
@@ -108,12 +107,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } catch (error) {
         console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
-    }
-    try {
-        const archiveRoot = document.getElementById('staff-archive-manager');
-        if (archiveRoot) initializeStaffArchiveManager(archiveRoot);
-    } catch (error) {
-        console.error('Archive workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
     const physicalRoot = document.getElementById('staff-physical-manager');
     if (physicalRoot) initializePhysicalIntakeManager(physicalRoot);

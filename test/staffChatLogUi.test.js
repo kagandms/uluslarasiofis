@@ -112,7 +112,7 @@ function createStaffDom(context) {
     };
 }
 
-test('staff HTML embeds chat logs inside #view-inquiries after inquiries manager with 10 production home cards', () => {
+test('staff HTML embeds chat logs inside #view-inquiries after inquiries manager with 9 production home cards', () => {
     const dom = new JSDOM(STAFF_HTML, { url: 'https://portal.test/yetkili/' });
     const doc = dom.window.document;
     try {
@@ -123,12 +123,11 @@ test('staff HTML embeds chat logs inside #view-inquiries after inquiries manager
         assert.equal(doc.getElementById('view-chat-logs'), null);
 
         const homeCards = [...doc.querySelectorAll('#home-screen .home-actions .home-action')];
-        assert.equal(homeCards.length, 10);
+        assert.equal(homeCards.length, 9);
         assert.deepEqual(
             homeCards.map((el) => el.dataset.workspaceView),
             [
                 'applications',
-                'archive',
                 'ykn',
                 'cover',
                 'teblig',

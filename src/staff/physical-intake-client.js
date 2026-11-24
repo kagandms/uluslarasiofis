@@ -3,7 +3,7 @@ const BASE_PATH = '/api/staff/physical-intakes';
 async function request(path, options = {}) {
     try {
         const response = await fetch(`${BASE_PATH}${path}`, { credentials: 'same-origin', ...options });
-        const payload = await response.json();
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw Object.assign(new Error(payload.error?.message || 'İşlem tamamlanamadı.'), {
             code: payload.error?.code, status: response.status, matches: payload.matches
         });
@@ -43,9 +43,10 @@ export function createPhysicalIntakeClient() {
             return request('/register', { method: 'POST', headers: { 'X-Registration-Id': options.id }, body });
         },
         detail: id => request(`/${encodeURIComponent(id)}`),
-        change: (id, options) => sendJson(`/${encodeURIComponent(id)}${options.action === 'delete' ? '' : `/${options.action}`}`, {
-            method: options.action === 'delete' ? 'DELETE' : options.action === 'status' ? 'PATCH' : 'POST', body: options.body
+        change: (id, options) => sendJson(`/${encodeURIComponent(id)}/${options.action}`, {
+            method: options.action === 'status' ? 'PATCH' : 'POST', body: options.body
         }),
+        deleteIntake: (id, body) => sendJson(`/${encodeURIComponent(id)}`, { method: 'DELETE', body }),
         deletePdf: (id, options) => request(`/${encodeURIComponent(id)}/pdf`, { method: 'DELETE',
             headers: { 'If-Match': String(options.version), 'X-Pdf-Id': options.fileId } }),
         savePdf: (id, options) => request(`/${encodeURIComponent(id)}/pdf`, { method: 'POST', body: options.bytes,

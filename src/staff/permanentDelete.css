@@ -1,0 +1,148 @@
+/* Permanent delete danger buttons and native <dialog> confirmation styling */
+:root {
+    --permanent-delete-bg: #b42318;
+    --permanent-delete-hover: #8a1c13;
+    --permanent-delete-border: #8a1c13;
+    --permanent-delete-text: #ffffff;
+    --permanent-delete-focus: #b42318;
+}
+
+body.dark-mode {
+    --permanent-delete-bg: #c62828;
+    --permanent-delete-hover: #e53935;
+    --permanent-delete-border: #fca5a5;
+    --permanent-delete-text: #ffffff;
+    --permanent-delete-focus: #fca5a5;
+}
+
+.btn-permanent-delete,
+#staff-applications-manager .btn-permanent-delete,
+.physical-intake-panel .btn-permanent-delete {
+    background: var(--permanent-delete-bg);
+    border: 1px solid var(--permanent-delete-border);
+    color: var(--permanent-delete-text);
+    font-weight: 600;
+}
+
+.btn-permanent-delete:hover:not(:disabled),
+#staff-applications-manager .btn-permanent-delete:hover:not(:disabled),
+.physical-intake-panel .btn-permanent-delete:hover:not(:disabled) {
+    background: var(--permanent-delete-hover);
+    border-color: var(--permanent-delete-border);
+    color: var(--permanent-delete-text);
+}
+
+.btn-permanent-delete:focus-visible,
+#staff-applications-manager .btn-permanent-delete:focus-visible,
+.physical-intake-panel .btn-permanent-delete:focus-visible {
+    outline: 3px solid var(--permanent-delete-focus);
+    outline-offset: 2px;
+}
+
+.btn-permanent-delete:disabled,
+#staff-applications-manager .btn-permanent-delete:disabled,
+.physical-intake-panel .btn-permanent-delete:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.permanent-delete-dialog {
+    box-sizing: border-box;
+    width: min(460px, calc(100vw - 24px));
+    max-width: 100%;
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    box-shadow: 0 20px 56px rgb(0 0 0 / 28%);
+    overflow: hidden;
+    animation: permanent-delete-dialog-enter 160ms ease-out;
+}
+
+.permanent-delete-dialog::backdrop {
+    background: rgb(15 23 42 / 58%);
+    backdrop-filter: blur(2px);
+}
+
+.permanent-delete-dialog-card {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1.35rem 1.4rem;
+}
+
+.permanent-delete-dialog-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--permanent-delete-bg);
+}
+
+body.dark-mode .permanent-delete-dialog-title {
+    color: #fca5a5;
+}
+
+.permanent-delete-dialog-body {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.permanent-delete-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    margin-top: 0.35rem;
+}
+
+.permanent-delete-dialog-actions .btn {
+    min-height: 44px;
+    padding: 0.55rem 1.05rem;
+    font-size: 0.9rem;
+}
+
+.permanent-delete-cancel:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+}
+
+@keyframes permanent-delete-dialog-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 420px) {
+    .permanent-delete-dialog {
+        width: calc(100vw - 16px);
+    }
+
+    .permanent-delete-dialog-card {
+        padding: 1rem;
+    }
+
+    .permanent-delete-dialog-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+
+    .permanent-delete-dialog-actions .btn {
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .permanent-delete-dialog {
+        animation: none;
+    }
+}

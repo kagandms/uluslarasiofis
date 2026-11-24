@@ -106,7 +106,7 @@ test('parseStaffIntent matches deterministic Turkish commands for supported tool
     assert.equal(workHoursShortSave?.args.hours, 6);
 
     const archiveNav = parseStaffIntent('Arşive git');
-    assert.deepEqual(archiveNav, { tool: 'navigate', args: { view: 'archive' } });
+    assert.equal(archiveNav, null);
 
     assert.equal(isRedLineStaffMessage('silinmiş evrak var mı'), false);
     assert.equal(isRedLineStaffMessage("Asaf'a bugün 6 saat kaydet"), false);

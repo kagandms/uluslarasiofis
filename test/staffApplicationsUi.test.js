@@ -278,7 +278,7 @@ test('draft queue offers verified code reset without a cancellation action', asy
     assert.match(root.textContent, /Taslak/);
     assert.ok(root.querySelector('[data-action="open-detail"]'));
     assert.ok(root.querySelector('[data-action="download-application-archive"]'));
-    assert.ok(root.querySelector('[data-action="archive-application"]'));
+    assert.ok(root.querySelector('[data-action="delete-application"]'));
     root.querySelector('[data-action="staff-reset-access-code"]').click();
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(shownCode, 'CODE-ONLY-ONCE');
@@ -1034,32 +1034,38 @@ test('staff sees available status actions directly and rejection reason only aft
     assert.deepEqual(transitions[0].slice(1), ['rejected', QUEUE_ITEM.updated_at, 'Göç İdaresinin resmî ret kararı.']);
 });
 
-test('queue preserves row DOM while archiving and releases controls after an API rejection', async context => {
+test('queue shows progress while permanently deleting and releases controls after an API rejection', async context => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
-    let rejectArchive;
-    let archiveCalls = 0;
+    let rejectDelete;
+    let deleteCalls = 0;
     const api = {
         queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
-        archiveApplication: () => { archiveCalls += 1; return new Promise((resolve, reject) => { rejectArchive = reject; }); }
+        deleteApplication: () => { deleteCalls += 1; return new Promise((resolve, reject) => { rejectDelete = reject; }); }
     };
     initializeStaffApplicationsManager(root, api);
     document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
     await new Promise(resolve => setImmediate(resolve));
-    const table = root.querySelector('table');
-    const archive = root.querySelector('[data-action="archive-application"]');
+    const deleteBtn = root.querySelector('[data-action="delete-application"]');
 
-    archive.click();
-    archive.click();
-    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
-    assert.equal(root.querySelector('table'), table);
-    assert.equal(archive.disabled, true);
-    rejectArchive(new Error('offline'));
+    deleteBtn.click();
+    const confirmBtn = document.querySelector('[data-action="confirm-permanent-delete"]');
+    assert.ok(confirmBtn);
+    confirmBtn.click();
     await new Promise(resolve => setImmediate(resolve));
 
-    assert.equal(archiveCalls, 1);
-    assert.equal(root.querySelector('[data-action="archive-application"]').disabled, false);
-    assert.match(root.textContent, /arşive taşınamadı/);
+    const pendingBtn = root.querySelector('[data-action="delete-application"]');
+    assert.equal(pendingBtn.disabled, true);
+    assert.equal(pendingBtn.textContent, 'Siliniyor…');
+    pendingBtn.click();
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    rejectDelete(new Error('offline'));
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(deleteCalls, 1);
+    assert.equal(root.querySelector('[data-action="delete-application"]').disabled, false);
+    assert.equal(root.querySelector('[data-action="delete-application"]').textContent, 'Sil');
+    assert.match(root.textContent, /Silme işlemi tamamlanamadı/);
 });
 
 test('online submitted applications expose the spreadsheet transfer control in the queue', async context => {

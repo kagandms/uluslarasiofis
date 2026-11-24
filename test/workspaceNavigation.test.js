@@ -31,7 +31,7 @@ test('number shortcuts switch workspaces and Escape returns home without clearin
     for (const key of ['3', '7', '9']) document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true }));
     document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
-    assert.deepEqual(visited, ['ykn', 'print', 'yoksis-audit']);
+    assert.deepEqual(visited, ['cover', 'work-hours', 'inquiries']);
     assert.equal(document.getElementById('home-screen').hidden, false);
     assert.equal(document.getElementById('workspace-content').hidden, true);
     assert.equal(draft.value, 'Unsaved passport');
@@ -51,7 +51,7 @@ test('YKN and Teblig workspaces focus their headings instead of search inputs', 
     document.querySelector('[data-workspace-view="teblig"]').click();
     assert.equal(document.activeElement.id, 'workspace-title');
     press(document.activeElement, '2');
-    assert.equal(document.getElementById('workspace-title').textContent.trim(), 'Arşiv');
+    assert.equal(document.getElementById('workspace-title').textContent.trim(), 'YKN');
 
     document.querySelector('[data-workspace-view="teblig"]').click();
     assert.equal(document.activeElement.id, 'workspace-title');
@@ -74,7 +74,7 @@ test('İkamet Başvuruları navigation stays active for online and physical inta
     assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'intake'), true);
     assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'applications'), true);
     assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'physical'), true);
-    assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'archive'), false);
+    assert.equal(isWorkspaceNavigationActive(intakeNavigation, 'ykn'), false);
 });
 
 test('YKN family and birth date fields are open when the result form renders', (context) => {
@@ -139,14 +139,14 @@ test('staff logo returns to the protected workspace home without resetting tool 
     }
 });
 
-test('Gelen Sorular card has no number shortcut badge and opens #view-inquiries via shared navigation until Escape returns home', (context) => {
+test('Gelen Sorular card has shortcut badge 9 and opens #view-inquiries via shared navigation until Escape returns home', (context) => {
     const dom = installWorkspace(context);
     const document = dom.window.document;
     const inquiriesCard = document.querySelector('#home-screen .home-action[data-workspace-view="inquiries"]');
 
     assert.ok(inquiriesCard);
-    assert.equal(inquiriesCard.querySelector('.home-action-shortcut'), null);
-    assert.equal(inquiriesCard.hasAttribute('aria-keyshortcuts'), false);
+    assert.equal(inquiriesCard.querySelector('.home-action-shortcut')?.textContent, '9');
+    assert.equal(inquiriesCard.getAttribute('aria-keyshortcuts'), '9');
 
     inquiriesCard.click();
 
@@ -156,9 +156,9 @@ test('Gelen Sorular card has no number shortcut badge and opens #view-inquiries 
     assert.equal(document.getElementById('view-inquiries').hidden, false);
     assert.equal(document.activeElement.id, 'inquiries-title');
 
-    document.querySelector('.workspace-nav [data-workspace-view="archive"]').click();
+    document.querySelector('.workspace-nav [data-workspace-view="ykn"]').click();
     assert.equal(document.getElementById('view-inquiries').hidden, true);
-    assert.equal(document.getElementById('view-archive').hidden, false);
+    assert.equal(document.getElementById('view-ykn').hidden, false);
 
     inquiriesCard.click();
     assert.equal(document.getElementById('view-inquiries').hidden, false);
