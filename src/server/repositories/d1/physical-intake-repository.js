@@ -9,7 +9,7 @@ const INTAKE_COLUMNS = `id,student_number,first_name,last_name,passport_number,
     (SELECT status FROM physical_receipt_print_attempts WHERE intake_id=physical_intakes.id ORDER BY created_at DESC,id DESC LIMIT 1) AS receipt_print_status`;
 
 function buildWhere(query) {
-    const clauses = [query.isDeleted ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'];
+    const clauses = ['deleted_at IS NULL'];
     const bindings = [];
     if (query.statuses) {
         clauses.push(`status IN (${query.statuses.map(() => '?').join(',')})`);
@@ -59,17 +59,15 @@ async function listIntakes(database, query) {
         total, total_pages: Math.ceil(total / query.pageSize) } };
 }
 
-async function updateIntake(database, input) {
-    const assignment = input.action === 'status' ? 'status=?,rejection_reason=?,legacy_status=NULL' : 'deleted_at=?';
-    const values = input.action === 'status' ? [input.value, input.reason || ''] : [input.value];
+async function updateStatus(database, input) {
     const result = await database.batch([
-        database.prepare(`UPDATE physical_intakes SET ${assignment},lock_version=lock_version+1,updated_at=?
-            WHERE id=? AND lock_version=? ${input.action === 'status' ? "AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed'" : ''} AND ${input.action === 'restore' ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL'}`)
-            .bind(...values, input.now, input.id, input.version),
+        database.prepare(`UPDATE physical_intakes SET status=?,rejection_reason=?,legacy_status=NULL,lock_version=lock_version+1,updated_at=?
+            WHERE id=? AND lock_version=? AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed' AND deleted_at IS NULL`)
+            .bind(input.status, input.reason || '', input.now, input.id, input.version),
         database.prepare(`INSERT INTO audit_events(id,event_type,actor_type,actor_staff_id,request_id,safe_metadata_json,created_at)
-            SELECT ?,?,'staff',?,?,?,? WHERE changes()=1`)
-            .bind(crypto.randomUUID(), `physical_intake.${input.action}`, input.staffId,
-                input.requestId, JSON.stringify({ physicalIntakeId: input.id, ...(input.action === 'status' ? { status: input.value } : {}) }), input.now)
+            SELECT ?,'physical_intake.status','staff',?,?,?,? WHERE changes()=1`)
+            .bind(crypto.randomUUID(), input.staffId, input.requestId,
+                JSON.stringify({ physicalIntakeId: input.id, status: input.status }), input.now)
     ]);
     return result[0].meta.changes === 1;
 }
@@ -132,7 +130,7 @@ export function createPhysicalIntakeRepository(database) {
         findLinked: id => database.prepare(`SELECT applications.id,students.student_number,
             applications.application_type,applications.application_route
             FROM applications JOIN students ON students.id=applications.student_id WHERE applications.id=?`).bind(id).first(),
-        update: input => updateIntake(database, input),
+        update: input => updateStatus(database, input),
         receipts: id => database.prepare('SELECT * FROM physical_intake_receipts WHERE intake_id=? ORDER BY document_version DESC').bind(id).all(),
         files: id => database.prepare(`SELECT id,revision_number,original_filename,byte_size,scan_status,upload_status,uploaded_at
             FROM physical_intake_files WHERE intake_id=? AND upload_status='finalized' ORDER BY revision_number DESC`).bind(id).all(),
