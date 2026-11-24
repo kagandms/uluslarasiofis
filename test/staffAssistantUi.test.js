@@ -868,6 +868,10 @@ test('welcome message appears once on first open, sets hello state, and stays ou
     assert.equal(requests.length, 0);
     assert.equal(log.querySelectorAll('.staff-assistant-message-welcome').length, 1);
     assert.match(log.textContent, /Merhaba, ben Topi, yetkili asistanınız\./);
+    assert.match(log.textContent, /İyi çalışmalar dilerim, ihtiyacınız olduğunda yardıma hazırım\./);
+    assert.doesNotMatch(log.textContent, /gerekirse buradayım/);
+    assert.doesNotMatch(log.textContent, /Kagan/);
+    assert.doesNotMatch(log.textContent, /A1234567/);
     assert.equal(headerTopi.classList.contains('is-hello'), true);
     assert.equal(launcherTopi.classList.contains('is-hello'), true);
     assert.equal(counter.textContent, '0 / 300');
