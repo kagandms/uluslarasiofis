@@ -19,7 +19,7 @@ const BLOB_REVOKE_DELAY_MS = 60_000;
 const UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor.';
 const INVALID_ACTION_MESSAGE = 'İşlem doğrulanamadığı için uygulanmadı.';
 const WELCOME_MESSAGE =
-    "Merhaba, ben Topi, yetkili asistanınız. Başvuru bulma, YKN zincirini çalıştırma, tebliğ arama, dilekçe ve çalışma saati kaydı konularında yardımcı olabilirim. Örneğin: «Kagan'ın tebliğine bak» ya da «A1234567 için YKN ver».";
+    "Merhaba, ben Topi, yetkili asistanınız. Başvuru bulma, YKN zincirini çalıştırma, tebliğ arama, dilekçe ve çalışma saati kaydı konularında yardımcı olabilirim. Örneğin: «Ad Soyad için tebliğe bak» ya da «Pasaport no için YKN ver». İyi çalışmalar dilerim, ihtiyacınız olduğunda yardıma hazırım.";
 
 const APPLICATION_STATUS_LABELS = Object.freeze({
     draft: 'Taslak',
