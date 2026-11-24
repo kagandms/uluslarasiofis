@@ -82,6 +82,14 @@ const YOKSIS_ITEM_KEYS = new Set([
     'isStale'
 ]);
 const MISSING_DOC_KEYS = new Set(['name', 'required', 'note']);
+const TEBLIGAT_RESULT_KEYS = new Set(['kind', 'total', 'truncated', 'items']);
+const TEBLIGAT_ITEM_KEYS = new Set([
+    'name',
+    'sheet',
+    'number',
+    'date',
+    'marked'
+]);
 
 const ACTION_KEYS_BY_TYPE = Object.freeze({
     navigate: new Set(['type', 'view']),
@@ -180,6 +188,26 @@ function validateYoksisAuditItem(item) {
     };
 }
 
+function validateTebligatItem(item) {
+    assertAllowedKeys(item, TEBLIGAT_ITEM_KEYS, 'invalid-response');
+    if (
+        !isString(item.name)
+        || !isString(item.sheet)
+        || !isString(item.number)
+        || !isNullableString(item.date)
+        || typeof item.marked !== 'boolean'
+    ) {
+        throw new Error('invalid-response');
+    }
+    return {
+        name: item.name,
+        sheet: item.sheet,
+        number: item.number,
+        date: item.date,
+        marked: item.marked
+    };
+}
+
 function validateResultBlock(results) {
     if (!isPlainObject(results) || !isString(results.kind)) {
         throw new Error('invalid-response');
@@ -218,6 +246,25 @@ function validateResultBlock(results) {
             total: results.total,
             lastImportAt: results.lastImportAt,
             items: results.items.map(validateYoksisAuditItem)
+        };
+    }
+
+    if (results.kind === 'tebligat') {
+        assertAllowedKeys(results, TEBLIGAT_RESULT_KEYS, 'invalid-response');
+        if (
+            !Number.isInteger(results.total)
+            || results.total < 0
+            || typeof results.truncated !== 'boolean'
+            || !Array.isArray(results.items)
+            || results.items.length > MAX_RESULTS_ITEMS
+        ) {
+            throw new Error('invalid-response');
+        }
+        return {
+            kind: 'tebligat',
+            total: results.total,
+            truncated: results.truncated,
+            items: results.items.map(validateTebligatItem)
         };
     }
 

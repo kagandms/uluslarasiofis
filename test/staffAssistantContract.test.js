@@ -41,6 +41,16 @@ function makeYoksisAuditItem(index = 1) {
     };
 }
 
+function makeTebligatItem(index = 1) {
+    return {
+        name: `Ahmet Yılmaz ${index}`,
+        sheet: '24.11.2026',
+        number: String(index),
+        date: '24.11.2026',
+        marked: index % 2 === 1
+    };
+}
+
 test('contract constants are frozen and match expected values', () => {
     assert.equal(Object.isFrozen(STAFF_ASSISTANT_VIEWS), true);
     assert.equal(Object.isFrozen(STAFF_ASSISTANT_PEOPLE), true);
@@ -213,11 +223,26 @@ test('validateStaffAssistantResponse accepts valid responses with action and res
     });
     assert.equal(withYoksis.results.kind, 'yoksisAudit');
     assert.equal(withYoksis.results.items[0].missingDocuments.length, 1);
+
+    const withTebligat = validateStaffAssistantResponse({
+        reply: '"Ahmet" için 2026 yılında 7 kayıt buldum; ilk 5\'ini gösteriyorum; adı ve soyadıyla daraltın.',
+        state: 'understood',
+        results: {
+            kind: 'tebligat',
+            total: 7,
+            truncated: true,
+            items: [1, 2, 3, 4, 5].map((i) => ({ ...makeTebligatItem(i), date: i === 1 ? null : '24.11.2026' }))
+        }
+    });
+    assert.equal(withTebligat.results.kind, 'tebligat');
+    assert.equal(withTebligat.results.truncated, true);
+    assert.equal(withTebligat.results.items.length, 5);
 });
 
 test('validateStaffAssistantResponse rejects unknown state, >5 items, and extra keys at every level', () => {
     const sixApps = [1, 2, 3, 4, 5, 6].map(makeApplicationItem);
     const sixYoksis = [1, 2, 3, 4, 5, 6].map(makeYoksisAuditItem);
+    const sixTebligat = [1, 2, 3, 4, 5, 6].map(makeTebligatItem);
 
     const invalidResponses = [
         null,
@@ -287,6 +312,52 @@ test('validateStaffAssistantResponse rejects unknown state, >5 items, and extra 
                     ...makeYoksisAuditItem(1),
                     missingDocuments: [{ name: 'Pasaport', required: true, note: '', extra: 1 }]
                 }]
+            }
+        },
+        {
+            reply: 'Tebligat',
+            state: 'understood',
+            results: { kind: 'tebligat', total: 6, truncated: true, items: sixTebligat }
+        },
+        {
+            reply: 'Tebligat',
+            state: 'understood',
+            results: {
+                kind: 'tebligat',
+                total: 1,
+                truncated: false,
+                items: [makeTebligatItem(1)],
+                extra: 1
+            }
+        },
+        {
+            reply: 'Tebligat',
+            state: 'understood',
+            results: {
+                kind: 'tebligat',
+                total: 1,
+                truncated: false,
+                items: [{ ...makeTebligatItem(1), rawId: 'secret' }]
+            }
+        },
+        {
+            reply: 'Tebligat',
+            state: 'understood',
+            results: {
+                kind: 'tebligat',
+                total: 1,
+                truncated: 'yes',
+                items: [makeTebligatItem(1)]
+            }
+        },
+        {
+            reply: 'Tebligat',
+            state: 'understood',
+            results: {
+                kind: 'tebligat',
+                total: 1,
+                truncated: false,
+                items: [{ ...makeTebligatItem(1), marked: 'true' }]
             }
         }
     ];
