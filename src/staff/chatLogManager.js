@@ -11,6 +11,9 @@ const STAFF_CHAT_STATS_URL = '/api/staff/chat-stats';
 const CHAT_LOGS_TITLE = 'Topi ile sohbet geçmişleri';
 const OLDER_DAYS_MIN = 1;
 const OLDER_DAYS_MAX = 3650;
+const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_MIN_LENGTH = 2;
+const SEARCH_MAX_LENGTH = 80;
 
 const FILTER_OPTIONS = Object.freeze([
     ['all', 'Tümü'],
@@ -18,6 +21,22 @@ const FILTER_OPTIONS = Object.freeze([
     ['handoff', 'Ofise yönlendirilenler'],
     ['refused', 'Reddedilenler'],
     ['fallback', 'Yedek menü']
+]);
+
+const LANGUAGE_OPTIONS = Object.freeze([
+    ['all', 'Tüm diller'],
+    ['tr', 'TR'],
+    ['en', 'EN'],
+    ['ru', 'RU'],
+    ['tk', 'TK'],
+    ['ar', 'AR']
+]);
+
+const PERIOD_OPTIONS = Object.freeze([
+    ['all', 'Tüm zamanlar'],
+    ['24h', 'Son 24 saat'],
+    ['7d', 'Son 7 gün'],
+    ['30d', 'Son 30 gün']
 ]);
 
 const OUTCOME_LABELS = Object.freeze({
@@ -75,20 +94,49 @@ function normalizeStats(stats) {
     };
 }
 
+function normalizeSearchQuery(raw) {
+    const trimmed = String(raw || '').trim().slice(0, SEARCH_MAX_LENGTH);
+    return trimmed.length >= SEARCH_MIN_LENGTH ? trimmed : '';
+}
+
+function parseTotalCount(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = Number(value);
+    return Number.isSafeInteger(numeric) && numeric >= 0 ? numeric : null;
+}
+
+function buildSessionsUrl({ filter = 'all', lang = 'all', period = 'all', q = '', cursor = null } = {}) {
+    const params = new URLSearchParams();
+    if (filter && filter !== 'all') params.set('filter', filter);
+    if (lang && lang !== 'all') params.set('lang', lang);
+    if (period && period !== 'all') params.set('period', period);
+    const normalizedQ = normalizeSearchQuery(q);
+    if (normalizedQ) params.set('q', normalizedQ);
+    if (cursor) params.set('cursor', cursor);
+    const queryString = params.toString();
+    return queryString ? `${STAFF_CHAT_SESSIONS_URL}?${queryString}` : STAFF_CHAT_SESSIONS_URL;
+}
+
 /**
  * Yetkili panel "Topi ile sohbet geçmişleri" yöneticisini verilen kök öğeye bağlar.
  * @param {HTMLElement} rootElement Konteyner öğesi (`#staff-chat-logs-manager`).
- * @param {{fetcher?: typeof fetch, confirm?: (message: string) => boolean}} [options] Testler için isteğe bağlı bağımlılıklar.
+ * @param {{fetcher?: typeof fetch, confirm?: (message: string) => boolean, debounceMs?: number}} [options] Testler için isteğe bağlı bağımlılıklar.
  * @returns {{refresh: () => Promise<void>, destroy: () => void}|null} Denetleyici nesnesi.
  */
-export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
+export function mountChatLogManager(rootElement, { fetcher, confirm, debounceMs = SEARCH_DEBOUNCE_MS } = {}) {
     if (!rootElement) return null;
 
     const document = rootElement.ownerDocument;
+    let searchDebounceTimer = null;
     const state = {
         filter: 'all',
+        lang: 'all',
+        period: 'all',
+        searchQuery: '',
+        appliedSearchQuery: '',
         sessions: [],
         nextCursor: null,
+        total: null,
         stats: normalizeStats(null),
         selectedSessionId: null,
         selectedDetail: null,
@@ -103,6 +151,22 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
         listRequestSeq: 0,
         detailRequestSeq: 0
     };
+
+    function cancelSearchDebounce() {
+        if (searchDebounceTimer !== null) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = null;
+        }
+    }
+
+    function hasActiveFilters() {
+        return (
+            state.filter !== 'all'
+            || state.lang !== 'all'
+            || state.period !== 'all'
+            || state.searchQuery.trim().length > 0
+        );
+    }
 
     async function requestApi(url, init = {}) {
         const fetchFn = resolveFetcher(document, fetcher);
@@ -147,27 +211,53 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
         }
     }
 
-    async function loadSessions({ filter = state.filter, cursor = null, append = false, silentError = false } = {}) {
+    async function loadSessions({
+        filter = state.filter,
+        lang = state.lang,
+        period = state.period,
+        searchQuery = state.searchQuery,
+        cursor = null,
+        append = false,
+        silentError = false
+    } = {}) {
         const seq = ++state.listRequestSeq;
         state.filter = filter;
+        state.lang = lang;
+        state.period = period;
+        state.searchQuery = String(searchQuery || '').slice(0, SEARCH_MAX_LENGTH);
+        state.appliedSearchQuery = normalizeSearchQuery(state.searchQuery);
         if (append) {
             state.loadingMore = true;
         } else {
+            state.sessions = [];
+            state.nextCursor = null;
+            state.total = null;
             state.loadingList = true;
             state.errorMessage = '';
         }
         render();
 
         try {
-            const params = new URLSearchParams({ filter: state.filter });
-            if (cursor) params.set('cursor', cursor);
-            const payload = await requestApi(`${STAFF_CHAT_SESSIONS_URL}?${params.toString()}`, {
+            const url = buildSessionsUrl({
+                filter: state.filter,
+                lang: state.lang,
+                period: state.period,
+                q: state.appliedSearchQuery,
+                cursor
+            });
+            const payload = await requestApi(url, {
                 headers: { Accept: 'application/json' }
             });
             if (seq !== state.listRequestSeq) return;
             const incoming = Array.isArray(payload?.items) ? payload.items : [];
             state.sessions = append ? [...state.sessions, ...incoming] : incoming;
             state.nextCursor = typeof payload?.nextCursor === 'string' && payload.nextCursor ? payload.nextCursor : null;
+            const incomingTotal = parseTotalCount(payload?.total);
+            if (append) {
+                if (incomingTotal !== null) state.total = incomingTotal;
+            } else {
+                state.total = incomingTotal;
+            }
         } catch (error) {
             if (seq !== state.listRequestSeq) return;
             console.error('Staff chat sessions load failed.', { errorName: error?.name || 'Error' });
@@ -240,6 +330,9 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
                 headers: { Accept: 'application/json' }
             });
             state.sessions = state.sessions.filter((item) => item.id !== sessionId);
+            if (typeof state.total === 'number' && state.total > 0) {
+                state.total -= 1;
+            }
             state.selectedSessionId = null;
             state.selectedDetail = null;
             state.statusMessage = 'Sohbet kalıcı olarak silindi.';
@@ -348,6 +441,12 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
 
         const badges = document.createElement('div');
         badges.className = 'staff-chatlog-badges';
+
+        const sourceBadge = document.createElement('span');
+        sourceBadge.className = 'staff-chatlog-badge is-source-topi';
+        sourceBadge.dataset.chatlogSource = 'topi';
+        sourceBadge.textContent = 'Topi';
+        badges.append(sourceBadge);
 
         const langCode = formatLanguageCode(item.language);
         if (langCode) {
@@ -607,7 +706,10 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
 
         bulkBar.append(daysLabel, daysInput, bulkDeleteButton);
 
-        // Süzgeç çipleri
+        // Süzgeç çubuğu: durum çipleri, dil çipleri, dönem, arama ve temizle düğmesi
+        const filterBox = document.createElement('div');
+        filterBox.className = 'staff-chatlog-filters';
+
         const filters = document.createElement('div');
         filters.className = 'staff-inquiries-tabs';
         filters.setAttribute('role', 'group');
@@ -623,6 +725,7 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
             chip.classList.toggle('is-active', isSelected);
             chip.textContent = label;
             chip.addEventListener('click', () => {
+                cancelSearchDebounce();
                 state.selectedSessionId = null;
                 state.selectedDetail = null;
                 state.statusMessage = '';
@@ -631,7 +734,143 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
             filters.append(chip);
         }
 
-        panel.append(topbar, statsGrid, bulkBar, filters);
+        const langFilters = document.createElement('div');
+        langFilters.className = 'staff-inquiries-tabs staff-chatlog-lang-filters';
+        langFilters.setAttribute('role', 'group');
+        langFilters.setAttribute('aria-label', 'Dil süzgeci');
+
+        for (const [langKey, label] of LANGUAGE_OPTIONS) {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'staff-inquiries-tab staff-chatlog-lang-chip';
+            chip.dataset.chatlogLang = langKey;
+            const isSelected = state.lang === langKey;
+            chip.setAttribute('aria-pressed', String(isSelected));
+            chip.classList.toggle('is-active', isSelected);
+            chip.textContent = label;
+            chip.addEventListener('click', () => {
+                cancelSearchDebounce();
+                state.selectedSessionId = null;
+                state.selectedDetail = null;
+                state.statusMessage = '';
+                void loadSessions({ lang: langKey, cursor: null, append: false });
+            });
+            langFilters.append(chip);
+        }
+
+        const controlsRow = document.createElement('div');
+        controlsRow.className = 'staff-chatlog-controls-row';
+
+        const periodLabel = document.createElement('label');
+        periodLabel.className = 'sr-only';
+        periodLabel.setAttribute('for', 'staff-chatlog-period');
+        periodLabel.textContent = 'Dönem';
+
+        const periodSelect = document.createElement('select');
+        periodSelect.id = 'staff-chatlog-period';
+        periodSelect.className = 'staff-chatlog-select';
+        periodSelect.dataset.chatlogPeriod = 'true';
+        periodSelect.setAttribute('aria-label', 'Dönem');
+        for (const [periodKey, label] of PERIOD_OPTIONS) {
+            const option = document.createElement('option');
+            option.value = periodKey;
+            option.textContent = label;
+            periodSelect.append(option);
+        }
+        periodSelect.value = state.period;
+        periodSelect.addEventListener('change', () => {
+            cancelSearchDebounce();
+            state.selectedSessionId = null;
+            state.selectedDetail = null;
+            state.statusMessage = '';
+            void loadSessions({ period: periodSelect.value || 'all', cursor: null, append: false });
+        });
+
+        const searchField = document.createElement('div');
+        searchField.className = 'staff-chatlog-search-field';
+
+        const searchLabel = document.createElement('label');
+        searchLabel.className = 'sr-only';
+        searchLabel.setAttribute('for', 'staff-chatlog-search');
+        searchLabel.textContent = 'Sohbetlerde ara';
+
+        const searchInput = document.createElement('input');
+        searchInput.id = 'staff-chatlog-search';
+        searchInput.type = 'search';
+        searchInput.className = 'staff-chatlog-search-input';
+        searchInput.dataset.chatlogSearch = 'true';
+        searchInput.placeholder = 'Sohbetlerde ara';
+        searchInput.setAttribute('aria-label', 'Sohbetlerde ara');
+        searchInput.autocomplete = 'off';
+        searchInput.maxLength = SEARCH_MAX_LENGTH;
+        searchInput.value = state.searchQuery;
+
+        const clearButton = document.createElement('button');
+        clearButton.type = 'button';
+        clearButton.className = 'btn btn-outline staff-chatlog-clear-btn';
+        clearButton.dataset.action = 'clear-chatlog-filters';
+        clearButton.textContent = 'Süzgeçleri temizle';
+        clearButton.hidden = !hasActiveFilters();
+        clearButton.addEventListener('click', () => {
+            cancelSearchDebounce();
+            state.selectedSessionId = null;
+            state.selectedDetail = null;
+            state.statusMessage = '';
+            void loadSessions({
+                filter: 'all',
+                lang: 'all',
+                period: 'all',
+                searchQuery: '',
+                cursor: null,
+                append: false
+            });
+        });
+
+        searchInput.addEventListener('input', () => {
+            const raw = String(searchInput.value || '').slice(0, SEARCH_MAX_LENGTH);
+            if (searchInput.value !== raw) {
+                searchInput.value = raw;
+            }
+            state.searchQuery = raw;
+            clearButton.hidden = !hasActiveFilters();
+            cancelSearchDebounce();
+
+            const nextNormalized = normalizeSearchQuery(raw);
+            if (nextNormalized === state.appliedSearchQuery) {
+                return;
+            }
+
+            searchDebounceTimer = setTimeout(() => {
+                searchDebounceTimer = null;
+                state.selectedSessionId = null;
+                state.selectedDetail = null;
+                state.statusMessage = '';
+                void loadSessions({ cursor: null, append: false });
+            }, debounceMs);
+        });
+
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            if (!state.searchQuery && searchDebounceTimer === null) return;
+            event.preventDefault();
+            event.stopPropagation();
+            cancelSearchDebounce();
+            state.searchQuery = '';
+            searchInput.value = '';
+            clearButton.hidden = !hasActiveFilters();
+            if (state.appliedSearchQuery !== '') {
+                state.selectedSessionId = null;
+                state.selectedDetail = null;
+                state.statusMessage = '';
+                void loadSessions({ searchQuery: '', cursor: null, append: false });
+            }
+        });
+
+        searchField.append(searchLabel, searchInput);
+        controlsRow.append(periodLabel, periodSelect, searchField, clearButton);
+        filterBox.append(filters, langFilters, controlsRow);
+
+        panel.append(topbar, statsGrid, bulkBar, filterBox);
 
         if (state.errorMessage) {
             const errorBox = document.createElement('p');
@@ -651,37 +890,69 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
 
         if (state.selectedSessionId) {
             panel.append(createSessionDetailView());
-        } else if (state.loadingList && state.sessions.length === 0) {
-            const loadingMsg = document.createElement('p');
-            loadingMsg.className = 'staff-inquiries-empty';
-            loadingMsg.textContent = 'Topi sohbet geçmişi yükleniyor…';
-            panel.append(loadingMsg);
-        } else if (state.sessions.length === 0) {
-            const emptyMsg = document.createElement('p');
-            emptyMsg.className = 'staff-inquiries-empty';
-            emptyMsg.textContent = 'Bu süzgece uyan sohbet kaydı yok.';
-            panel.append(emptyMsg);
         } else {
-            const list = document.createElement('div');
-            list.className = 'staff-inquiries-list staff-chatlog-list';
-            list.append(...state.sessions.map((item) => createSessionListItem(item)));
-            panel.append(list);
+            if (state.total !== null) {
+                const resultCount = document.createElement('p');
+                resultCount.className = 'staff-chatlog-result-count';
+                resultCount.dataset.chatlogResultCount = 'true';
+                resultCount.setAttribute('aria-live', 'polite');
+                resultCount.textContent = `${state.total} sohbet`;
+                panel.append(resultCount);
+            }
 
-            if (state.nextCursor) {
-                const moreButton = document.createElement('button');
-                moreButton.type = 'button';
-                moreButton.className = 'btn btn-outline staff-chatlog-more-btn';
-                moreButton.dataset.action = 'load-more-sessions';
-                moreButton.disabled = state.loadingMore;
-                moreButton.textContent = state.loadingMore ? 'Yükleniyor…' : 'Daha fazla yükle';
-                moreButton.addEventListener('click', () => {
-                    void loadSessions({ filter: state.filter, cursor: state.nextCursor, append: true });
-                });
-                panel.append(moreButton);
+            if (state.loadingList && state.sessions.length === 0) {
+                const loadingMsg = document.createElement('p');
+                loadingMsg.className = 'staff-inquiries-empty';
+                loadingMsg.textContent = 'Topi sohbet geçmişi yükleniyor…';
+                panel.append(loadingMsg);
+            } else if (state.sessions.length === 0) {
+                const emptyMsg = document.createElement('p');
+                emptyMsg.className = 'staff-inquiries-empty';
+                emptyMsg.textContent = 'Bu süzgece uyan sohbet kaydı yok.';
+                panel.append(emptyMsg);
+            } else {
+                const list = document.createElement('div');
+                list.className = 'staff-inquiries-list staff-chatlog-list';
+                list.append(...state.sessions.map((item) => createSessionListItem(item)));
+                panel.append(list);
+
+                if (state.nextCursor) {
+                    const moreButton = document.createElement('button');
+                    moreButton.type = 'button';
+                    moreButton.className = 'btn btn-outline staff-chatlog-more-btn';
+                    moreButton.dataset.action = 'load-more-sessions';
+                    moreButton.disabled = state.loadingMore;
+                    moreButton.textContent = state.loadingMore ? 'Yükleniyor…' : 'Daha fazla yükle';
+                    moreButton.addEventListener('click', () => {
+                        void loadSessions({ cursor: state.nextCursor, append: true });
+                    });
+                    panel.append(moreButton);
+                }
             }
         }
 
+        const activeEl = document.activeElement;
+        const shouldRestoreSearchFocus = Boolean(
+            activeEl && rootElement.contains(activeEl) && activeEl.dataset?.chatlogSearch === 'true'
+        );
+        const selectionStart = shouldRestoreSearchFocus ? activeEl.selectionStart : null;
+        const selectionEnd = shouldRestoreSearchFocus ? activeEl.selectionEnd : null;
+
         rootElement.replaceChildren(panel);
+
+        if (shouldRestoreSearchFocus) {
+            const nextSearchInput = rootElement.querySelector('[data-chatlog-search="true"]');
+            if (nextSearchInput) {
+                nextSearchInput.focus();
+                if (typeof selectionStart === 'number' && typeof selectionEnd === 'number') {
+                    try {
+                        nextSearchInput.setSelectionRange(selectionStart, selectionEnd);
+                    } catch {
+                        // Bazı tarayıcılar/test ortamları selectionRange desteklemeyebilir.
+                    }
+                }
+            }
+        }
     }
 
     const handleWorkspaceViewChanged = (event) => {
@@ -698,6 +969,7 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
     return {
         refresh: () => loadAll(),
         destroy() {
+            cancelSearchDebounce();
             document.removeEventListener('workspace:view-changed', handleWorkspaceViewChanged);
         }
     };

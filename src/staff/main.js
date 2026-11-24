@@ -26,6 +26,7 @@ import { initWorkHours } from './work-hours.js';
 import { initializeYoksisDocumentAuditManager } from '../managers/yoksisDocumentAuditManager.js';
 import { mountInquiryManager } from './inquiryManager.js';
 import { mountChatLogManager } from './chatLogManager.js';
+import { initInquirySourceSwitch } from './inquirySourceSwitch.js';
 
 const staffAuthReady = document.readyState === 'loading'
     ? new Promise((resolve) => {
@@ -126,6 +127,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (chatLogsRoot) mountChatLogManager(chatLogsRoot);
     } catch (error) {
         console.error('Chat logs workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
+    }
+    try { initInquirySourceSwitch(); } catch (error) {
+        console.error('Inquiry source switch failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
     }
     try { initDocumentsManager(); } catch (error) {
         console.error('Documents workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });
