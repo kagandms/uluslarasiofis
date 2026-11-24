@@ -10,6 +10,7 @@ import {
     extractPassportGender,
     getCountryIso3Code
 } from '../utils/ykn-document-parser.js';
+import { toLatinBirthPlace } from '../utils/ykn-latin-translit.js';
 import { mergeApplyProfile, applyManualProfileChoices, normalizeProfileGender, normalizeProfileMaritalStatus } from '../utils/ykn-profile-state.js';
 import { selectBestPassportOrientation } from '../utils/passport-orientation.js';
 import {
@@ -282,6 +283,19 @@ async function extractImageTextWithOcr(documentBytes, contentType) {
     } finally {
         URL.revokeObjectURL(imageUrl);
     }
+}
+
+const AFGHAN_ISSUING_AUTHORITY = 'KABUL CENTRAL PASSPORT DEPARTMENT (MOI)';
+
+/**
+ * Öğrencinin uyruk veya doğum ülkesi bilgisinin Afganistan olup olmadığını belirler.
+ *
+ * @param {{ uyruk?: string, dogumUlkesi?: string } | null | undefined} student - Öğrenci nesnesi.
+ * @returns {boolean} Afganistan uyrukluysa true.
+ */
+export function isAfghanStudent(student) {
+    const nationalityText = `${student?.uyruk || ''} ${student?.dogumUlkesi || ''}`.toUpperCase();
+    return /AF[GĞ]H?AN/i.test(nationalityText) || /\bAFG\b/.test(nationalityText);
 }
 
 export function initYknManager() {
@@ -636,6 +650,7 @@ export function initYknManager() {
     function getCountryAuthorityFallback(student) {
         if (isTurkmenStudent(student)) return 'SMST';
         if (isPakistaniStudent(student)) return 'PAKISTAN';
+        if (isAfghanStudent(student)) return AFGHAN_ISSUING_AUTHORITY;
         return getCountryIso3Code(student?.uyruk || student?.dogumUlkesi);
     }
 
@@ -646,6 +661,34 @@ export function initYknManager() {
             student?.issuingAuthority === countryCode &&
             student?.verenMakam === countryCode
         );
+    }
+
+    function applyLatinBirthPlaceToStudent(
+        student,
+        rawBirthPlace,
+        { forceUpdateInput = false, keys = ['birthPlace', 'dogumYeri', 'dogumYeriAciklamasi'] } = {}
+    ) {
+        if (!student || isTurkmenStudent(student) || isPakistaniStudent(student)) return;
+        const rawText = readProfileText(rawBirthPlace);
+        if (!rawText.trim()) return;
+
+        const { value, needsManual } = toLatinBirthPlace(rawText);
+        if (needsManual) {
+            for (const key of keys) student[key] = '';
+            if (inputBirthPlace && (forceUpdateInput || student === currentStudentData || inputBirthPlace.value.toUpperCase() === rawText.trim().toUpperCase())) {
+                inputBirthPlace.value = '';
+            }
+            addStatus('Doğum yeri Latin harflerle elle yazılmalı.', 'info');
+            updateMissingFieldsUI();
+            return;
+        }
+
+        if (value && (forceUpdateInput || value !== rawText)) {
+            for (const key of keys) student[key] = value;
+            if (inputBirthPlace && (forceUpdateInput || student === currentStudentData || !inputBirthPlace.value || inputBirthPlace.value.toUpperCase() === rawText.trim().toUpperCase())) {
+                inputBirthPlace.value = value;
+            }
+        }
     }
 
     function applyCountryDefaultsToStudent(student) {
@@ -673,14 +716,27 @@ export function initYknManager() {
             return;
         }
 
-        if (!student.verenMakam && !student.issuingAuthority) {
-            const countryCode = getCountryIso3Code(student.uyruk || student.dogumUlkesi);
-            if (!countryCode) return;
-            student.verenMakam = countryCode;
-            student.issuingAuthority = countryCode;
+        if (isAfghanStudent(student)) {
+            // Afganistan pasaportlarında YÖKSİS için veren makam sabit olarak KABUL CENTRAL PASSPORT DEPARTMENT (MOI)'dir.
+            student.verenMakam = AFGHAN_ISSUING_AUTHORITY;
+            student.issuingAuthority = AFGHAN_ISSUING_AUTHORITY;
+            if (inputIssuingAuthority) inputIssuingAuthority.value = AFGHAN_ISSUING_AUTHORITY;
+        } else {
+            if (!student.verenMakam && !student.issuingAuthority) {
+                const countryCode = getCountryIso3Code(student.uyruk || student.dogumUlkesi);
+                if (countryCode) {
+                    student.verenMakam = countryCode;
+                    student.issuingAuthority = countryCode;
+                }
+            }
+            if (inputIssuingAuthority && !inputIssuingAuthority.value && student.issuingAuthority) {
+                inputIssuingAuthority.value = student.issuingAuthority;
+            }
         }
-        if (inputIssuingAuthority && !inputIssuingAuthority.value && student.issuingAuthority) {
-            inputIssuingAuthority.value = student.issuingAuthority;
+
+        const existingBirthPlace = student.birthPlace || student.dogumYeriAciklamasi || student.dogumYeri;
+        if (existingBirthPlace) {
+            applyLatinBirthPlaceToStudent(student, existingBirthPlace);
         }
     }
 
@@ -2137,14 +2193,25 @@ export function initYknManager() {
 
                 // Pasaport doğum yeri ve veren makam analizi
                 if (detectedBirthPlace) {
-                    currentStudentData.birthPlace = detectedBirthPlace;
-                    currentStudentData.dogumYeri = detectedBirthPlace;
-                    currentStudentData.dogumYeriAciklamasi = detectedBirthPlace;
-                    if (inputBirthPlace) inputBirthPlace.value = detectedBirthPlace;
+                    if (isTurkmenStudent(currentStudentData) || isPakistaniStudent(currentStudentData)) {
+                        currentStudentData.birthPlace = detectedBirthPlace;
+                        currentStudentData.dogumYeri = detectedBirthPlace;
+                        currentStudentData.dogumYeriAciklamasi = detectedBirthPlace;
+                        if (inputBirthPlace) inputBirthPlace.value = detectedBirthPlace;
+                    } else {
+                        applyLatinBirthPlaceToStudent(currentStudentData, detectedBirthPlace, { forceUpdateInput: true });
+                    }
                 } else if (currentStudentData?.dogumUlkesi && inputBirthPlace && !inputBirthPlace.value) {
                     const fallbackCountry = readProfileText(currentStudentData.dogumUlkesi).toUpperCase();
-                    currentStudentData.dogumYeriAciklamasi = fallbackCountry;
-                    inputBirthPlace.value = fallbackCountry;
+                    if (isTurkmenStudent(currentStudentData) || isPakistaniStudent(currentStudentData)) {
+                        currentStudentData.dogumYeriAciklamasi = fallbackCountry;
+                        inputBirthPlace.value = fallbackCountry;
+                    } else {
+                        applyLatinBirthPlaceToStudent(currentStudentData, fallbackCountry, {
+                            forceUpdateInput: true,
+                            keys: ['dogumYeriAciklamasi']
+                        });
+                    }
                 }
 
                 if (detectedAuthority) {
