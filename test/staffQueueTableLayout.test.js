@@ -36,7 +36,7 @@ test('createApplicationQueueTable marks online columns and wrapping action cells
         actions: () => [
             { label: 'GöçNet’e aktar', action: 'gocnet-transfer', run: () => {} },
             { label: 'Detay', action: 'open-detail', run: () => {} },
-            { label: 'İndir', action: 'download-application-archive', run: () => {} }
+            { label: 'İndir', action: 'download-application-pdf', run: () => {} }
         ]
     });
 

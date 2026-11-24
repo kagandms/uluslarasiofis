@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { register } from 'node:module';
 import { JSDOM } from 'jsdom';
+import { PDFDocument } from 'pdf-lib';
 import { test } from 'node:test';
 import { initializeStaffApplicationsManager } from '../src/staff/applicationsManager.js';
 import { createApplicationQueueTable } from '../src/staff/application-queue-table.js';
@@ -151,7 +153,7 @@ test('applications workspace is prominent and opening it loads a queue without d
     assert.equal([...root.querySelectorAll('td')].some((cell) => cell.dataset.label === 'Atanan Personel'), false);
     assert.ok(root.querySelectorAll('th')[1]?.textContent.includes('Pasaport No'));
     assert.ok(root.querySelector('[data-action="open-detail"]'));
-    assert.ok(root.querySelector('[data-action="download-application-archive"]'));
+    assert.ok(root.querySelector('[data-action="download-application-pdf"]'));
 
     const documentsHomeAction = document.querySelector('.home-actions [data-workspace-view="documents"]');
     const documentsNavigationButton = document.querySelector('.workspace-nav [data-workspace-view="documents"]');
@@ -277,7 +279,7 @@ test('draft queue offers verified code reset without a cancellation action', asy
 
     assert.match(root.textContent, /Taslak/);
     assert.ok(root.querySelector('[data-action="open-detail"]'));
-    assert.ok(root.querySelector('[data-action="download-application-archive"]'));
+    assert.ok(root.querySelector('[data-action="download-application-pdf"]'));
     assert.ok(root.querySelector('[data-action="delete-application"]'));
     root.querySelector('[data-action="staff-reset-access-code"]').click();
     await new Promise((resolve) => setImmediate(resolve));
@@ -1220,7 +1222,7 @@ test('a refreshed queue exposes an explicit retry for an unresolved spreadsheet 
     assert.equal(root.querySelector('[data-action="spreadsheet-transfer"]').textContent, 'Excelden kaldır');
 });
 
-test('queue ZIP download reports pending scans and allows another attempt', async context => {
+test('queue PDF download reports pending scans and allows another attempt', async context => {
     const { document, root } = createStaffDom();
     installDocument(context, document);
     let detailRequests = 0;
@@ -1230,21 +1232,21 @@ test('queue ZIP download reports pending scans and allows another attempt', asyn
             detailRequests += 1;
             return { application: QUEUE_ITEM, documents: [{ revision_number: 1, scan_status: 'pending' }] };
         },
-        async createArchiveManifest() { assert.fail('Pending documents must block the archive.'); },
+        async createArchiveManifest() { assert.fail('Pending documents must block the PDF.'); },
         async readArchiveFile() { assert.fail('Pending documents must not be downloaded.'); }
     };
     initializeStaffApplicationsManager(root, api);
     document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
     await new Promise(resolve => setImmediate(resolve));
 
-    root.querySelector('[data-action="download-application-archive"]').click();
+    root.querySelector('[data-action="download-application-pdf"]').click();
     await new Promise(resolve => setImmediate(resolve));
 
     assert.equal(detailRequests, 1);
-    assert.equal(root.querySelector('[data-action="download-application-archive"]').textContent, 'İndir');
+    assert.equal(root.querySelector('[data-action="download-application-pdf"]').textContent, 'İndir');
     assert.match(root.textContent, /güvenlik|tarama/i);
 
-    root.querySelector('[data-action="download-application-archive"]').click();
+    root.querySelector('[data-action="download-application-pdf"]').click();
     await new Promise(resolve => setImmediate(resolve));
 
     assert.equal(detailRequests, 2);
@@ -1653,7 +1655,7 @@ test('online queue and shared queue table expose column and action wrapping layo
         statusLabel: () => 'İşleme alınmak üzere onaylandı',
         actions: () => [
             { label: 'Detay', action: 'open-detail', run: () => {} },
-            { label: 'İndir', action: 'download-application-archive', run: () => {} }
+            { label: 'İndir', action: 'download-application-pdf', run: () => {} }
         ]
     });
     assert.ok(sharedTable.querySelector('th.staff-queue-col-name'));
@@ -1672,4 +1674,226 @@ test('staff header badge renders v3.0 and legacy approved_for_processing label r
     const { document } = createStaffDom();
     installDocument(context, document);
     assert.equal(document.querySelector('.version-badge')?.textContent, 'v3.0');
+});
+
+function createManifestFixture() {
+    return {
+        total_source_bytes: 7,
+        files: [
+            {
+                code: 'passport',
+                expected_revision_number: 1,
+                object_identity: 'a'.repeat(64),
+                media_type: 'application/pdf',
+                byte_size: 4,
+                entry_name: '01-passport.pdf'
+            },
+            {
+                code: 'student_certificate',
+                expected_revision_number: 1,
+                object_identity: 'b'.repeat(64),
+                media_type: 'application/pdf',
+                byte_size: 3,
+                entry_name: '02-student_certificate.pdf'
+            }
+        ]
+    };
+}
+
+let cssLoaderRegistered = false;
+function ensureCssLoaderRegistered() {
+    if (cssLoaderRegistered) return;
+    register(`data:text/javascript,${encodeURIComponent(
+        'export function load(url, context, nextLoad) { if (url.endsWith(".css")) return { format: "module", source: "", shortCircuit: true }; return nextLoad(url, context); }'
+    )}`);
+    cssLoaderRegistered = true;
+}
+
+test('queue row İndir button builds with combined-PDF aria-label and downloads merged PDF named for the student', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const downloads = [];
+    const modals = [];
+    const progressObserved = [];
+    const mergedBytes = new Uint8Array([37, 80, 68, 70]);
+    const api = {
+        queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
+        readApplicationDetail: async () => ({ application: QUEUE_ITEM, documents: [] }),
+        createArchiveManifest: async () => createManifestFixture(),
+        readArchiveFile: async (_id, file) => new Response(new Uint8Array(file.byte_size))
+    };
+    initializeStaffApplicationsManager(root, api, {
+        mergeDocumentsToPdf: async (files, onProgress) => {
+            onProgress?.({ message: 'Test birleştirme sürüyor…' });
+            progressObserved.push(root.textContent);
+            return {
+                bytes: mergedBytes,
+                metrics: { targetReached: true, warning: null }
+            };
+        },
+        downloadPdfFile: (bytes, filename) => downloads.push({ bytes, filename }),
+        openPdfMergerModal: (options) => modals.push(options)
+    });
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const rowButton = root.querySelector('[data-action="download-application-pdf"]');
+    assert.ok(rowButton);
+    assert.equal(rowButton.textContent, 'İndir');
+    assert.equal(rowButton.getAttribute('aria-label'), 'Belgeleri tek PDF olarak indir');
+
+    rowButton.click();
+    for (let attempt = 0; attempt < 50 && downloads.length === 0; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    assert.equal(progressObserved.length, 1);
+    assert.match(progressObserved[0], /Test birleştirme sürüyor/);
+    assert.equal(downloads.length, 1);
+    assert.equal(downloads[0].bytes, mergedBytes);
+    assert.equal(downloads[0].filename, 'ayse_yilmaz_p123456.pdf');
+    assert.equal(modals.length, 0);
+});
+
+test('queue row İndir opens merger modal with downloadFilename and does not download when YÖKSİS target is not reached', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const downloads = [];
+    const modals = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
+        readApplicationDetail: async () => ({ application: QUEUE_ITEM, documents: [] }),
+        createArchiveManifest: async () => createManifestFixture(),
+        readArchiveFile: async (_id, file) => new Response(new Uint8Array(file.byte_size))
+    };
+    initializeStaffApplicationsManager(root, api, {
+        mergeDocumentsToPdf: async () => ({
+            bytes: new Uint8Array([1, 2, 3]),
+            metrics: { targetReached: false, warning: '10 MB sınırı aşıldı' }
+        }),
+        downloadPdfFile: (bytes, filename) => downloads.push({ bytes, filename }),
+        openPdfMergerModal: (options) => modals.push(options)
+    });
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    root.querySelector('[data-action="download-application-pdf"]').click();
+    for (let attempt = 0; attempt < 50 && modals.length === 0; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    assert.equal(downloads.length, 0);
+    assert.equal(modals.length, 1);
+    assert.deepEqual(modals[0].initialFiles.map((file) => file.name), ['01-passport.pdf', '02-student_certificate.pdf']);
+    assert.equal(modals[0].maxFiles, 30);
+    assert.equal(modals[0].downloadFilename, 'ayse_yilmaz_p123456.pdf');
+    assert.match(root.textContent, /9 MiB|YÖKSİS/);
+});
+
+test('queue row İndir shows İptal while running and aborts cleanly on cancel', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const signals = [];
+    const downloads = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
+        readApplicationDetail: async () => ({ application: QUEUE_ITEM, documents: [] }),
+        createArchiveManifest: (_id, signal) => {
+            signals.push(signal);
+            return new Promise((_resolve, reject) => {
+                signal.addEventListener('abort', () => reject(new document.defaultView.DOMException('Canceled', 'AbortError')), { once: true });
+            });
+        },
+        readArchiveFile: async () => assert.fail('Canceled manifest must not fetch files.')
+    };
+    initializeStaffApplicationsManager(root, api, {
+        mergeDocumentsToPdf: async () => assert.fail('Canceled request must not merge.'),
+        downloadPdfFile: (bytes, filename) => downloads.push({ bytes, filename })
+    });
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    root.querySelector('[data-action="download-application-pdf"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(signals.length, 1);
+    assert.equal(signals[0].aborted, false);
+    const cancelButton = root.querySelector('[data-action="download-application-pdf"]');
+    assert.equal(cancelButton.textContent, 'İptal');
+    assert.equal(cancelButton.getAttribute('aria-label'), 'Tek PDF indirmeyi iptal et');
+
+    cancelButton.click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(signals[0].aborted, true);
+    assert.equal(root.querySelector('[data-action="download-application-pdf"]').textContent, 'İndir');
+    assert.match(root.textContent, /iptal edildi/);
+    assert.equal(downloads.length, 0);
+});
+
+test('detail Tek PDF indir passes student downloadFilename to openPdfMergerModal', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const modals = [];
+    const api = {
+        queryApplications: async () => createQueuePayload([QUEUE_ITEM]),
+        readApplicationDetail: async () => ({ application: QUEUE_ITEM, documents: [], allowed_status_transitions: [] }),
+        createArchiveManifest: async () => createManifestFixture(),
+        readArchiveFile: async (_id, file) => new Response(new Uint8Array(file.byte_size))
+    };
+    initializeStaffApplicationsManager(root, api, {
+        openPdfMergerModal: (options) => modals.push(options)
+    });
+    document.dispatchEvent(new document.defaultView.CustomEvent('workspace:view-changed', { detail: { viewName: 'applications' } }));
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    root.querySelector('[data-action="prepare-yoksis-pdf"]').click();
+    for (let attempt = 0; attempt < 50 && modals.length === 0; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    assert.equal(modals.length, 1);
+    assert.equal(modals[0].downloadFilename, 'ayse_yilmaz_p123456.pdf');
+    assert.deepEqual(modals[0].initialFiles.map((file) => file.name), ['01-passport.pdf', '02-student_certificate.pdf']);
+});
+
+test('pdfMergerModal uses downloadFilename when provided and keeps dated fallback when omitted', async (context) => {
+    ensureCssLoaderRegistered();
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    if (globalThis.window === undefined) {
+        Object.defineProperty(globalThis, 'window', { value: {}, writable: true, configurable: true });
+        context.after(() => {
+            if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
+            else delete globalThis.window;
+        });
+    }
+    const { resolveMergedPdfFilename } = await import('../src/ui/pdfMergerModal.js');
+    const fixedDate = new Date('2026-11-24T12:00:00.000Z');
+
+    assert.equal(
+        resolveMergedPdfFilename({ downloadFilename: '  arzuv_hudaykulova_a3578965.pdf  ' }, fixedDate),
+        'arzuv_hudaykulova_a3578965.pdf'
+    );
+    assert.equal(
+        resolveMergedPdfFilename({ downloadFilename: '   \t\n  ' }, fixedDate),
+        'Birlestirilmis_Belgeler_2026-11-24.pdf'
+    );
+    assert.equal(
+        resolveMergedPdfFilename({}, fixedDate),
+        'Birlestirilmis_Belgeler_2026-11-24.pdf'
+    );
+    assert.equal(
+        resolveMergedPdfFilename(undefined, fixedDate),
+        'Birlestirilmis_Belgeler_2026-11-24.pdf'
+    );
+    assert.equal(
+        resolveMergedPdfFilename({ downloadFilename: 123 }, fixedDate),
+        'Birlestirilmis_Belgeler_2026-11-24.pdf'
+    );
+    assert.equal(
+        resolveMergedPdfFilename({ downloadFilename: null }, fixedDate),
+        'Birlestirilmis_Belgeler_2026-11-24.pdf'
+    );
 });
