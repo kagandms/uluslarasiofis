@@ -8,15 +8,47 @@ function readText(value) {
     return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
+const MRZ_LINE1_START_RE = /^P[A-Z<]/;
+const MRZ_LINE2_TOKEN_RE = /(?:[A-Z0-9]{9}|[A-Z0-9]{8}<|[A-Z0-9]{7}<<|[A-Z0-9]{6}<<<|[A-Z0-9]{5}<<<<)[0-9]/;
+
+/**
+ * Büyük harfe çevrilmiş OCR metninde pasaport MRZ alanı bulunup bulunmadığını belirler.
+ * OCR motoru '<' dolgu karakterlerini bozabildiği veya kırpabildiği için, standart
+ * MRZ desenlerine ek olarak en az iki adet çoklu '<' kümesi ya da 25+ karakterlik
+ * MRZ 1./2. satır kalıpları da toleranslı biçimde kabul edilir.
+ *
+ * @param {string} upperText - Büyük harfe dönüştürülmüş sayfa OCR metni.
+ * @returns {boolean} MRZ tespit edilirse true, aksi halde false.
+ */
 function detectMrz(upperText) {
     if (upperText.includes('P<') || upperText.includes('<<<')) {
         return true;
     }
-    const mrzLikeLines = upperText
+
+    const fillerRuns = upperText.match(/<{2,}/g);
+    if (fillerRuns && fillerRuns.length >= 2) {
+        return true;
+    }
+
+    const compactLines = upperText
         .split(/\r?\n/)
-        .map((line) => line.replace(/\s+/g, ''))
-        .filter((line) => line.length >= 30 && line.includes('<'));
-    return mrzLikeLines.length >= 2;
+        .map((line) => line.replace(/\s+/g, ''));
+
+    const mrzLikeLines = compactLines.filter((line) => line.length >= 30 && line.includes('<'));
+    if (mrzLikeLines.length >= 2) {
+        return true;
+    }
+
+    return compactLines.some((line) => {
+        if (line.length < 25) {
+            return false;
+        }
+        const chevronCount = (line.match(/</g) || []).length;
+        if (chevronCount < 3) {
+            return false;
+        }
+        return MRZ_LINE1_START_RE.test(line) || MRZ_LINE2_TOKEN_RE.test(line);
+    });
 }
 
 /**
