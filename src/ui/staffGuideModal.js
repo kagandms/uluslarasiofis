@@ -66,22 +66,13 @@ export function openStaffGuideModal() {
                 '<strong>Başvuru Listesi:</strong> Öğrencilerin sisteme gönderdiği ikamet başvurularını tarih, ad/soyad, durum ve ülke bazında filtreleyin.',
                 '<strong>Evrak İnceleme:</strong> Öğrencinin yüklediği pasaport, öğrenci belgesi, sigorta ve harç dekontu gibi belgeleri tarayıcıda doğrudan önizleyin.',
                 '<strong>Eksik Evrak Talebi:</strong> Hatalı veya okunamayan bir evrak varsa "Belge Güncellemesi" seçeneğiyle gerekçeli not ekleyerek öğrenciye tekrar yükleme talebi iletin.',
-                '<strong>Durum İlerlemesi:</strong> İncelemesi tamamlanan dosyaları "Göç İdaresine İletildi" veya "Tamamlandı" aşamasına aktarın.'
-            ]
-        },
-        {
-            icon: '🗄️',
-            title: '2. Arşiv',
-            summary: 'Sonuçlanan, iptal edilen ve geçmiş başvuruların kaydı',
-            details: [
-                'Tamamlanmış, iptal edilmiş veya reddedilmiş dosyaların geçmiş kayıtlarına tek tıkla ulaşın.',
-                'Öğrenci numarası veya pasaport numarasıyla geçmiş dönemlere ait evrakları sorgulayın.',
-                'Gerek duyulduğunda dosya evraklarını toplu ZIP paketi olarak bilgisayarınıza indirin.'
+                '<strong>Durum İlerlemesi:</strong> İncelemesi tamamlanan dosyaları "Göç İdaresine İletildi" veya "Tamamlandı" aşamasına aktarın.',
+                '<strong>Kalıcı Silme:</strong> Online ve fiziksel listelerdeki ya da detay ekranındaki "Sil" düğmesiyle onay penceresi üzerinden kaydı ve yüklenen belgeleri kalıcı olarak silebilirsiniz. Bu işlem geri alınamaz.'
             ]
         },
         {
             icon: '🎓',
-            title: '3. YKN (Öğrenci Sorgulama & YÖKSİS Aktarımı)',
+            title: '2. YKN (Öğrenci Sorgulama & YÖKSİS Aktarımı)',
             summary: 'Apply Topkapı sorgusu, OCR ve YKN tarayıcı eklentisiyle otomatik YÖKSİS doldurma',
             details: [
                 '<strong>Pasaport ile Arama:</strong> Pasaport numarasını girip "Ara"ya bastığınızda Apply Topkapı veritabanından öğrenci profili çekilir.',
@@ -92,7 +83,7 @@ export function openStaffGuideModal() {
         },
         {
             icon: '📄',
-            title: '4. Kapak Hazırla',
+            title: '3. Kapak Hazırla',
             summary: 'İkamet formu OCR taraması, otomatik veri çıkarma ve kapak PDF\'i',
             details: [
                 '<strong>Fotoğraf Yükle:</strong> Öğrencinin ikamet başvuru formu fotoğraflarını (1. ve 2. sayfa) yükleyin.',
@@ -103,7 +94,7 @@ export function openStaffGuideModal() {
         },
         {
             icon: '🔍',
-            title: '5. Tebliğ Bul',
+            title: '4. Tebliğ Bul',
             summary: 'İl Göç İdaresi tebligat kayıtları ve sorgulama',
             details: [
                 'Göç İdaresi tarafından üniversiteye gönderilen güncel tebliğ listelerinde öğrenci pasaportu veya ismiyle arama yapın.',
@@ -112,7 +103,7 @@ export function openStaffGuideModal() {
         },
         {
             icon: '📁',
-            title: '6. Belgeler',
+            title: '5. Belgeler',
             summary: 'Ofis formları, kontrol listeleri ve dilekçe şablonları',
             details: [
                 'Uluslararası Öğrenci Ofisi bünyesindeki tüm güncel dilekçe, taahhütname ve kontrol evraklarına hızlıca erişin ve indirin.'
@@ -120,7 +111,7 @@ export function openStaffGuideModal() {
         },
         {
             icon: '📸',
-            title: '7. Toplu Fotoğraf / PDF Birleştirici',
+            title: '6. Toplu Fotoğraf / PDF Birleştirici',
             summary: '30 adede kadar fotoğrafı seri çekip tek bir A4 PDF dosyasında birleştirme',
             details: [
                 '<strong>Üst Menüden Erişim:</strong> Üst barda yer alan "PDF Birleştir" butonuna tıklayarak her an açabilirsiniz.',

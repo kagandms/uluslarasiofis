@@ -6,7 +6,6 @@
 /** @type {readonly string[]} */
 export const STAFF_ASSISTANT_VIEWS = Object.freeze([
     'applications',
-    'archive',
     'cover',
     'documents',
     'inquiries',

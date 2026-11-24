@@ -38,7 +38,6 @@ const PEOPLE_DISPLAY_NAMES = Object.freeze({
 
 const VIEW_LABELS = Object.freeze({
     applications: 'Başvurular',
-    archive: 'Arşiv',
     cover: 'Kapak',
     documents: 'Belgeler',
     inquiries: 'Gelen Sorular',

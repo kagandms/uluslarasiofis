@@ -11,6 +11,7 @@ import { createApplicationQueueFilters, splitNoteStatus } from './application-qu
 import { describeGocnetPreparationError, prepareGocnetTransfer } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
+import { confirmPermanentDelete, formatPermanentDeleteError } from './permanentDeleteDialog.js';
 import {
     appendEditableDetailItem,
     createApplicationFieldEditController,
@@ -214,7 +215,7 @@ function createMigrationBulkExportAction(document, state, onExport) {
     return wrapper;
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onArchiveApplication, archiveApplicationId, onSendToMigration, onRevertFromMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
+function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDeleteApplication, archiveApplicationId, deletingApplicationId, onSendToMigration, onRevertFromMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
     const headers = ['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -230,6 +231,8 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
     const noteEntries = [];
     items.forEach((item) => {
         const row = document.createElement('tr');
+        if (item.id) row.dataset.applicationId = item.id;
+        const isRowDeleting = deletingApplicationId === item.id;
         const studentName = [item.first_name, item.last_name].filter(Boolean).join(' ');
         const noteCell = document.createElement('td');
         noteCell.className = 'staff-record-note-cell';
@@ -322,28 +325,32 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
         action.className = 'btn btn-outline';
         action.dataset.action = 'open-detail';
         action.textContent = 'Detay';
+        action.disabled = isRowDeleting;
         action.addEventListener('click', () => onOpenDetail(item.id));
         const download = document.createElement('button');
         download.type = 'button';
         download.className = 'btn btn-outline';
         download.dataset.action = 'download-application-archive';
         download.textContent = archiveApplicationId === item.id ? 'İptal' : 'İndir';
+        download.disabled = isRowDeleting;
         download.setAttribute('aria-label', archiveApplicationId === item.id ? 'ZIP indirmeyi iptal et' : 'Virüs taramasından geçmiş belgeleri ZIP olarak indir');
         download.addEventListener('click', () => onDownloadArchive(item.id));
-        const archive = document.createElement('button');
-        archive.type = 'button';
-        archive.className = 'btn btn-outline';
-        archive.dataset.action = 'archive-application';
-        archive.textContent = 'Sil';
-        archive.setAttribute('aria-label', `${item.student_number} başvurusunu Silinen arşivine taşı`);
-        archive.addEventListener('click', () => onArchiveApplication(item.id));
-        actionCell.append(action, download, archive);
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'btn btn-danger btn-permanent-delete';
+        deleteButton.dataset.action = 'delete-application';
+        deleteButton.textContent = isRowDeleting ? 'Siliniyor…' : 'Sil';
+        deleteButton.disabled = isRowDeleting;
+        deleteButton.setAttribute('aria-label', `${studentName || item.student_number || 'Başvuru'} kaydını kalıcı olarak sil`);
+        deleteButton.addEventListener('click', (event) => onDeleteApplication(item, event.currentTarget));
+        actionCell.append(action, download, deleteButton);
         if (['submitted', 'under_review', 'resubmission_required', 'approved_for_processing'].includes(item.status)) {
             const send = document.createElement('button');
             send.type = 'button';
             send.className = 'btn btn-outline';
             send.dataset.action = 'send-to-migration';
             send.textContent = 'Göçe İletildi';
+            send.disabled = isRowDeleting;
             send.addEventListener('click', () => onSendToMigration(item));
             actionCell.append(send);
         } else if (item.status === 'sent_to_migration') {
@@ -352,9 +359,13 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onAr
             revert.className = 'btn btn-outline';
             revert.dataset.action = 'revert-from-migration';
             revert.textContent = 'Göçten Geri Al';
+            revert.disabled = isRowDeleting;
             revert.setAttribute('aria-label', `${item.student_number} başvurusunu Göç İdaresinden geri al`);
             revert.addEventListener('click', () => onRevertFromMigration(item));
             actionCell.append(revert);
+        }
+        if (isRowDeleting) {
+            actionCell.querySelectorAll('button').forEach((btn) => { btn.disabled = true; });
         }
         row.append(actionCell);
         body.append(row);
@@ -483,7 +494,7 @@ function renderQueue(root, state, handlers) {
         }
     } else if (state.result) {
         panel.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
-            handlers.onDownloadArchive, handlers.onArchiveApplication, state.archiveApplicationId, handlers.onSendToMigration,
+            handlers.onDownloadArchive, handlers.onDeleteApplication, state.archiveApplicationId, state.deletingApplicationId, handlers.onSendToMigration,
             handlers.onRevertFromMigration, handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
             state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer, {
                 notesById: state.recordNotes,
@@ -638,14 +649,16 @@ function createDocumentReadActions(document, item, options) {
     return [preview];
 }
 
-function createApplicationArchiveAction(document, applicationId, state, onDownloadArchive, onPrepareYoksisPdf) {
+function createApplicationArchiveAction(document, application, state, onDownloadArchive, onPrepareYoksisPdf, onDeleteApplication) {
+    const applicationId = application.id;
     const actions = document.createElement('div');
     actions.className = 'staff-application-document-actions';
     const button = document.createElement('button');
     const isActive = state.archiveApplicationId === applicationId;
+    const isDeleting = state.deletingApplicationId === applicationId;
     button.type = 'button';
     button.className = 'btn btn-outline';
-    button.disabled = Boolean(state.combinedPdfController);
+    button.disabled = Boolean(state.combinedPdfController || isDeleting);
     button.dataset.action = 'download-application-archive';
     button.textContent = isActive ? 'ZIP’i iptal et' : 'Belgeleri ZIP indir';
     button.setAttribute('aria-label', isActive ? 'ZIP indirmeyi iptal et' : 'Virüs taramasından geçmiş belgeleri ZIP olarak indir');
@@ -654,11 +667,20 @@ function createApplicationArchiveAction(document, applicationId, state, onDownlo
     combinedPdf.type = 'button';
     combinedPdf.className = 'btn btn-primary';
     combinedPdf.dataset.action = 'prepare-yoksis-pdf';
-    combinedPdf.disabled = Boolean(state.combinedPdfController || state.archiveController);
+    combinedPdf.disabled = Boolean(state.combinedPdfController || state.archiveController || isDeleting);
     combinedPdf.textContent = state.combinedPdfApplicationId === applicationId
         ? 'Evraklar hazırlanıyor…' : 'Tek PDF indir';
     combinedPdf.addEventListener('click', () => onPrepareYoksisPdf(applicationId));
-    actions.append(button, combinedPdf);
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'btn btn-danger btn-permanent-delete';
+    deleteButton.dataset.action = 'delete-application';
+    deleteButton.disabled = Boolean(isDeleting || state.actionPending);
+    deleteButton.textContent = isDeleting ? 'Siliniyor…' : 'Sil';
+    const studentName = [application.first_name, application.last_name].filter(Boolean).join(' ');
+    deleteButton.setAttribute('aria-label', `${studentName || application.student_number || 'Başvuru'} kaydını kalıcı olarak sil`);
+    deleteButton.addEventListener('click', (event) => onDeleteApplication(application, event.currentTarget));
+    actions.append(button, combinedPdf, deleteButton);
     return actions;
 }
 
@@ -1032,8 +1054,8 @@ function renderDetail(root, state, handlers) {
         panel.append(createText(document, 'p', 'staff-applications-state', message));
     } else if (state.detail) {
         panel.append(
-            createApplicationArchiveAction(document, state.detail.application.id, state,
-                handlers.onDownloadArchive, handlers.onPrepareYoksisPdf),
+            createApplicationArchiveAction(document, state.detail.application, state,
+                handlers.onDownloadArchive, handlers.onPrepareYoksisPdf, handlers.onDeleteApplication),
             createApplicationSummary(document, state.detail.application, state, handlers),
             createApplicationWorkflow(document, state.detail.application, state.detail, state, handlers),
             createDocumentSection(document, state.detail.application.id, state.detail.documents, state, handlers)
@@ -1115,8 +1137,8 @@ function createStaffApplicationsApi() {
         createArchiveManifest(applicationId, signal) {
             return request(`/api/staff/applications/${encodeURIComponent(applicationId)}/documents/archive-manifest`, { method: 'POST', signal });
         },
-        archiveApplication(applicationId) {
-            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/archive`, {});
+        deleteApplication(applicationId) {
+            return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/delete`, { confirmed: true });
         },
         resetAccessCode(applicationId) {
             return postJson(`/api/staff/applications/${encodeURIComponent(applicationId)}/reset-access-code`, {});
@@ -1174,6 +1196,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         fieldEdit: null, fieldEditNotice: null, fieldEditBannerError: null,
         rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
+        deletingApplicationId: null,
         combinedPdfApplicationId: null, combinedPdfController: null, bulkExportController: null, bulkExportReport: null,
         bulkExportProgress: null,
         archiveError: null, archiveMessage: null,
@@ -1228,6 +1251,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             onCancelRejection: cancelApplicationRejection,
             onDownloadArchive: downloadArchive,
             onPrepareYoksisPdf: prepareYoksisPdf,
+            onDeleteApplication: deleteApplication,
             onDismissToast: dismissToast,
             onBeginFieldEdit: fieldEditController.beginEdit,
             onUpdateFieldDraft: fieldEditController.updateDraftValue,
@@ -1236,7 +1260,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
-            onDownloadArchive: downloadArchive, onArchiveApplication: archiveApplication,
+            onDownloadArchive: downloadArchive, onDeleteApplication: deleteApplication,
             onResetDraftAccess: resetDraftAccess,
             onSendToMigration: sendToMigration, onRevertFromMigration: revertFromMigration, onDismissToast: dismissToast,
             onSpreadsheetTransfer: transferApplicationToSpreadsheet, onGocnetTransfer: checkGocnetTransfer,
@@ -1555,7 +1579,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         });
     }
     async function loadQueue() {
-        if (state.actionPending) return;
+        if (state.actionPending || state.deletingApplicationId) return;
         const requestId = ++queueRequestId;
         state.loading = true;
         state.error = false;
@@ -1576,20 +1600,54 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
             render();
         }
     }
-    async function archiveApplication(applicationId) {
-        if (state.actionPending || typeof api.archiveApplication !== 'function') return;
-        state.actionPending = `archive:${applicationId}`;
+    async function deleteApplication(item, trigger = null) {
+        const applicationId = item?.id;
+        if (!applicationId || state.actionPending || state.deletingApplicationId || typeof api.deleteApplication !== 'function') return;
+        const confirmed = await confirmPermanentDelete(document, {
+            name: [item.first_name, item.last_name].filter(Boolean).join(' '),
+            number: item.reference_number || item.student_number || item.passport_number || '',
+            kind: 'online',
+            trigger
+        });
+        if (!confirmed) return;
+        state.deletingApplicationId = applicationId;
         state.archiveError = null;
         state.archiveMessage = null;
         render();
+        let deleted = false;
         try {
-            await api.archiveApplication(applicationId);
-            state.archiveMessage = 'Başvuru Silinen arşivine taşındı.';
+            await api.deleteApplication(applicationId);
+            deleted = true;
+            state.deletingApplicationId = null;
+            if (state.result?.items) {
+                state.result = {
+                    ...state.result,
+                    items: state.result.items.filter((entry) => entry.id !== applicationId),
+                    pagination: state.result.pagination ? {
+                        ...state.result.pagination,
+                        total_items: Math.max(0, (Number(state.result.pagination.total_items) || 0) - 1)
+                    } : state.result.pagination
+                };
+                if (state.result.items.length === 0 && state.query.page > 1) {
+                    state.query = { ...state.query, page: state.query.page - 1 };
+                }
+            }
+            if (state.view === 'detail') {
+                clearScanPoll();
+                fieldEditController.reset();
+                discardPreview();
+                state.detail = null;
+                state.view = 'queue';
+            }
+            state.archiveMessage = 'Kalıcı olarak silindi.';
+            render();
         } catch (error) {
-            console.error('Application archive failed.', { errorName: error.name });
-            state.archiveError = 'Başvuru arşive taşınamadı. Listeyi yenileyip tekrar deneyin.';
-        } finally {
-            state.actionPending = null;
+            console.error('Application permanent delete failed.', { errorName: error?.name || 'Error', code: error?.code });
+            state.deletingApplicationId = null;
+            state.archiveError = formatPermanentDeleteError(error);
+            render();
+        }
+        if (deleted) {
             await loadQueue();
         }
     }

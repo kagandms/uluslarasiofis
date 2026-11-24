@@ -256,7 +256,7 @@ test('splitNoteStatus maps noted and not_noted to status all with has_note and p
     assert.deepEqual(splitNoteStatus('not_noted'), { status: 'all', has_note: 'no' });
     assert.deepEqual(splitNoteStatus('all'), { status: 'all', has_note: 'all' });
     assert.deepEqual(splitNoteStatus('under_review'), { status: 'under_review', has_note: 'all' });
-    assert.deepEqual(splitNoteStatus('archive_all'), { status: 'archive_all', has_note: 'all' });
+    assert.deepEqual(splitNoteStatus('approved'), { status: 'approved', has_note: 'all' });
 
     const dom = new JSDOM('<main></main>');
     const root = dom.window.document.querySelector('main');

@@ -40,7 +40,6 @@ const VIEW_ALIASES = Object.freeze([
     { view: 'yoksis-audit', patterns: [/\byoksis\b/u, /\beksik\s+evrak\b/u] },
     { view: 'work-hours', patterns: [/\bcalisma\s+saat\w*/u, /\bmesai\b/u] },
     { view: 'applications', patterns: [/\bbasvurular\w*/u, /\bbasvuru\s+(?:ekran|sekme|sayfa|kuyrug)/u] },
-    { view: 'archive', patterns: [/\barsiv\b/u, /\barsive\b/u, /\barsivi\b/u] },
     { view: 'cover', patterns: [/\bkapak\w*/u] },
     { view: 'documents', patterns: [/\bbelgeler\w*/u, /\bdilekceler\w*/u, /\bbelge\s+(?:ekran|sekme|sayfa)/u] },
     { view: 'inquiries', patterns: [/\bgelen\s+sorular\w*/u, /\bsorular\w*/u] },
