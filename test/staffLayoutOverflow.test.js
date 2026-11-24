@@ -6,10 +6,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const HOME_CSS_URL = new URL('../src/staff/home.css', import.meta.url);
+const INDEX_CSS_URL = new URL('../src/index.css', import.meta.url);
 const SIDE_NAV_CSS_URL = new URL('../src/staff/workspaceSideNav.css', import.meta.url);
 const APPLICATIONS_MANAGER_URL = new URL('../src/staff/applicationsManager.js', import.meta.url);
 
 const HOME_CSS = readFileSync(HOME_CSS_URL, 'utf8');
+const INDEX_CSS = readFileSync(INDEX_CSS_URL, 'utf8');
 const SIDE_NAV_CSS = readFileSync(SIDE_NAV_CSS_URL, 'utf8');
 const APPLICATIONS_MANAGER_JS = readFileSync(APPLICATIONS_MANAGER_URL, 'utf8');
 
@@ -29,37 +31,104 @@ test('İkamet Başvuruları kuyruk tablosu yatay kaydırılabilir kapsayıcı i�
         /panel\.append\(tableWrap\)/,
         'tableWrap kuyruk paneline eklenmelidir'
     );
+    assert.match(
+        APPLICATIONS_MANAGER_JS,
+        /actionGroup\.className\s*=\s*'staff-queue-actions'/,
+        'İşlem hücresi düğmeleri ve durum mesajları .staff-queue-actions kapsayıcısına sarılmalıdır'
+    );
+    assert.match(
+        APPLICATIONS_MANAGER_JS,
+        /actionCell\.append\(actionGroup\)/,
+        '.staff-queue-actions kapsayıcısı mevcut td hücresine tek çocuk olarak eklenmelidir'
+    );
 });
 
-test('home.css kuyruk tablosu kapsayıcısına overflow-x: auto ve işlem hücresi çocuklarına satır içi sarmalama tanımlar', () => {
+test('home.css kuyruk tablosu kapsayıcısına overflow-x: auto ve masaüstünde .staff-queue-actions için 2 sütunlu sıkı işlem ızgarası tanımlar', () => {
     const wrapRule = HOME_CSS.match(/\.staff-applications-table-wrap\s*\{[^}]*\}/);
     assert.ok(wrapRule, '.staff-applications-table-wrap kuralı tanımlı olmalıdır');
     assert.match(wrapRule[0], /overflow-x:\s*auto;/);
     assert.match(wrapRule[0], /max-width:\s*100%;/);
     assert.match(wrapRule[0], /min-width:\s*0;/);
 
-    const actionCellRule = HOME_CSS.match(
+    const desktopQueueBlock = HOME_CSS.match(
+        /@media\s*\(\s*min-width:\s*901px\s*\)\s*\{\s*\.staff-applications-table\s+th\s*\{[^}]*\}\s*\.staff-applications-table\s+td\.staff-queue-actions-cell,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s*\{[^}]*\}\s*\.staff-applications-table\s+\.staff-queue-actions\s*\{[^}]*\}\s*\.staff-applications-table\s+td\.staff-queue-actions-cell\s+\.btn,\s*\.staff-applications-table\s+td\.staff-queue-actions-cell\s+button,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s+\.btn,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s+button\s*\{[^}]*\}\s*\}/
+    );
+    assert.ok(desktopQueueBlock, 'Masaüstü (>=901px) kuyruk tablosu 2 sütunlu işlem ızgarası ve sıkı düğme kuralları tanımlı olmalıdır');
+
+    const headerRule = desktopQueueBlock[0].match(/\.staff-applications-table\s+th\s*\{[^}]*\}/);
+    assert.ok(headerRule, 'Masaüstü tablo başlığı sarmalama kuralı tanımlı olmalıdır');
+    assert.match(headerRule[0], /white-space:\s*normal;/);
+
+    const actionCellRule = desktopQueueBlock[0].match(
         /\.staff-applications-table\s+td\.staff-queue-actions-cell,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s*\{[^}]*\}/
     );
     assert.ok(actionCellRule, 'Satır işlem hücresi kuralı tanımlı olmalıdır');
     assert.match(actionCellRule[0], /white-space:\s*normal;/);
-    assert.match(actionCellRule[0], /max-width:\s*100%;/);
-    assert.doesNotMatch(actionCellRule[0], /display:\s*flex\b/, 'td hücresi table-cell olarak kalmalıdır');
+    assert.doesNotMatch(actionCellRule[0], /display:\s*(?:inline-)?(?:grid|flex)\b/, 'td işlem hücresi grid veya flex olmamalıdır');
+    assert.doesNotMatch(actionCellRule[0], /grid-template-columns:/, 'td işlem hücresinde grid-template-columns olmamalıdır');
 
-    const actionChildrenRule = HOME_CSS.match(
-        /\.staff-applications-table\s+td\.staff-queue-actions-cell\s*>\s*\*,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s*>\s*\*\s*\{[^}]*\}/
+    const tdActionRules = [...HOME_CSS.matchAll(/(?:td\.staff-queue-actions-cell|td\[data-label="Detay"\])\s*\{([^}]*)\}/g)];
+    assert.ok(tdActionRules.length > 0, 'td işlem hücresi kuralları bulunmalıdır');
+    for (const [, body] of tdActionRules) {
+        assert.doesNotMatch(body, /display:\s*(?:inline-)?(?:grid|flex)\b/, 'td işlem hücresi normal tablo hücresi olarak kalmalıdır');
+        assert.doesNotMatch(body, /grid-template-columns:/, 'td işlem hücresinde grid tanımlanmamalıdır');
+    }
+
+    const actionGroupRule = desktopQueueBlock[0].match(
+        /\.staff-applications-table\s+\.staff-queue-actions\s*\{[^}]*\}/
     );
-    assert.ok(actionChildrenRule, 'Satır işlem hücresi doğrudan çocukları için inline-block kuralı tanımlı olmalıdır');
-    assert.match(actionChildrenRule[0], /display:\s*inline-block;/);
-    assert.match(actionChildrenRule[0], /vertical-align:\s*middle;/);
-    assert.match(actionChildrenRule[0], /max-width:\s*100%;/);
+    assert.ok(actionGroupRule, '.staff-queue-actions 2 sütunlu ızgara kuralı tanımlı olmalıdır');
+    assert.match(actionGroupRule[0], /display:\s*grid;/);
+    assert.match(actionGroupRule[0], /grid-template-columns:\s*repeat\(2,\s*max-content\);/);
+    assert.match(actionGroupRule[0], /gap:\s*0\.25rem\s+0\.3rem;/);
+    assert.match(actionGroupRule[0], /justify-content:\s*start;/);
+
+    const actionButtonRule = desktopQueueBlock[0].match(
+        /\.staff-applications-table\s+td\.staff-queue-actions-cell\s+\.btn,\s*\.staff-applications-table\s+td\.staff-queue-actions-cell\s+button,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s+\.btn,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s+button\s*\{[^}]*\}/
+    );
+    assert.ok(actionButtonRule, 'Satır işlem düğmeleri için sıkı boyut kuralı tanımlı olmalıdır');
+    assert.match(actionButtonRule[0], /margin:\s*0;/);
+    assert.match(actionButtonRule[0], /min-width:\s*0;/);
+    assert.match(actionButtonRule[0], /padding:\s*0\.3rem\s+0\.55rem;/);
+    assert.match(actionButtonRule[0], /font-size:\s*0\.8rem;/);
+    assert.match(actionButtonRule[0], /white-space:\s*nowrap;/);
 
     const statusRule = HOME_CSS.match(
         /\.staff-applications-table\s+td\.staff-queue-actions-cell\s+\.staff-gocnet-transfer-status,\s*\.staff-applications-table\s+td\.staff-queue-actions-cell\s+\.staff-spreadsheet-transfer-error,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s+\.staff-gocnet-transfer-status,\s*\.staff-applications-table\s+td\[data-label="Detay"\]\s+\.staff-spreadsheet-transfer-error\s*\{[^}]*\}/
     );
     assert.ok(statusRule, 'İşlem hücresi durum mesajları için blok kuralı tanımlı olmalıdır');
     assert.match(statusRule[0], /display:\s*block;/);
+    assert.match(statusRule[0], /grid-column:\s*1\s*\/\s*-1;/);
     assert.match(statusRule[0], /width:\s*100%;/);
+});
+
+test('home.css yalnızca çalışma alanı açıkken masaüstü kapsayıcısını genişletir ve genel .container kuralı değişmez', () => {
+    const workspaceContainerRule = HOME_CSS.match(
+        /@media\s*\(\s*min-width:\s*901px\s*\)\s*\{\s*body:has\(#app-content:not\(\[hidden\]\)\s+#workspace-content:not\(\[hidden\]\)\)\s+#app-content\s*>\s*main\.container\s*\{([^}]*)\}\s*\}/
+    );
+    assert.ok(
+        workspaceContainerRule,
+        'Çalışma alanı açıkken main.container için masaüstü (>=901px) kapsamlı genişleme kuralı tanımlı olmalıdır'
+    );
+    assert.match(
+        workspaceContainerRule[1],
+        /max-width:\s*min\(1600px,\s*calc\(100vw\s*-\s*2rem\)\);/
+    );
+
+    const homeContainerRule = HOME_CSS.match(
+        /body:has\(#app-content:not\(\[hidden\]\)\s+#home-screen:not\(\[hidden\]\)\)\s+#app-content\s*>\s*main\.container\s*\{([^}]*)\}/
+    );
+    assert.ok(homeContainerRule, 'Ana ekran main.container kuralı korunmalıdır');
+    assert.doesNotMatch(
+        homeContainerRule[1],
+        /max-width:\s*min\(1600px/,
+        'Ana ekran kapsayıcı genişliği değişmemelidir'
+    );
+
+    const globalContainerRule = INDEX_CSS.match(/\/\*\s*Layout\s*\*\/\s*\.container\s*\{([^}]*)\}/);
+    assert.ok(globalContainerRule, 'src/index.css genel .container kuralı tanımlı olmalıdır');
+    assert.match(globalContainerRule[1], /max-width:\s*1180px;/);
+    assert.match(globalContainerRule[1], /padding:\s*0\s+1\.5rem;/);
 });
 
 test('home.css YÖKSİS panelini ızgara sütununa sınırlar ve arama satırının sarılmasını sağlar', () => {
