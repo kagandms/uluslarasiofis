@@ -206,6 +206,30 @@ source boundary only; it does not prove live artifact equality or rollback safet
 `45142517656` for `998cfeb` stopped, as designed, at the code-only scope check because these protected paths
 differed from the previous baseline `04d72c2be5d65536cf1a7d141f6f9f24f26b7e4a`.
 
+## 0046 and 0047 baseline evidence
+
+Dated 24 November 2026. Source: the owner explicitly approved, in the session conversation, applying
+`migrations/0046_yoksis_audit_import.sql` (SHA-256
+`e77eae5d5858cbdd9bef2960c31ff8542a55db2c005561d5f2375967abb90f37`) and `migrations/0047_chat_log.sql` (SHA-256
+`e5ba1df656632c98dbb21bed31ab712a15fbe24342bd3433d702f14212ab29e9`) to production D1 with the same command
+as `npm run db:migrate:production` (`wrangler d1 migrations apply uluslarasiofis-production --remote --env production`);
+this workflow never applies migrations. A Time Travel bookmark was recorded before the apply
+(`00000711-00000166-0000512d-568b3a5f78aaa95f699376e3616a1352`). `wrangler d1 migrations list --remote --env production`
+listed exactly these two as pending before the apply. Both migrations only add schema. `0046` creates the table
+`yoksis_audit_imports` with the index `idx_yoksis_audit_imports_finalized`, adds eight columns to
+`yoksis_document_audit_records` and creates the index `idx_yoksis_audit_records_import`. `0047` creates the tables
+`chat_sessions` and `chat_turns` with the indexes `idx_chat_sessions_last_at`, `idx_chat_turns_created`,
+`idx_chat_turns_feedback_created` and `idx_chat_turns_outcome_created`. No existing row was read or changed.
+Read-only checks after the apply: the migrations list reports no pending migrations, the three new tables and all
+six indexes exist, the new tables have 0 rows, and `yoksis_document_audit_records` still has the same 1593 rows.
+
+The same candidate adds the self-hosted MediaPipe face detector bundle (`vendor/mediapipe`, new dependency in
+`package.json`) for the automatic passport photo crop; it does not touch `wrangler.jsonc`, secrets, bindings or
+cron triggers. The code-only baseline advanced to `bf929bef91ed5ebd7aa1572814bfb151f76db283` (the reviewed
+source that contains migrations `0046` and `0047`). Validation status: the baseline records the reviewed source
+boundary only; it does not prove live artifact equality or rollback safety. The live active version at the time of
+writing is the release of `9cf071d`; the next preflight for the candidate that carries this baseline has not run.
+
 ## Workers AI binding (chatbot)
 
 Dated 2026-11-23. The Workers AI binding (`AI`) is **not** created or updated by the release
