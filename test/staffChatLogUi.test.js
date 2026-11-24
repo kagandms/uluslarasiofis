@@ -1,6 +1,6 @@
 /**
- * Yetkili "Sohbetler" arayüzü testleri:
- * HTML kart/bölüm bağlantıları, liste, süzgeç çipleri, sayaçlar, oturum detayı ve onaylı silme akışları.
+ * Yetkili "Gelen Sorular" altındaki "Topi ile sohbet geçmişleri" arayüzü testleri:
+ * HTML yerleşimi, liste, süzgeç çipleri, sayaçlar, oturum detayı ve onaylı silme akışları.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -112,32 +112,57 @@ function createStaffDom(context) {
     };
 }
 
-test('staff HTML includes chatLog.css link, Sohbetler home card next to Gelen Sorular, and view-chat-logs section', () => {
+test('staff HTML embeds chat logs inside #view-inquiries after inquiries manager with 10 production home cards', () => {
     const dom = new JSDOM(STAFF_HTML, { url: 'https://portal.test/yetkili/' });
     const doc = dom.window.document;
     try {
         const cssLink = doc.querySelector('link[rel="stylesheet"][href="/src/staff/chatLog.css"]');
         assert.ok(cssLink);
 
-        const homeCards = [...doc.querySelectorAll('#home-screen .home-actions .home-action')];
-        const inquiriesIdx = homeCards.findIndex((el) => el.dataset.workspaceView === 'inquiries');
-        const chatLogsIdx = homeCards.findIndex((el) => el.dataset.workspaceView === 'chat-logs');
-        assert.ok(inquiriesIdx >= 0);
-        assert.equal(chatLogsIdx, inquiriesIdx + 1);
-        assert.equal(homeCards[chatLogsIdx].getAttribute('aria-controls'), 'view-chat-logs');
-        assert.match(homeCards[chatLogsIdx].textContent, /Sohbetler/);
+        assert.equal(doc.querySelector('[data-workspace-view="chat-logs"]'), null);
+        assert.equal(doc.getElementById('view-chat-logs'), null);
 
-        const panel = doc.getElementById('view-chat-logs');
-        assert.ok(panel);
-        assert.equal(panel.hidden, true);
-        assert.ok(panel.querySelector('#staff-chat-logs-manager'));
+        const homeCards = [...doc.querySelectorAll('#home-screen .home-actions .home-action')];
+        assert.equal(homeCards.length, 10);
+        assert.deepEqual(
+            homeCards.map((el) => el.dataset.workspaceView),
+            [
+                'applications',
+                'archive',
+                'ykn',
+                'cover',
+                'teblig',
+                'documents',
+                'print',
+                'work-hours',
+                'yoksis-audit',
+                'inquiries'
+            ]
+        );
+
+        const inquiriesPanel = doc.getElementById('view-inquiries');
+        assert.ok(inquiriesPanel);
+        assert.equal(inquiriesPanel.hidden, true);
+
+        const inquiriesManager = inquiriesPanel.querySelector('#staff-inquiries-manager');
+        const historySection = inquiriesPanel.querySelector('#staff-chat-history-section.staff-chat-history-section');
+        const chatLogsManager = historySection?.querySelector('#staff-chat-logs-manager');
+        assert.ok(inquiriesManager);
+        assert.ok(historySection);
+        assert.equal(historySection.getAttribute('aria-label'), 'Topi ile sohbet geçmişleri');
+        assert.equal(historySection.querySelector('h1, h2, h3, h4'), null);
+        assert.ok(chatLogsManager);
+
+        const position = inquiriesManager.compareDocumentPosition(chatLogsManager);
+        assert.ok((position & dom.window.Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
     } finally {
         dom.window.close();
     }
 });
 
-test('mount renders today/7-day stats, session list with XSS-safe textContent, and filter chips query the right endpoint', async (context) => {
-    const { root } = createStaffDom(context);
+test('mount renders title, today/7-day stats, session list with XSS-safe textContent while #view-inquiries is hidden, and filter chips query the right endpoint', async (context) => {
+    const { document, root } = createStaffDom(context);
+    assert.equal(document.getElementById('view-inquiries').hidden, true);
     const requests = [];
 
     const controller = mountChatLogManager(root, {
@@ -159,6 +184,9 @@ test('mount renders today/7-day stats, session list with XSS-safe textContent, a
     });
     context.after(() => controller?.destroy());
     await flushPromises();
+
+    // Embedded section heading rendered
+    assert.equal(root.querySelector('.staff-inquiries-heading h3')?.textContent, 'Topi ile sohbet geçmişleri');
 
     // Stats rendered
     assert.equal(root.querySelector('[data-stat-period="today"][data-stat-metric="answers"]')?.textContent, '12');

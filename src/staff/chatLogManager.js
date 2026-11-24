@@ -1,5 +1,5 @@
 /**
- * Yetkili panel "Sohbetler" çalışma alanı yöneticisi.
+ * Yetkili panel "Gelen Sorular" altındaki "Topi ile sohbet geçmişleri" bölümü yöneticisi.
  * Halka açık Topi sohbet oturumlarını listeler, süzer, günlük/7 günlük sayaçları gösterir,
  * oturum turlarını okur ve onaylı tekil/toplu silme işlemlerini yürütür.
  * Tüm kullanıcı/asistan metinleri yalnızca `textContent` ile basılır; sohbet metni konsola yazılmaz.
@@ -8,7 +8,7 @@ import { formatApplicationTimestamp } from '../shared/application-timestamps.js'
 
 const STAFF_CHAT_SESSIONS_URL = '/api/staff/chat-sessions';
 const STAFF_CHAT_STATS_URL = '/api/staff/chat-stats';
-const CHAT_LOGS_TITLE = 'Sohbetler';
+const CHAT_LOGS_TITLE = 'Topi ile sohbet geçmişleri';
 const OLDER_DAYS_MIN = 1;
 const OLDER_DAYS_MAX = 3650;
 
@@ -76,7 +76,7 @@ function normalizeStats(stats) {
 }
 
 /**
- * Yetkili panel "Sohbetler" yöneticisini verilen kök öğeye bağlar.
+ * Yetkili panel "Topi ile sohbet geçmişleri" yöneticisini verilen kök öğeye bağlar.
  * @param {HTMLElement} rootElement Konteyner öğesi (`#staff-chat-logs-manager`).
  * @param {{fetcher?: typeof fetch, confirm?: (message: string) => boolean}} [options] Testler için isteğe bağlı bağımlılıklar.
  * @returns {{refresh: () => Promise<void>, destroy: () => void}|null} Denetleyici nesnesi.
@@ -172,7 +172,7 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
             if (seq !== state.listRequestSeq) return;
             console.error('Staff chat sessions load failed.', { errorName: error?.name || 'Error' });
             if (!silentError) {
-                state.errorMessage = error?.message || 'Sohbetler yüklenemedi. Lütfen tekrar deneyin.';
+                state.errorMessage = error?.message || 'Topi sohbet geçmişi yüklenemedi. Lütfen tekrar deneyin.';
             }
         } finally {
             if (seq === state.listRequestSeq) {
@@ -547,7 +547,7 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
         const title = document.createElement('h3');
         title.textContent = CHAT_LOGS_TITLE;
         const subtitle = document.createElement('p');
-        subtitle.textContent = 'Öğrencilerin Topi ile sohbetleri ve Evet/Hayır geri bildirimleri. Otomatik silme yoktur.';
+        subtitle.textContent = 'Öğrencilerin ana sayfadaki Topi asistanıyla yaptığı sohbetler ve Evet/Hayır geri bildirimleri. Otomatik silme yoktur.';
         headingGroup.append(title, subtitle);
 
         const refreshButton = document.createElement('button');
@@ -654,7 +654,7 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
         } else if (state.loadingList && state.sessions.length === 0) {
             const loadingMsg = document.createElement('p');
             loadingMsg.className = 'staff-inquiries-empty';
-            loadingMsg.textContent = 'Sohbetler yükleniyor…';
+            loadingMsg.textContent = 'Topi sohbet geçmişi yükleniyor…';
             panel.append(loadingMsg);
         } else if (state.sessions.length === 0) {
             const emptyMsg = document.createElement('p');
@@ -685,40 +685,12 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
     }
 
     const handleWorkspaceViewChanged = (event) => {
-        if (event.detail?.viewName === 'chat-logs') {
+        if (event.detail?.viewName === 'inquiries') {
             void loadAll();
         }
     };
 
-    // workspaceNavigation.js `chat-logs` anahtarını henüz içermiyorsa tıklama sonrası görünümü açar.
-    const handleFallbackNavClick = (event) => {
-        const trigger = event.target?.closest?.('button[data-workspace-view="chat-logs"]');
-        if (!trigger) return;
-        const viewPanel = document.getElementById('view-chat-logs');
-        if (!viewPanel || !viewPanel.hidden) return;
-        const homeScreen = document.getElementById('home-screen');
-        const workspaceContent = document.getElementById('workspace-content');
-        const workspaceTitle = document.getElementById('workspace-title');
-        if (homeScreen) homeScreen.hidden = true;
-        if (workspaceContent) workspaceContent.hidden = false;
-        if (workspaceTitle) workspaceTitle.textContent = CHAT_LOGS_TITLE;
-        document.querySelectorAll('.view-panel').forEach((panel) => {
-            panel.hidden = panel !== viewPanel;
-        });
-        document.querySelectorAll('[data-workspace-view]').forEach((btn) => {
-            const active = btn.dataset.workspaceView === 'chat-logs';
-            btn.classList.toggle('is-active', active);
-            btn.setAttribute('aria-current', active ? 'page' : 'false');
-        });
-        const CustomEventCtor = document.defaultView?.CustomEvent || globalThis.CustomEvent;
-        if (CustomEventCtor) {
-            document.dispatchEvent(new CustomEventCtor('workspace:view-changed', { detail: { viewName: 'chat-logs' } }));
-        }
-        document.getElementById('chat-logs-title')?.focus();
-    };
-
     document.addEventListener('workspace:view-changed', handleWorkspaceViewChanged);
-    document.addEventListener('click', handleFallbackNavClick);
 
     render();
     void loadAll({ silentError: true });
@@ -727,7 +699,6 @@ export function mountChatLogManager(rootElement, { fetcher, confirm } = {}) {
         refresh: () => loadAll(),
         destroy() {
             document.removeEventListener('workspace:view-changed', handleWorkspaceViewChanged);
-            document.removeEventListener('click', handleFallbackNavClick);
         }
     };
 }
