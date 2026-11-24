@@ -217,7 +217,7 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
     const launcherText = doc.createElement('span');
     launcherText.className = 'staff-assistant-launcher-text';
     launcherText.textContent = 'Topi';
-    const launcherPlaytime = createTopiPlaytime(doc, { reducedMotion, size: 22 });
+    const launcherPlaytime = createTopiPlaytime(doc, { reducedMotion, size: 22, launcher: launcherButton });
     if (launcherPlaytime.element) {
         launcherButton.append(launcherTopi, launcherText, launcherPlaytime.element);
     } else {
@@ -229,6 +229,7 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
         launcherPlaytime.element.hidden = hidden;
         const activeToy = launcherPlaytime.element.firstElementChild;
         if (activeToy) activeToy.hidden = hidden;
+        launcherButton.classList.toggle('is-playing', !hidden);
     }
 
     const panel = doc.createElement('section');

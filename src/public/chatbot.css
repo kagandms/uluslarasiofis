@@ -159,7 +159,15 @@ html[dir="rtl"] .chatbot-root {
     inline-size: 48px;
     block-size: 48px;
     transform-origin: 50% 85%;
-    animation: topi-cat-chase 7s ease-in-out infinite;
+}
+
+.chatbot-launcher.is-playing .topi {
+    animation: topi-cat-react 6s ease-in-out infinite;
+}
+
+.chatbot-launcher.is-playing .topi .R {
+    transform-origin: 50% 50%;
+    animation: topi-paw-tap 6s ease-in-out infinite;
 }
 
 .chatbot-launcher .topi svg {
@@ -170,20 +178,18 @@ html[dir="rtl"] .chatbot-root {
 .chatbot-launcher .topi-playtime {
     position: absolute;
     inset: 0;
-    z-index: 2;
+    z-index: 3;
     overflow: hidden;
     border-radius: inherit;
     pointer-events: none;
 }
 
 .chatbot-launcher .topi-mouse,
-.chatbot-launcher .topi-yarn,
-.chatbot-launcher .topi-ball,
-.chatbot-launcher .topi-feather {
+.chatbot-launcher .topi-yarn {
     position: absolute;
-    inset-block-end: 0.25rem;
-    inset-inline-start: 0.8rem;
-    z-index: 2;
+    inset-block-end: 0.18rem;
+    inset-inline-start: 0.75rem;
+    z-index: 3;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -195,29 +201,15 @@ html[dir="rtl"] .chatbot-root {
 }
 
 .chatbot-launcher .topi-mouse {
-    animation: topi-mouse-chase 7s linear infinite;
+    animation: topi-mouse-play 6s cubic-bezier(0.36, 0.08, 0.24, 1) infinite;
 }
 
 .chatbot-launcher .topi-yarn {
-    transform-origin: center center;
-    animation: topi-yarn-roll 7s linear infinite;
-}
-
-.chatbot-launcher .topi-ball {
-    transform-origin: center center;
-    animation: topi-ball-bounce 7s ease-in-out infinite;
-}
-
-.chatbot-launcher .topi-feather {
-    inset-block-end: 0.45rem;
-    transform-origin: center center;
-    animation: topi-feather-drift 8s ease-in-out infinite;
+    animation: topi-yarn-roll 6s cubic-bezier(0.33, 0.06, 0.28, 1) infinite;
 }
 
 .chatbot-launcher .topi-mouse svg,
-.chatbot-launcher .topi-yarn svg,
-.chatbot-launcher .topi-ball svg,
-.chatbot-launcher .topi-feather svg {
+.chatbot-launcher .topi-yarn svg {
     display: block;
     inline-size: 22px;
     block-size: 22px;
@@ -227,189 +219,186 @@ html[dir="rtl"] .chatbot-root {
     transform: scaleX(var(--chase-dir, 1));
 }
 
-@keyframes topi-mouse-chase {
+.chatbot-launcher .topi-yarn .yarn-core {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: topi-yarn-spin 6s linear infinite;
+}
+
+@keyframes topi-mouse-play {
     0% {
         opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * -1.4rem)) translateY(0);
+        transform: translateX(calc(var(--chase-dir, 1) * -1.1rem)) translateY(0) scaleX(1) rotate(0deg);
     }
-    3% {
+    8% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * -0.7rem)) translateY(-3px);
+        transform: translateX(calc(var(--chase-dir, 1) * -0.15rem)) translateY(0) scaleX(1) rotate(0deg);
     }
-    9% {
+    14% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.3rem)) translateY(0);
+        transform: translateX(calc(var(--chase-dir, 1) * 0.2rem)) translateY(-1px) scaleX(1) rotate(-6deg);
     }
-    15% {
+    19% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 1.4rem)) translateY(-4px);
+        transform: translateX(calc(var(--chase-dir, 1) * 0.25rem)) translateY(0) scaleX(1) rotate(4deg);
     }
-    21% {
+    24% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 2.5rem)) translateY(0);
+        transform: translateX(calc(var(--chase-dir, 1) * 0.35rem)) translateY(-1px) scaleX(1) rotate(-5deg);
     }
-    27% {
+    29% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 3.7rem)) translateY(-4px);
+        transform: translateX(calc(var(--chase-dir, 1) * 0.4rem)) translateY(0) scaleX(1) rotate(0deg);
     }
-    33% {
+    36% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 4.9rem)) translateY(0);
+        transform: translateX(calc(var(--chase-dir, 1) * 2.1rem)) translateY(-1px) scaleX(1) rotate(-3deg);
     }
-    38% {
+    44% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 6.8rem)) translateY(-5px);
+        transform: translateX(calc(var(--chase-dir, 1) * 3.8rem)) translateY(-6px) scaleX(1) rotate(-7deg);
     }
-    42.8% {
+    52% {
+        opacity: 1;
+        transform: translateX(calc(var(--chase-dir, 1) * 5.2rem)) translateY(0) scaleX(1) rotate(2deg);
+    }
+    58% {
+        opacity: 1;
+        transform: translateX(calc(var(--chase-dir, 1) * 5.6rem)) translateY(0) scaleX(1) rotate(0deg);
+    }
+    65% {
+        opacity: 1;
+        transform: translateX(calc(var(--chase-dir, 1) * 5.6rem)) translateY(0) scaleX(1) rotate(-4deg);
+    }
+    70% {
+        opacity: 1;
+        transform: translateX(calc(var(--chase-dir, 1) * 5.4rem)) translateY(0) scaleX(-1) rotate(0deg);
+    }
+    78% {
+        opacity: 1;
+        transform: translateX(calc(var(--chase-dir, 1) * 2.3rem)) translateY(-3px) scaleX(-1) rotate(-4deg);
+    }
+    86% {
         opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 8.2rem)) translateY(-2px);
+        transform: translateX(calc(var(--chase-dir, 1) * -1.1rem)) translateY(0) scaleX(-1) rotate(0deg);
     }
     100% {
         opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 8.2rem)) translateY(0);
+        transform: translateX(calc(var(--chase-dir, 1) * -1.1rem)) translateY(0) scaleX(1) rotate(0deg);
     }
 }
 
 @keyframes topi-yarn-roll {
     0% {
         opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 7.8rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 360deg));
+        transform: translateX(calc(var(--chase-dir, 1) * 5.6rem)) translateY(0) scale(1, 1);
     }
-    5% {
+    8% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 5.8rem)) translateY(-2px) rotate(calc(var(--chase-dir, 1) * 240deg));
-    }
-    14% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 2.2rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 80deg));
-    }
-    20% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.6rem)) translateY(-1px) rotate(0deg);
-    }
-    25% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 2rem)) translateY(-5px) rotate(calc(var(--chase-dir, 1) * 110deg));
-    }
-    31% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 3.1rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 190deg));
-    }
-    37% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 5.5rem)) translateY(-3px) rotate(calc(var(--chase-dir, 1) * 300deg));
-    }
-    43% {
-        opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 8.2rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 420deg));
-    }
-    100% {
-        opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 8.2rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 420deg));
-    }
-}
-
-@keyframes topi-ball-bounce {
-    0% {
-        opacity: 0;
-        transform: translateX(0) translateY(0) rotate(0deg);
-    }
-    6% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.8rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 60deg));
-    }
-    15% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 2.2rem)) translateY(-8px) rotate(calc(var(--chase-dir, 1) * 160deg));
-    }
-    23% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 3.5rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 250deg));
-    }
-    31% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 4.8rem)) translateY(-6px) rotate(calc(var(--chase-dir, 1) * 340deg));
-    }
-    39% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 6rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 420deg));
-    }
-    48% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 3.8rem)) translateY(-5px) rotate(calc(var(--chase-dir, 1) * 260deg));
-    }
-    56% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 1.4rem)) translateY(0) rotate(calc(var(--chase-dir, 1) * 100deg));
-    }
-    64% {
-        opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.2rem)) translateY(0) rotate(0deg);
-    }
-    100% {
-        opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.2rem)) translateY(0) rotate(0deg);
-    }
-}
-
-@keyframes topi-feather-drift {
-    0% {
-        opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 5.6rem)) translateY(-8px) rotate(-14deg);
-    }
-    10% {
-        opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 4.8rem)) translateY(-5px) rotate(12deg);
+        transform: translateX(calc(var(--chase-dir, 1) * 4.7rem)) translateY(0) scale(1, 1);
     }
     24% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 3.8rem)) translateY(-2px) rotate(-10deg);
+        transform: translateX(calc(var(--chase-dir, 1) * 2.7rem)) translateY(0) scale(1, 1);
     }
-    38% {
+    42% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 2.6rem)) translateY(-6px) rotate(14deg);
+        transform: translateX(calc(var(--chase-dir, 1) * 0.6rem)) translateY(0) scale(1, 1);
+    }
+    45% {
+        opacity: 1;
+        transform: translateX(calc(var(--chase-dir, 1) * 0.5rem)) translateY(1px) scale(1.18, 0.82);
     }
     52% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 1.6rem)) translateY(-1px) rotate(-12deg);
+        transform: translateX(calc(var(--chase-dir, 1) * 2.1rem)) translateY(-7px) scale(0.94, 1.06);
     }
-    66% {
+    60% {
         opacity: 1;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.8rem)) translateY(-4px) rotate(10deg);
+        transform: translateX(calc(var(--chase-dir, 1) * 3.5rem)) translateY(0) scale(1.06, 0.94);
     }
-    78% {
+    70% {
+        opacity: 1;
+        transform: translateX(calc(var(--chase-dir, 1) * 4.8rem)) translateY(0) scale(1, 1);
+    }
+    82% {
         opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.2rem)) translateY(0) rotate(-8deg);
+        transform: translateX(calc(var(--chase-dir, 1) * 6.2rem)) translateY(0) scale(1, 1);
     }
     100% {
         opacity: 0;
-        transform: translateX(calc(var(--chase-dir, 1) * 0.2rem)) translateY(0) rotate(-8deg);
+        transform: translateX(calc(var(--chase-dir, 1) * 6.2rem)) translateY(0) scale(1, 1);
     }
 }
 
-@keyframes topi-cat-chase {
-    0%,
-    44%,
+@keyframes topi-yarn-spin {
+    0% {
+        transform: rotate(calc(var(--chase-dir, 1) * 665deg));
+    }
+    8% {
+        transform: rotate(calc(var(--chase-dir, 1) * 545deg));
+    }
+    24% {
+        transform: rotate(calc(var(--chase-dir, 1) * 280deg));
+    }
+    42%,
+    45% {
+        transform: rotate(0deg);
+    }
+    52% {
+        transform: rotate(calc(var(--chase-dir, 1) * 195deg));
+    }
+    60% {
+        transform: rotate(calc(var(--chase-dir, 1) * 385deg));
+    }
+    70% {
+        transform: rotate(calc(var(--chase-dir, 1) * 560deg));
+    }
+    82%,
     100% {
-        transform: translate(0, 0) rotate(0deg) scale(1);
+        transform: rotate(calc(var(--chase-dir, 1) * 745deg));
     }
-    6% {
-        transform: translate(0, 2px) rotate(calc(var(--chase-dir, 1) * -5deg)) scale(1.03, 0.94);
+}
+
+@keyframes topi-cat-react {
+    0%,
+    8%,
+    86%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
     }
-    16% {
-        transform: translate(calc(var(--chase-dir, 1) * 2px), 3px) rotate(calc(var(--chase-dir, 1) * 3deg)) scale(1.04, 0.92);
+    22% {
+        transform: translate(calc(var(--chase-dir, 1) * -1px), 0) rotate(calc(var(--chase-dir, 1) * -3deg));
     }
-    26% {
-        transform: translate(calc(var(--chase-dir, 1) * 4px), 3px) rotate(calc(var(--chase-dir, 1) * 6deg)) scale(1.05, 0.91);
+    38% {
+        transform: translate(calc(var(--chase-dir, 1) * 1px), 1px) rotate(calc(var(--chase-dir, 1) * 3deg));
     }
-    31% {
-        transform: translate(calc(var(--chase-dir, 1) * 2px), 4px) rotate(calc(var(--chase-dir, 1) * 5deg)) scale(1.06, 0.89);
+    45% {
+        transform: translate(calc(var(--chase-dir, 1) * 2px), 1.5px) rotate(calc(var(--chase-dir, 1) * 5deg));
     }
-    34.5% {
-        transform: translate(calc(var(--chase-dir, 1) * 10px), -5px) rotate(calc(var(--chase-dir, 1) * 9deg)) scale(0.98, 1.06);
+    56% {
+        transform: translate(calc(var(--chase-dir, 1) * 1px), 0) rotate(calc(var(--chase-dir, 1) * 3deg));
     }
-    39% {
-        transform: translate(calc(var(--chase-dir, 1) * 6px), 1px) rotate(calc(var(--chase-dir, 1) * 4deg)) scale(1.03, 0.96);
+    72% {
+        transform: translate(0, 0) rotate(calc(var(--chase-dir, 1) * -2deg));
+    }
+}
+
+@keyframes topi-paw-tap {
+    0%,
+    36%,
+    56%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+    41% {
+        transform: translate(1.2px, -3px) rotate(-12deg);
+    }
+    45% {
+        transform: translate(2px, 1px) rotate(10deg);
+    }
+    50% {
+        transform: translate(0.6px, -1px) rotate(-4deg);
     }
 }
 
@@ -434,14 +423,14 @@ html[dir="rtl"] .chatbot-root {
 .chatbot-root.is-panel-open .chatbot-launcher-tagline,
 .chatbot-root.is-panel-open .chatbot-launcher .topi-playtime,
 .chatbot-root.is-panel-open .chatbot-launcher .topi-mouse,
-.chatbot-root.is-panel-open .chatbot-launcher .topi-yarn,
-.chatbot-root.is-panel-open .chatbot-launcher .topi-ball,
-.chatbot-root.is-panel-open .chatbot-launcher .topi-feather {
+.chatbot-root.is-panel-open .chatbot-launcher .topi-yarn {
     display: none;
     animation: none;
 }
 
-.chatbot-root.is-panel-open .chatbot-launcher .topi {
+.chatbot-root.is-panel-open .chatbot-launcher .topi,
+.chatbot-root.is-panel-open .chatbot-launcher .topi .R,
+.chatbot-root.is-panel-open .chatbot-launcher .topi-yarn .yarn-core {
     animation: none;
 }
 
@@ -450,8 +439,6 @@ html[dir="rtl"] .chatbot-root {
 .chatbot-launcher .topi-playtime[hidden],
 .chatbot-launcher .topi-mouse[hidden],
 .chatbot-launcher .topi-yarn[hidden],
-.chatbot-launcher .topi-ball[hidden],
-.chatbot-launcher .topi-feather[hidden],
 .chatbot-panel[hidden],
 .chatbot-validation-error[hidden],
 .chatbot-feedback-error[hidden] {
@@ -896,19 +883,17 @@ html[dir="rtl"] .chatbot-panel,
 
 .chatbot-root.is-reduced-motion .chatbot-launcher-tagline,
 .chatbot-root.is-reduced-motion .chatbot-launcher .topi,
+.chatbot-root.is-reduced-motion .chatbot-launcher .topi .R,
 .chatbot-root.is-reduced-motion .chatbot-launcher .topi-playtime,
 .chatbot-root.is-reduced-motion .chatbot-launcher .topi-mouse,
 .chatbot-root.is-reduced-motion .chatbot-launcher .topi-yarn,
-.chatbot-root.is-reduced-motion .chatbot-launcher .topi-ball,
-.chatbot-root.is-reduced-motion .chatbot-launcher .topi-feather {
+.chatbot-root.is-reduced-motion .chatbot-launcher .topi-yarn .yarn-core {
     animation: none;
 }
 
 .chatbot-root.is-reduced-motion .chatbot-launcher .topi-playtime,
 .chatbot-root.is-reduced-motion .chatbot-launcher .topi-mouse,
-.chatbot-root.is-reduced-motion .chatbot-launcher .topi-yarn,
-.chatbot-root.is-reduced-motion .chatbot-launcher .topi-ball,
-.chatbot-root.is-reduced-motion .chatbot-launcher .topi-feather {
+.chatbot-root.is-reduced-motion .chatbot-launcher .topi-yarn {
     display: none;
 }
 
@@ -967,12 +952,8 @@ html[dir="rtl"] .chatbot-panel,
 
     .chatbot-launcher .topi-mouse,
     .chatbot-launcher .topi-yarn,
-    .chatbot-launcher .topi-ball,
-    .chatbot-launcher .topi-feather,
     .chatbot-launcher .topi-mouse svg,
-    .chatbot-launcher .topi-yarn svg,
-    .chatbot-launcher .topi-ball svg,
-    .chatbot-launcher .topi-feather svg {
+    .chatbot-launcher .topi-yarn svg {
         inline-size: 20px;
         block-size: 20px;
     }
@@ -998,19 +979,17 @@ html[dir="rtl"] .chatbot-panel,
 
     .chatbot-launcher-tagline,
     .chatbot-launcher .topi,
+    .chatbot-launcher .topi .R,
     .chatbot-launcher .topi-playtime,
     .chatbot-launcher .topi-mouse,
     .chatbot-launcher .topi-yarn,
-    .chatbot-launcher .topi-ball,
-    .chatbot-launcher .topi-feather {
+    .chatbot-launcher .topi-yarn .yarn-core {
         animation: none;
     }
 
     .chatbot-launcher .topi-playtime,
     .chatbot-launcher .topi-mouse,
-    .chatbot-launcher .topi-yarn,
-    .chatbot-launcher .topi-ball,
-    .chatbot-launcher .topi-feather {
+    .chatbot-launcher .topi-yarn {
         display: none;
     }
 }

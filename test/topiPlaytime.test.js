@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
+import * as topiMascot from '../src/public/topiMascot.js';
 import {
-    TOPI_BALL_SVG_SOURCE,
-    TOPI_FEATHER_SVG_SOURCE,
     TOPI_MOUSE_SVG_SOURCE,
     TOPI_TOYS,
     TOPI_YARN_SVG_SOURCE,
-    createTopiBall,
-    createTopiFeather,
     createTopiMouse,
     createTopiPlaytime,
     createTopiYarn,
@@ -30,12 +29,26 @@ function createScriptedRandom(values) {
     };
 }
 
+async function readWorkspaceFile(relativePath) {
+    return readFile(resolve(process.cwd(), relativePath), 'utf8');
+}
+
+function extractCssBlock(css, selectorPattern) {
+    const match = css.match(new RegExp(`${selectorPattern}\\s*\\{([^}]*)\\}`));
+    assert.ok(match, `Expected CSS block matching ${selectorPattern}`);
+    return match[1];
+}
+
+function parseZIndex(cssBlock, label) {
+    const match = cssBlock.match(/z-index\s*:\s*(-?\d+)/);
+    assert.ok(match, `Expected numeric z-index in ${label}`);
+    return Number(match[1]);
+}
+
 test('all toy SVG sources are <= 1500 bytes, use 24x24 viewBox, have aria-hidden, and have no <image>, external href, or scripts', () => {
     const sources = [
         ['mouse', TOPI_MOUSE_SVG_SOURCE],
-        ['yarn', TOPI_YARN_SVG_SOURCE],
-        ['ball', TOPI_BALL_SVG_SOURCE],
-        ['feather', TOPI_FEATHER_SVG_SOURCE]
+        ['yarn', TOPI_YARN_SVG_SOURCE]
     ];
 
     for (const [name, source] of sources) {
@@ -49,15 +62,17 @@ test('all toy SVG sources are <= 1500 bytes, use 24x24 viewBox, have aria-hidden
         assert.equal(/https?:\/\//i.test(withoutXmlns), false, `${name} SVG must not contain external http(s) URLs`);
         assert.equal(/<script/i.test(source), false, `${name} SVG must not contain <script`);
     }
+
+    assert.match(TOPI_MOUSE_SVG_SOURCE, /class="mouse-shadow"/, 'mouse SVG must include a subtle ground shadow');
+    assert.match(TOPI_YARN_SVG_SOURCE, /class="yarn-core"/, 'yarn SVG must include a rotating yarn-core group');
+    assert.match(TOPI_YARN_SVG_SOURCE, /class="yarn-thread"/, 'yarn SVG must include a trailing loose thread');
 });
 
 test('toy factories return aria-hidden wrappers and SVGs respecting size', (context) => {
     const { doc } = createDom(context);
     const factories = [
         { create: createTopiMouse, wrapperClass: 'topi-mouse', svgClass: 'mascot-mouse' },
-        { create: createTopiYarn, wrapperClass: 'topi-yarn', svgClass: 'mascot-yarn' },
-        { create: createTopiBall, wrapperClass: 'topi-ball', svgClass: 'mascot-ball' },
-        { create: createTopiFeather, wrapperClass: 'topi-feather', svgClass: 'mascot-feather' }
+        { create: createTopiYarn, wrapperClass: 'topi-yarn', svgClass: 'mascot-yarn' }
     ];
 
     for (const { create, wrapperClass, svgClass } of factories) {
@@ -84,35 +99,26 @@ test('toy factories return aria-hidden wrappers and SVGs respecting size', (cont
     }
 });
 
-test('pickTopiToy returns all 4 toys by thresholds and never returns the same toy 3 times in a row', () => {
-    assert.deepEqual(TOPI_TOYS, ['mouse', 'yarn', 'ball', 'feather']);
+test('pickTopiToy only returns mouse or yarn, never repeats 3 times in a row, and alternates after at most 2 rounds', () => {
+    assert.deepEqual(TOPI_TOYS, ['mouse', 'yarn']);
 
     assert.equal(pickTopiToy([], () => 0), 'mouse');
-    assert.equal(pickTopiToy([], () => 0.24), 'mouse');
-    assert.equal(pickTopiToy([], () => 0.25), 'yarn');
-    assert.equal(pickTopiToy([], () => 0.49), 'yarn');
-    assert.equal(pickTopiToy([], () => 0.5), 'ball');
-    assert.equal(pickTopiToy([], () => 0.74), 'ball');
-    assert.equal(pickTopiToy([], () => 0.75), 'feather');
-    assert.equal(pickTopiToy([], () => 0.99), 'feather');
+    assert.equal(pickTopiToy([], () => 0.49), 'mouse');
+    assert.equal(pickTopiToy([], () => 0.5), 'yarn');
+    assert.equal(pickTopiToy([], () => 0.99), 'yarn');
 
     assert.equal(pickTopiToy(['mouse'], () => 0.1), 'mouse');
     assert.equal(pickTopiToy(['mouse', 'mouse'], () => 0.1), 'yarn');
 
-    assert.equal(pickTopiToy(['yarn'], () => 0.3), 'yarn');
-    assert.equal(pickTopiToy(['yarn', 'yarn'], () => 0.3), 'mouse');
+    assert.equal(pickTopiToy(['yarn'], () => 0.9), 'yarn');
+    assert.equal(pickTopiToy(['yarn', 'yarn'], () => 0.9), 'mouse');
 
-    assert.equal(pickTopiToy(['ball'], () => 0.6), 'ball');
-    assert.equal(pickTopiToy(['ball', 'ball'], () => 0.6), 'yarn');
-
-    assert.equal(pickTopiToy(['feather'], () => 0.9), 'feather');
-    assert.equal(pickTopiToy(['feather', 'feather'], () => 0.9), 'ball');
-
-    for (const fixedRoll of [0.1, 0.3, 0.6, 0.9]) {
+    for (const fixedRoll of [0.1, 0.49, 0.5, 0.9]) {
         const constantRandom = () => fixedRoll;
         const history = [];
         for (let i = 0; i < 16; i += 1) {
             const picked = pickTopiToy(history, constantRandom);
+            assert.ok(TOPI_TOYS.includes(picked), `Unexpected toy: ${picked}`);
             history.push(picked);
             if (i >= 2) {
                 const lastThree = history.slice(-3);
@@ -124,82 +130,6 @@ test('pickTopiToy returns all 4 toys by thresholds and never returns the same to
             }
         }
     }
-});
-
-test('createTopiPlaytime with reducedMotion returns element null and creates nothing', (context) => {
-    const { doc } = createDom(context);
-
-    const playtime = createTopiPlaytime(doc, { reducedMotion: true });
-    assert.equal(playtime.element, null);
-    assert.equal(playtime.next(), null);
-    assert.doesNotThrow(() => playtime.destroy());
-    assert.equal(doc.body.children.length, 0);
-});
-
-test('createTopiPlaytime renders aria-hidden wrapper with one toy child and swaps through all 4 toys on animationiteration/animationend', (context) => {
-    const { dom, doc } = createDom(context);
-    const scriptedRandom = createScriptedRandom([0.1, 0.1, 0.6, 0.9]);
-
-    const playtime = createTopiPlaytime(doc, { reducedMotion: false, random: scriptedRandom });
-    context.after(() => playtime.destroy());
-
-    const wrapper = playtime.element;
-    assert.ok(wrapper);
-    assert.equal(wrapper.tagName, 'SPAN');
-    assert.equal(wrapper.className, 'topi-playtime');
-    assert.equal(wrapper.getAttribute('aria-hidden'), 'true');
-    assert.equal(wrapper.children.length, 1);
-
-    const firstToy = wrapper.firstElementChild;
-    assert.equal(firstToy.className, 'topi-mouse');
-    assert.equal(firstToy.getAttribute('aria-hidden'), 'true');
-
-    // Initial history has ['mouse']; first random 0.1 -> 'mouse' (2 in a row)
-    firstToy.dispatchEvent(new dom.window.Event('animationiteration'));
-    assert.equal(wrapper.children.length, 1);
-    const secondToy = wrapper.firstElementChild;
-    assert.equal(secondToy.className, 'topi-mouse');
-    assert.equal(secondToy.getAttribute('aria-hidden'), 'true');
-
-    // History has ['mouse', 'mouse']; second random 0.1 is overridden to 'yarn'
-    secondToy.dispatchEvent(new dom.window.Event('animationiteration'));
-    assert.equal(wrapper.children.length, 1);
-    const thirdToy = wrapper.firstElementChild;
-    assert.equal(thirdToy.className, 'topi-yarn');
-    assert.equal(thirdToy.getAttribute('aria-hidden'), 'true');
-
-    // Third random 0.6 -> 'ball' via animationend
-    thirdToy.dispatchEvent(new dom.window.Event('animationend'));
-    assert.equal(wrapper.children.length, 1);
-    const fourthToy = wrapper.firstElementChild;
-    assert.equal(fourthToy.className, 'topi-ball');
-    assert.equal(fourthToy.getAttribute('aria-hidden'), 'true');
-
-    // Fourth random 0.9 -> 'feather' via animationiteration
-    fourthToy.dispatchEvent(new dom.window.Event('animationiteration'));
-    assert.equal(wrapper.children.length, 1);
-    const fifthToy = wrapper.firstElementChild;
-    assert.equal(fifthToy.className, 'topi-feather');
-    assert.equal(fifthToy.getAttribute('aria-hidden'), 'true');
-});
-
-test('createTopiPlaytime destroy removes listeners and stops swapping', (context) => {
-    const { dom, doc } = createDom(context);
-    const playtime = createTopiPlaytime(doc, {
-        reducedMotion: false,
-        random: () => 0.9
-    });
-
-    const wrapper = playtime.element;
-    const initialToy = wrapper.firstElementChild;
-    assert.equal(initialToy.className, 'topi-mouse');
-
-    playtime.destroy();
-
-    initialToy.dispatchEvent(new dom.window.Event('animationiteration'));
-    initialToy.dispatchEvent(new dom.window.Event('animationend'));
-    assert.equal(wrapper.firstElementChild, initialToy);
-    assert.equal(playtime.next(), null);
 });
 
 test('pickTopiToy calls random exactly once per pick including overridden case', () => {
@@ -217,10 +147,175 @@ test('pickTopiToy calls random exactly once per pick including overridden case',
 
     assert.equal(pickTopiToy(['yarn', 'yarn'], rng), 'mouse');
     assert.equal(calls, 3);
+});
 
-    assert.equal(pickTopiToy(['ball', 'ball'], rng), 'mouse');
-    assert.equal(calls, 4);
+test('createTopiPlaytime with reducedMotion returns element null, creates nothing, and clears reaction class', (context) => {
+    const { doc } = createDom(context);
+    const launcher = doc.createElement('button');
+    launcher.classList.add('is-playing', 'is-playing-mouse');
 
-    assert.equal(pickTopiToy(['feather', 'feather'], rng), 'mouse');
-    assert.equal(calls, 5);
+    const playtime = createTopiPlaytime(doc, { reducedMotion: true, launcher });
+    assert.equal(playtime.element, null);
+    assert.equal(playtime.next(), null);
+    assert.equal(launcher.classList.contains('is-playing'), false);
+    assert.equal(launcher.classList.contains('is-playing-mouse'), false);
+    assert.doesNotThrow(() => playtime.destroy());
+    assert.equal(doc.body.children.length, 0);
+});
+
+test('createTopiPlaytime swaps between mouse and yarn on animationiteration/animationend and sets/clears reaction class', async (context) => {
+    const { dom, doc } = createDom(context);
+    const launcher = doc.createElement('button');
+    const scriptedRandom = createScriptedRandom([0.1, 0.1, 0.9, 0.9]);
+
+    const playtime = createTopiPlaytime(doc, {
+        reducedMotion: false,
+        random: scriptedRandom,
+        launcher
+    });
+    context.after(() => playtime.destroy());
+
+    const wrapper = playtime.element;
+    assert.ok(wrapper);
+    assert.equal(wrapper.tagName, 'SPAN');
+    assert.equal(wrapper.className, 'topi-playtime');
+    assert.equal(wrapper.getAttribute('aria-hidden'), 'true');
+    assert.equal(wrapper.children.length, 1);
+    assert.equal(launcher.classList.contains('is-playing'), true);
+    assert.equal(launcher.classList.contains('is-playing-mouse'), true);
+    assert.equal(launcher.classList.contains('is-playing-yarn'), false);
+
+    const firstToy = wrapper.firstElementChild;
+    assert.equal(firstToy.className, 'topi-mouse');
+    assert.equal(firstToy.getAttribute('aria-hidden'), 'true');
+
+    // History has ['mouse']; first random 0.1 -> 'mouse' (2 in a row)
+    firstToy.dispatchEvent(new dom.window.Event('animationiteration'));
+    assert.equal(wrapper.children.length, 1);
+    const secondToy = wrapper.firstElementChild;
+    assert.equal(secondToy.className, 'topi-mouse');
+    assert.equal(launcher.classList.contains('is-playing'), true);
+    assert.equal(launcher.classList.contains('is-playing-mouse'), true);
+
+    // History has ['mouse', 'mouse']; second random 0.1 is overridden to 'yarn'
+    secondToy.dispatchEvent(new dom.window.Event('animationiteration'));
+    assert.equal(wrapper.children.length, 1);
+    const thirdToy = wrapper.firstElementChild;
+    assert.equal(thirdToy.className, 'topi-yarn');
+    assert.equal(thirdToy.getAttribute('aria-hidden'), 'true');
+    assert.equal(launcher.classList.contains('is-playing'), true);
+    assert.equal(launcher.classList.contains('is-playing-yarn'), true);
+    assert.equal(launcher.classList.contains('is-playing-mouse'), false);
+
+    // History has ['mouse', 'mouse', 'yarn']; third random 0.9 -> 'yarn' via animationend
+    thirdToy.dispatchEvent(new dom.window.Event('animationend'));
+    assert.equal(wrapper.children.length, 1);
+    const fourthToy = wrapper.firstElementChild;
+    assert.equal(fourthToy.className, 'topi-yarn');
+
+    // History ends with ['yarn', 'yarn']; fourth random 0.9 is overridden to 'mouse'
+    fourthToy.dispatchEvent(new dom.window.Event('animationiteration'));
+    assert.equal(wrapper.children.length, 1);
+    const fifthToy = wrapper.firstElementChild;
+    assert.equal(fifthToy.className, 'topi-mouse');
+    assert.equal(launcher.classList.contains('is-playing-mouse'), true);
+
+    playtime.destroy();
+    assert.equal(launcher.classList.contains('is-playing'), false);
+    assert.equal(launcher.classList.contains('is-playing-mouse'), false);
+    assert.equal(launcher.classList.contains('is-playing-yarn'), false);
+
+    // Also sets and clears is-playing when attached to a parent launcher without explicit launcher option
+    const implicitLauncher = doc.createElement('button');
+    const implicitPlaytime = createTopiPlaytime(doc, { reducedMotion: false, random: () => 0.1 });
+    implicitLauncher.append(implicitPlaytime.element);
+    await Promise.resolve();
+    assert.equal(implicitLauncher.classList.contains('is-playing'), true);
+    assert.equal(implicitLauncher.classList.contains('is-playing-mouse'), true);
+
+    implicitPlaytime.destroy();
+    assert.equal(implicitLauncher.classList.contains('is-playing'), false);
+    assert.equal(implicitLauncher.classList.contains('is-playing-mouse'), false);
+});
+
+test('createTopiPlaytime destroy removes listeners and stops swapping', (context) => {
+    const { dom, doc } = createDom(context);
+    const launcher = doc.createElement('button');
+    const playtime = createTopiPlaytime(doc, {
+        reducedMotion: false,
+        random: () => 0.9,
+        launcher
+    });
+
+    const wrapper = playtime.element;
+    const initialToy = wrapper.firstElementChild;
+    assert.equal(initialToy.className, 'topi-mouse');
+    assert.equal(launcher.classList.contains('is-playing'), true);
+
+    playtime.destroy();
+
+    initialToy.dispatchEvent(new dom.window.Event('animationiteration'));
+    initialToy.dispatchEvent(new dom.window.Event('animationend'));
+    assert.equal(wrapper.firstElementChild, initialToy);
+    assert.equal(playtime.next(), null);
+    assert.equal(launcher.classList.contains('is-playing'), false);
+});
+
+test('no ball or feather toy symbols remain in src', async () => {
+    assert.equal('TOPI_BALL_SVG_SOURCE' in topiMascot, false);
+    assert.equal('TOPI_FEATHER_SVG_SOURCE' in topiMascot, false);
+    assert.equal('createTopiBall' in topiMascot, false);
+    assert.equal('createTopiFeather' in topiMascot, false);
+
+    const files = [
+        'src/public/topiMascot.js',
+        'src/public/chatbot.css',
+        'src/public/homeChatbot.js',
+        'src/staff/staffAssistant.css',
+        'src/staff/staffAssistant.js'
+    ];
+    const forbiddenPattern = /TOPI_(?:BALL|FEATHER)_SVG_SOURCE|createTopi(?:Ball|Feather)|(?:topi|mascot)-(?:ball|feather)|(?:ball-bounce|feather-drift)|\bball\b|\bfeather\b/i;
+
+    for (const file of files) {
+        const source = await readWorkspaceFile(file);
+        assert.equal(
+            forbiddenPattern.test(source),
+            false,
+            `Found forbidden ball/feather reference in ${file}`
+        );
+    }
+});
+
+test('toy wrapper has higher z-index than the cat and enforces overflow hidden and pointer-events none in student and staff CSS', async () => {
+    const [studentCss, staffCss] = await Promise.all([
+        readWorkspaceFile('src/public/chatbot.css'),
+        readWorkspaceFile('src/staff/staffAssistant.css')
+    ]);
+
+    const studentCatBlock = extractCssBlock(studentCss, '\\.chatbot-launcher \\.topi');
+    const studentPlaytimeBlock = extractCssBlock(studentCss, '\\.chatbot-launcher \\.topi-playtime');
+    assert.ok(
+        parseZIndex(studentPlaytimeBlock, '.chatbot-launcher .topi-playtime')
+            > parseZIndex(studentCatBlock, '.chatbot-launcher .topi'),
+        'Student .topi-playtime z-index must be greater than .topi z-index'
+    );
+    assert.match(studentPlaytimeBlock, /overflow\s*:\s*hidden/);
+    assert.match(studentPlaytimeBlock, /pointer-events\s*:\s*none/);
+    assert.match(studentCss, /\.chatbot-launcher\.is-playing\s+\.topi\s*\{/);
+    assert.match(studentCss, /\.chatbot-launcher\.is-playing\s+\.topi\s+\.R\s*\{/);
+
+    const staffCatBlock = extractCssBlock(
+        staffCss,
+        '\\.staff-assistant-launcher \\.topi,\\s*\\.staff-assistant-launcher \\.staff-assistant-launcher-text'
+    );
+    const staffPlaytimeBlock = extractCssBlock(staffCss, '\\.staff-assistant-launcher \\.topi-playtime');
+    assert.ok(
+        parseZIndex(staffPlaytimeBlock, '.staff-assistant-launcher .topi-playtime')
+            > parseZIndex(staffCatBlock, '.staff-assistant-launcher .topi'),
+        'Staff .topi-playtime z-index must be greater than .topi z-index'
+    );
+    assert.match(staffPlaytimeBlock, /overflow\s*:\s*hidden/);
+    assert.match(staffPlaytimeBlock, /pointer-events\s*:\s*none/);
+    assert.match(staffCss, /\.staff-assistant-launcher\.is-playing\s+\.topi\s*\{/);
+    assert.match(staffCss, /\.staff-assistant-launcher\.is-playing\s+\.topi\s+\.R\s*\{/);
 });
