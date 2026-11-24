@@ -353,3 +353,180 @@ test('bulk delete older_than_days validates input and calls DELETE only after co
     assert.equal(bulkDelete.options.credentials, 'same-origin');
     assert.match(root.querySelector('.staff-inquiries-status')?.textContent || '', /5/);
 });
+
+test('every session row displays the Topi source chip and result count renders total only when present', async (context) => {
+    const { root } = createStaffDom(context);
+    let responsePayload = { items: SAMPLE_SESSIONS, nextCursor: null, total: 14 };
+
+    const controller = mountChatLogManager(root, {
+        fetcher: async (url) => {
+            const parsed = new URL(String(url), 'https://portal.test');
+            if (parsed.pathname === '/api/staff/chat-stats') {
+                return createJsonResponse(SAMPLE_STATS);
+            }
+            if (parsed.pathname === '/api/staff/chat-sessions') {
+                return createJsonResponse(responsePayload);
+            }
+            throw new Error(`Unexpected request: ${url}`);
+        }
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    // Every session row has the "Topi" source chip
+    const items = [...root.querySelectorAll('.staff-chatlog-item')];
+    assert.equal(items.length, 2);
+    for (const item of items) {
+        const sourceChip = item.querySelector('[data-chatlog-source="topi"]');
+        assert.ok(sourceChip, 'Missing Topi source chip on session row');
+        assert.equal(sourceChip.textContent, 'Topi');
+    }
+
+    // Result line shows "14 sohbet"
+    const countLine = root.querySelector('[data-chatlog-result-count="true"]');
+    assert.ok(countLine);
+    assert.equal(countLine.textContent, '14 sohbet');
+
+    // When total is missing from response, show nothing
+    responsePayload = { items: [SAMPLE_SESSIONS[0]], nextCursor: null };
+    root.querySelector('[data-chatlog-filter="down"]').click();
+    await flushPromises();
+    assert.equal(root.querySelector('[data-chatlog-result-count="true"]'), null);
+});
+
+test('chat filters build exact query strings with only active params, preserve filters on pagination, and reset cursor/list on change', async (context) => {
+    const { dom, root } = createStaffDom(context);
+    const sessionRequests = [];
+
+    const controller = mountChatLogManager(root, {
+        fetcher: async (url) => {
+            const parsed = new URL(String(url), 'https://portal.test');
+            if (parsed.pathname === '/api/staff/chat-stats') {
+                return createJsonResponse(SAMPLE_STATS);
+            }
+            if (parsed.pathname === '/api/staff/chat-sessions') {
+                sessionRequests.push(String(url));
+                const cursor = parsed.searchParams.get('cursor');
+                if (cursor === 'cursor-2') {
+                    return createJsonResponse({
+                        items: [{ ...SAMPLE_SESSIONS[1], id: 'sess-page-2' }],
+                        nextCursor: null,
+                        total: 2
+                    });
+                }
+                return createJsonResponse({
+                    items: [SAMPLE_SESSIONS[0]],
+                    nextCursor: 'cursor-2',
+                    total: 2
+                });
+            }
+            throw new Error(`Unexpected request: ${url}`);
+        }
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    // Initial load sends no query params
+    assert.equal(sessionRequests[0], '/api/staff/chat-sessions');
+
+    // Clear button hidden when nothing is active
+    assert.equal(root.querySelector('[data-action="clear-chatlog-filters"]').hidden, true);
+
+    // Language chips exist
+    for (const lang of ['all', 'tr', 'en', 'ru', 'tk', 'ar']) {
+        assert.ok(root.querySelector(`[data-chatlog-lang="${lang}"]`), `Missing lang chip ${lang}`);
+    }
+
+    // Select lang=tr
+    root.querySelector('[data-chatlog-lang="tr"]').click();
+    await flushPromises();
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions?lang=tr');
+    assert.equal(root.querySelector('[data-action="clear-chatlog-filters"]').hidden, false);
+
+    // Select period=7d
+    const periodSelect = root.querySelector('[data-chatlog-period="true"]');
+    periodSelect.value = '7d';
+    periodSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    await flushPromises();
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions?lang=tr&period=7d');
+
+    // Select filter=down
+    root.querySelector('[data-chatlog-filter="down"]').click();
+    await flushPromises();
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions?filter=down&lang=tr&period=7d');
+
+    // Pagination keeps active filters and appends items
+    root.querySelector('[data-action="load-more-sessions"]').click();
+    await flushPromises();
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions?filter=down&lang=tr&period=7d&cursor=cursor-2');
+    assert.equal(root.querySelectorAll('.staff-chatlog-item').length, 2);
+
+    // Changing language resets cursor and list
+    root.querySelector('[data-chatlog-lang="en"]').click();
+    await flushPromises();
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions?filter=down&lang=en&period=7d');
+    assert.equal(root.querySelectorAll('.staff-chatlog-item').length, 1);
+
+    // Clear button resets all filters and fetches clean endpoint
+    root.querySelector('[data-action="clear-chatlog-filters"]').click();
+    await flushPromises();
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions');
+    assert.equal(root.querySelector('[data-action="clear-chatlog-filters"]').hidden, true);
+    assert.equal(root.querySelector('[data-chatlog-period="true"]').value, 'all');
+});
+
+test('search input debounces 300ms, enforces >=2 chars and max 80 chars, and clears on Escape', async (context) => {
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    const { dom, root } = createStaffDom(context);
+    const sessionRequests = [];
+
+    const controller = mountChatLogManager(root, {
+        fetcher: async (url) => {
+            const parsed = new URL(String(url), 'https://portal.test');
+            if (parsed.pathname === '/api/staff/chat-stats') {
+                return createJsonResponse(SAMPLE_STATS);
+            }
+            if (parsed.pathname === '/api/staff/chat-sessions') {
+                sessionRequests.push(String(url));
+                return createJsonResponse({ items: SAMPLE_SESSIONS, nextCursor: null, total: 2 });
+            }
+            throw new Error(`Unexpected request: ${url}`);
+        }
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+    assert.equal(sessionRequests.length, 1);
+
+    // Single character must not trigger a request even after 300ms
+    const searchInput = root.querySelector('[data-chatlog-search="true"]');
+    assert.equal(searchInput.maxLength, 80);
+    searchInput.value = 'a';
+    searchInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    context.mock.timers.tick(500);
+    await flushPromises();
+    assert.equal(sessionRequests.length, 1);
+
+    // Typing "ik" then "ika" within 300ms sends only one debounced request for "ika"
+    searchInput.value = 'ik';
+    searchInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    context.mock.timers.tick(150);
+    searchInput.value = 'ika';
+    searchInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    context.mock.timers.tick(299);
+    await flushPromises();
+    assert.equal(sessionRequests.length, 1);
+
+    context.mock.timers.tick(1);
+    await flushPromises();
+    assert.equal(sessionRequests.length, 2);
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions?q=ika');
+
+    // Esc in search box clears input and reloads without q
+    const activeSearchInput = root.querySelector('[data-chatlog-search="true"]');
+    activeSearchInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushPromises();
+    assert.equal(sessionRequests.length, 3);
+    assert.equal(sessionRequests.at(-1), '/api/staff/chat-sessions');
+    assert.equal(root.querySelector('[data-chatlog-search="true"]').value, '');
+    assert.equal(root.querySelector('[data-action="clear-chatlog-filters"]').hidden, true);
+});

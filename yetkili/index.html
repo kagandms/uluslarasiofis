@@ -243,8 +243,17 @@
 
                 <section id="view-inquiries" class="view-panel" hidden aria-labelledby="inquiries-title">
                     <h3 id="inquiries-title" class="sr-only" tabindex="-1">Gelen Sorular</h3>
-                    <div id="staff-inquiries-manager"></div>
-                    <section id="staff-chat-history-section" class="staff-chat-history-section" aria-label="Topi ile sohbet geçmişleri">
+                    <div id="staff-inquiry-source-switch" class="staff-source-switch" role="tablist" aria-label="Soru kaynağı">
+                        <button type="button" id="staff-source-tab-form" class="staff-source-tab is-active" role="tab" aria-selected="true" aria-controls="staff-inquiries-manager" tabindex="0" data-inquiry-source-tab="form">
+                            <span class="staff-source-tab-label">Formdan gelen sorular</span>
+                            <span id="staff-source-form-badge" class="staff-source-tab-badge" data-source-form-badge hidden>0</span>
+                        </button>
+                        <button type="button" id="staff-source-tab-topi" class="staff-source-tab" role="tab" aria-selected="false" aria-controls="staff-chat-history-section" tabindex="-1" data-inquiry-source-tab="topi">
+                            <span class="staff-source-tab-label">Topi sohbetleri</span>
+                        </button>
+                    </div>
+                    <div id="staff-inquiries-manager" role="tabpanel" aria-labelledby="staff-source-tab-form"></div>
+                    <section id="staff-chat-history-section" class="staff-chat-history-section" role="tabpanel" aria-labelledby="staff-source-tab-topi" aria-label="Topi ile sohbet geçmişleri" hidden>
                         <div id="staff-chat-logs-manager"></div>
                     </section>
                 </section>

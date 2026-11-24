@@ -1,9 +1,93 @@
-/* Staff "Topi ile sohbet geçmişleri" section under "Gelen Sorular" — reuses inquiries.css tokens and layout patterns */
+/* Staff "Gelen Sorular" source switch and "Topi ile sohbet geçmişleri" section — reuses inquiries.css tokens and layout patterns */
+
+.staff-source-switch {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0.35rem;
+    max-width: 100%;
+    margin-bottom: 1rem;
+    padding: 0.3rem;
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    background: var(--card-bg);
+}
+
+.staff-source-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.95rem;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.staff-source-tab:hover {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.staff-source-tab.is-active,
+.staff-source-tab[aria-selected="true"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+body.dark-mode .staff-source-tab.is-active,
+body.dark-mode .staff-source-tab[aria-selected="true"] {
+    color: #16181c;
+}
+
+.staff-source-tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.staff-source-tab-badge {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding-inline: 0.38rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.staff-source-tab.is-active .staff-source-tab-badge,
+.staff-source-tab[aria-selected="true"] .staff-source-tab-badge {
+    background: rgba(255, 255, 255, 0.22);
+    color: inherit;
+}
+
+body.dark-mode .staff-source-tab-badge {
+    color: #16181c;
+}
+
+body.dark-mode .staff-source-tab.is-active .staff-source-tab-badge,
+body.dark-mode .staff-source-tab[aria-selected="true"] .staff-source-tab-badge {
+    background: rgba(22, 24, 28, 0.18);
+    color: #16181c;
+}
+
+.staff-source-tab-badge[hidden] {
+    display: none !important;
+}
 
 .staff-chat-history-section {
-    margin-top: 2.25rem;
-    padding-top: 2rem;
-    border-top: 1px solid var(--card-border);
     min-width: 0;
     width: 100%;
 }
@@ -103,6 +187,73 @@ body.dark-mode .staff-chatlog-stat-metric.is-down dd {
     font-variant-numeric: tabular-nums;
 }
 
+.staff-chatlog-filters {
+    display: grid;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.staff-chatlog-lang-chip {
+    min-height: 2.2rem;
+    padding: 0.32rem 0.72rem;
+    font-size: 0.84rem;
+}
+
+.staff-chatlog-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.staff-chatlog-select,
+.staff-chatlog-search-input {
+    min-height: 2.45rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+}
+
+.staff-chatlog-select {
+    flex: 0 1 auto;
+    max-width: 100%;
+    cursor: pointer;
+}
+
+.staff-chatlog-search-field {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.staff-chatlog-search-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.staff-chatlog-select:focus-visible,
+.staff-chatlog-search-input:focus-visible,
+.staff-chatlog-clear-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.staff-chatlog-clear-btn[hidden] {
+    display: none;
+}
+
+.staff-chatlog-result-count {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
 .staff-chatlog-item {
     min-width: 0;
 }
@@ -158,6 +309,12 @@ body.dark-mode .staff-chatlog-stat-metric.is-down dd {
     color: var(--text-secondary);
     font-size: 0.75rem;
     font-weight: 650;
+}
+
+.staff-chatlog-badge.is-source-topi {
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--card-border));
+    background: color-mix(in srgb, var(--accent) 12%, var(--card-bg));
+    color: var(--accent);
 }
 
 .staff-chatlog-badge.is-up {
@@ -301,6 +458,24 @@ body.dark-mode .staff-chatlog-badge.is-outcome-handoff {
 }
 
 @media (max-width: 560px) {
+    .staff-source-switch {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+        width: 100%;
+    }
+
+    .staff-source-tab {
+        padding: 0.45rem 0.65rem;
+        font-size: 0.86rem;
+    }
+
+    .staff-chatlog-select,
+    .staff-chatlog-search-field,
+    .staff-chatlog-clear-btn {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+
     .staff-chatlog-detail,
     .staff-chatlog-item-btn,
     .staff-chatlog-bulk-bar,
