@@ -474,3 +474,279 @@ test('GET /api/staff/chat-stats counts today and last7 using Europe/Istanbul day
     assert.deepEqual(payload.today, { answers: 2, up: 1, down: 1 });
     assert.deepEqual(payload.last7, { answers: 4, up: 2, down: 1 });
 });
+
+test('GET /api/staff/chat-sessions enforces 401 with new filter query parameters when unauthenticated', async () => {
+    const { environment, database } = createEnvironment();
+    await seedTurn(database, { sessionId: 'sess-unauth-filter' });
+    const studentCookie = await seedStudentSession(database);
+
+    const path = '/api/staff/chat-sessions?lang=tr&period=7d&q=ikamet&filter=all';
+    const anonymousRes = await worker.fetch(createRequest(path), environment);
+    assert.equal(anonymousRes.status, 401);
+    assert.equal((await anonymousRes.json()).error.code, 'UNAUTHORIZED');
+
+    const studentRes = await worker.fetch(createRequest(path, { cookie: studentCookie }), environment);
+    assert.equal(studentRes.status, 401);
+    assert.equal((await studentRes.json()).error.code, 'UNAUTHORIZED');
+});
+
+test('GET /api/staff/chat-sessions filters by lang and period (including SQLite CURRENT_TIMESTAMP format)', async () => {
+    const { environment, database } = createEnvironment();
+    const reviewerCookie = await seedStaff(environment, database);
+
+    const nowMs = Date.now();
+    const hoursAgo = (h) => new Date(nowMs - h * 3_600_000).toISOString();
+    const daysAgo = (d) => new Date(nowMs - d * 86_400_000).toISOString();
+    const sqliteFormat = (iso) => iso.slice(0, 19).replace('T', ' ');
+
+    await seedTurn(database, { sessionId: 'sess-tr-2h', language: 'tr', nowIso: hoursAgo(2) });
+    await seedTurn(database, { sessionId: 'sess-en-3d', language: 'en', nowIso: daysAgo(3) });
+    await seedTurn(database, { sessionId: 'sess-ru-15d', language: 'ru', nowIso: daysAgo(15) });
+    await seedTurn(database, { sessionId: 'sess-tk-45d', language: 'tk', nowIso: daysAgo(45) });
+    await seedTurn(database, { sessionId: 'sess-ar-5h-sqlite', language: 'ar', nowIso: sqliteFormat(hoursAgo(5)) });
+
+    const fetchList = async (queryString) => {
+        const res = await worker.fetch(
+            createRequest(`/api/staff/chat-sessions${queryString}`, { cookie: reviewerCookie }),
+            environment
+        );
+        assert.equal(res.status, 200, `Expected 200 for ${queryString}`);
+        return res.json();
+    };
+
+    for (const [lang, expectedId] of [
+        ['tr', 'sess-tr-2h'],
+        ['en', 'sess-en-3d'],
+        ['ru', 'sess-ru-15d'],
+        ['tk', 'sess-tk-45d'],
+        ['ar', 'sess-ar-5h-sqlite']
+    ]) {
+        const payload = await fetchList(`?lang=${lang}`);
+        assert.deepEqual(payload.items.map((item) => item.id), [expectedId], `lang=${lang}`);
+        assert.equal(payload.total, 1);
+    }
+
+    const periodAll = await fetchList('?period=all');
+    assert.equal(periodAll.total, 5);
+    assert.equal(periodAll.items.length, 5);
+
+    const period24h = await fetchList('?period=24h');
+    assert.deepEqual(period24h.items.map((item) => item.id).sort(), ['sess-ar-5h-sqlite', 'sess-tr-2h']);
+    assert.equal(period24h.total, 2);
+
+    const period7d = await fetchList('?period=7d');
+    assert.deepEqual(period7d.items.map((item) => item.id).sort(), ['sess-ar-5h-sqlite', 'sess-en-3d', 'sess-tr-2h']);
+    assert.equal(period7d.total, 3);
+
+    const period30d = await fetchList('?period=30d');
+    assert.deepEqual(
+        period30d.items.map((item) => item.id).sort(),
+        ['sess-ar-5h-sqlite', 'sess-en-3d', 'sess-ru-15d', 'sess-tr-2h']
+    );
+    assert.equal(period30d.total, 4);
+
+    // Combined lang + period (AND) returns empty when no session matches both.
+    const emptyCombo = await fetchList('?lang=tk&period=30d');
+    assert.deepEqual(emptyCombo.items, []);
+    assert.equal(emptyCombo.nextCursor, null);
+    assert.equal(emptyCombo.total, 0);
+});
+
+test('GET /api/staff/chat-sessions text search (q) matches user/assistant text, escapes LIKE wildcards, and handles Turkish İ/ı', async () => {
+    const { environment, database } = createEnvironment();
+    const reviewerCookie = await seedStaff(environment, database);
+
+    await seedTurn(database, {
+        sessionId: 'sess-user-ikamet',
+        userText: 'İkamet belgesi nedir?',
+        assistantText: 'Genel bilgi yanıtı.',
+        nowIso: '2026-11-23T09:01:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-assistant-ikamet',
+        userText: 'Merhaba',
+        assistantText: 'Yeni ikamet başvurusu için randevu alın.',
+        nowIso: '2026-11-23T09:02:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-turn2-match',
+        userText: 'İlk soru',
+        assistantText: 'İlk yanıt',
+        nowIso: '2026-11-23T09:03:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-turn2-match',
+        userText: 'Işık sigorta geçerli mi?',
+        assistantText: 'Evet, geçerlidir.',
+        nowIso: '2026-11-23T09:04:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-percent-literal',
+        userText: 'Harç indirimi 50% var mı?',
+        assistantText: 'Hayır.',
+        nowIso: '2026-11-23T09:05:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-percent-nonmatch',
+        userText: '500 TL ödeme yaptım',
+        assistantText: 'Tamam.',
+        nowIso: '2026-11-23T09:06:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-underscore-literal',
+        userText: 'kod_42 ile giriş',
+        assistantText: 'Kontrol ediliyor.',
+        nowIso: '2026-11-23T09:07:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-underscore-nonmatch',
+        userText: 'kodX42 ile giriş',
+        assistantText: 'Kontrol ediliyor.',
+        nowIso: '2026-11-23T09:08:00.000Z'
+    });
+    await seedTurn(database, {
+        sessionId: 'sess-backslash-literal',
+        userText: 'dosya a\\b yolu',
+        assistantText: 'Anlaşıldı.',
+        nowIso: '2026-11-23T09:09:00.000Z'
+    });
+
+    const searchIds = async (q) => {
+        const res = await worker.fetch(
+            createRequest(`/api/staff/chat-sessions?q=${encodeURIComponent(q)}`, { cookie: reviewerCookie }),
+            environment
+        );
+        assert.equal(res.status, 200, `Expected 200 for q=${q}`);
+        const payload = await res.json();
+        assert.equal(payload.total, payload.items.length);
+        return payload.items.map((item) => item.id);
+    };
+
+    // Turkish "İkamet" vs "ikamet" matches both directions (user_text and assistant_text).
+    assert.deepEqual(await searchIds('ikamet'), ['sess-assistant-ikamet', 'sess-user-ikamet']);
+    assert.deepEqual(await searchIds('İkamet'), ['sess-assistant-ikamet', 'sess-user-ikamet']);
+    assert.deepEqual(await searchIds('  ikamet  '), ['sess-assistant-ikamet', 'sess-user-ikamet']);
+
+    // Turkish dotless I/ı and later turn match.
+    assert.deepEqual(await searchIds('ışık'), ['sess-turn2-match']);
+    assert.deepEqual(await searchIds('Işık'), ['sess-turn2-match']);
+
+    // Assistant-only match.
+    assert.deepEqual(await searchIds('randevu alın'), ['sess-assistant-ikamet']);
+
+    // LIKE wildcard escaping: %, _, and \ must match literally.
+    assert.deepEqual(await searchIds('50%'), ['sess-percent-literal']);
+    assert.deepEqual(await searchIds('kod_42'), ['sess-underscore-literal']);
+    assert.deepEqual(await searchIds('a\\b'), ['sess-backslash-literal']);
+
+    // Boundary lengths 2 and 80 are accepted.
+    const minRes = await worker.fetch(
+        createRequest('/api/staff/chat-sessions?q=50', { cookie: reviewerCookie }),
+        environment
+    );
+    assert.equal(minRes.status, 200);
+    const maxRes = await worker.fetch(
+        createRequest(`/api/staff/chat-sessions?q=${'x'.repeat(80)}`, { cookie: reviewerCookie }),
+        environment
+    );
+    assert.equal(maxRes.status, 200);
+    assert.equal((await maxRes.json()).total, 0);
+});
+
+test('GET /api/staff/chat-sessions validates lang, period, and q bounds with 400 VALIDATION_ERROR', async () => {
+    const { environment, database } = createEnvironment();
+    const reviewerCookie = await seedStaff(environment, database);
+
+    for (const invalidPath of [
+        '/api/staff/chat-sessions?lang=de',
+        '/api/staff/chat-sessions?lang=TR',
+        '/api/staff/chat-sessions?lang=all',
+        '/api/staff/chat-sessions?lang=%20%20',
+        '/api/staff/chat-sessions?period=1h',
+        '/api/staff/chat-sessions?period=90d',
+        '/api/staff/chat-sessions?period=toString',
+        '/api/staff/chat-sessions?period=%20',
+        '/api/staff/chat-sessions?q=a',
+        '/api/staff/chat-sessions?q=%20%20',
+        `/api/staff/chat-sessions?q=${'a'.repeat(81)}`
+    ]) {
+        const res = await worker.fetch(createRequest(invalidPath, { cookie: reviewerCookie }), environment);
+        assert.equal(res.status, 400, `Expected 400 for ${invalidPath}`);
+        assert.equal((await res.json()).error.code, 'VALIDATION_ERROR', `Expected VALIDATION_ERROR for ${invalidPath}`);
+    }
+});
+
+test('GET /api/staff/chat-sessions combines filter, lang, period, q, and cursor pagination with stable total', async () => {
+    const { environment, database } = createEnvironment();
+    const reviewerCookie = await seedStaff(environment, database);
+
+    const nowMs = Date.now();
+    // 27 sessions matching ALL filters: filter=down, lang=tr, period=7d, q=vize
+    for (let i = 1; i <= 27; i += 1) {
+        const iso = new Date(nowMs - (30 - i) * 60_000).toISOString();
+        await seedTurn(database, {
+            sessionId: `match-${String(i).padStart(2, '0')}`,
+            language: 'tr',
+            userText: `Vize uzatma sorusu ${i}`,
+            assistantText: 'Vize işlemleri hakkında bilgi.',
+            outcome: 'ok',
+            feedback: 'down',
+            nowIso: iso
+        });
+    }
+
+    // Distractors that fail exactly one criterion each:
+    await seedTurn(database, {
+        sessionId: 'miss-filter',
+        language: 'tr',
+        userText: 'Vize uzatma sorusu',
+        feedback: 'up',
+        nowIso: new Date(nowMs - 5 * 60_000).toISOString()
+    });
+    await seedTurn(database, {
+        sessionId: 'miss-lang',
+        language: 'en',
+        userText: 'Vize extension question',
+        feedback: 'down',
+        nowIso: new Date(nowMs - 5 * 60_000).toISOString()
+    });
+    await seedTurn(database, {
+        sessionId: 'miss-period',
+        language: 'tr',
+        userText: 'Vize eski soru',
+        feedback: 'down',
+        nowIso: new Date(nowMs - 10 * 86_400_000).toISOString()
+    });
+    await seedTurn(database, {
+        sessionId: 'miss-q',
+        language: 'tr',
+        userText: 'Yurt kaydı nasıl yapılır?',
+        assistantText: 'Yurt başvuru rehberi.',
+        feedback: 'down',
+        nowIso: new Date(nowMs - 5 * 60_000).toISOString()
+    });
+
+    const baseQuery = 'filter=down&lang=tr&period=7d&q=vize';
+    const page1Res = await worker.fetch(
+        createRequest(`/api/staff/chat-sessions?${baseQuery}`, { cookie: reviewerCookie }),
+        environment
+    );
+    assert.equal(page1Res.status, 200);
+    const page1 = await page1Res.json();
+    assert.equal(page1.total, 27);
+    assert.equal(page1.items.length, 25);
+    assert.equal(page1.items[0].id, 'match-27');
+    assert.equal(page1.items[24].id, 'match-03');
+    assert.ok(page1.nextCursor);
+
+    // Page 2 with cursor: total ignores cursor and stays 27.
+    const page2Res = await worker.fetch(
+        createRequest(`/api/staff/chat-sessions?${baseQuery}&cursor=${encodeURIComponent(page1.nextCursor)}`, { cookie: reviewerCookie }),
+        environment
+    );
+    assert.equal(page2Res.status, 200);
+    const page2 = await page2Res.json();
+    assert.equal(page2.total, 27);
+    assert.deepEqual(page2.items.map((item) => item.id), ['match-02', 'match-01']);
+    assert.equal(page2.nextCursor, null);
+});

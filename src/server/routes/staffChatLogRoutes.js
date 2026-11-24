@@ -12,9 +12,18 @@ import { requireMethod, requireSameOrigin } from './shared.js';
 
 const STAFF_ROLES = Object.freeze(['reviewer', 'admin']);
 const ALLOWED_FILTERS = Object.freeze(['all', 'down', 'handoff', 'refused', 'fallback']);
+const ALLOWED_LANGUAGES = Object.freeze(['tr', 'en', 'ru', 'tk', 'ar']);
 const OLDER_THAN_DAYS_MIN = 1;
 const OLDER_THAN_DAYS_MAX = 3650;
 const DAY_MS = 86_400_000;
+const PERIOD_DURATION_MS = Object.freeze({
+    all: null,
+    '24h': DAY_MS,
+    '7d': 7 * DAY_MS,
+    '30d': 30 * DAY_MS
+});
+const SEARCH_QUERY_MIN_CHARS = 2;
+const SEARCH_QUERY_MAX_CHARS = 80;
 const ID_DISALLOWED_CHAR_PATTERN = /[\u0000-\u001F\u007F-\u009F\s]/u;
 
 function createChatLogsRepo(environment) {
@@ -35,11 +44,42 @@ function validateSessionId(rawId) {
     return trimmed;
 }
 
-function validateListQuery(searchParams) {
+function validateListQuery(searchParams, now = new Date()) {
     const rawFilter = searchParams.get('filter');
     const filter = rawFilter === null || rawFilter === '' ? 'all' : rawFilter.trim();
     if (!ALLOWED_FILTERS.includes(filter)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Geçersiz süzgeç parametresi.');
+    }
+
+    const rawLang = searchParams.get('lang');
+    let lang = null;
+    if (rawLang !== null && rawLang !== '') {
+        const trimmedLang = rawLang.trim();
+        if (!ALLOWED_LANGUAGES.includes(trimmedLang)) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Geçersiz dil parametresi.');
+        }
+        lang = trimmedLang;
+    }
+
+    const rawPeriod = searchParams.get('period');
+    const period = rawPeriod === null || rawPeriod === '' ? 'all' : rawPeriod.trim();
+    if (!Object.hasOwn(PERIOD_DURATION_MS, period)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Geçersiz dönem parametresi.');
+    }
+    const periodDurationMs = PERIOD_DURATION_MS[period];
+    const sinceIso = periodDurationMs === null
+        ? null
+        : new Date(now.getTime() - periodDurationMs).toISOString();
+
+    const rawQuery = searchParams.get('q');
+    let query = null;
+    if (rawQuery !== null && rawQuery !== '') {
+        const trimmedQuery = rawQuery.trim();
+        const queryLength = [...trimmedQuery].length;
+        if (queryLength < SEARCH_QUERY_MIN_CHARS || queryLength > SEARCH_QUERY_MAX_CHARS) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Arama metni 2 ile 80 karakter arasında olmalıdır.');
+        }
+        query = trimmedQuery;
     }
 
     const rawCursor = searchParams.get('cursor');
@@ -50,7 +90,7 @@ function validateListQuery(searchParams) {
             throw new ApiError(400, 'VALIDATION_ERROR', 'Sayfalama imleci geçersiz.');
         }
     }
-    return { filter, cursor };
+    return { filter, lang, sinceIso, query, cursor };
 }
 
 function validateOlderThanDays(searchParams) {
@@ -80,17 +120,17 @@ function getIstanbulStatsBoundaries(now = new Date()) {
 }
 
 /**
- * Yetkili personel için sohbet oturumlarını imleçli sayfalama ve süzgeçle listeler.
+ * Yetkili personel için sohbet oturumlarını imleçli sayfalama ve süzgeçlerle listeler.
  * @param {Request} request Worker isteği.
  * @param {object} environment Worker bağlamları.
- * @returns {Promise<{items: Array<object>, nextCursor: string|null}>} Oturum listesi ve sonraki imleç.
+ * @returns {Promise<{items: Array<object>, nextCursor: string|null, total: number}>} Oturum listesi, sonraki imleç ve toplam eşleşme sayısı.
  */
 export async function listStaffChatSessions(request, environment) {
     requireMethod(request, 'GET');
     await requireStaff(request, environment, STAFF_ROLES);
     const { searchParams } = new URL(request.url);
-    const { filter, cursor } = validateListQuery(searchParams);
-    return createChatLogsRepo(environment).listSessions({ filter, cursor, limit: 25 });
+    const { filter, lang, sinceIso, query, cursor } = validateListQuery(searchParams, new Date());
+    return createChatLogsRepo(environment).listSessions({ filter, lang, sinceIso, query, cursor, limit: 25 });
 }
 
 /**
