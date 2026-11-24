@@ -248,8 +248,8 @@ class RunnerPollingLoopTests(unittest.TestCase):
                 active_window_seconds=180,
             )
             clock = FakeClock(0.0)
-            # 18 idle waits of 10 s => t = 0..180 s (19 polls)
-            stop_event = FakeStopEvent(clock, max_waits=18)
+            # 19 idle waits of 10 s; event is set after the 19th wait, so polls run at t = 0..180 s (19 polls)
+            stop_event = FakeStopEvent(clock, max_waits=19)
             transport = FakeTransport(clock)
             ready = make_ready_health()
 
