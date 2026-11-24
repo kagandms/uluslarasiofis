@@ -46,8 +46,9 @@ function faceErrorMessage(errorCode) {
  * @param {() => Array<{ dataUrl: string, text: string }>} deps.getPages - Kırpıcıdaki mevcut belge sayfalarını döndürür.
  * @param {() => number} deps.getPageIndex - Seçili sayfa dizinini döndürür.
  * @param {(index: number) => Promise<boolean>} [deps.selectPage] - Kırpıcıyı belirtilen sayfa dizinine geçirir; başarısızsa `false` döner.
+ * @param {(index: number, rotation: number) => Promise<{ dataUrl: string } | false>} [deps.rotatePage] - Döndürülmüş sayfayı kalıcı olarak düzeltip kırpıcıya yeniden yükler.
  * @param {() => Promise<boolean>} deps.selectNextSource - Bir sonraki belge kaynağına geçer; kaynak yoksa `false` döner.
- * @param {(imageDataUrl: string, aspectRatio: number) => Promise<{ x: number, y: number, width: number, height: number } | { error: string }>} deps.detectFace - Yüz kırpma kutusunu hesaplar.
+ * @param {(imageDataUrl: string, aspectRatio: number, options?: { tryRotations?: boolean }) => Promise<{ x: number, y: number, width: number, height: number, rotation?: number } | { error: string }>} deps.detectFace - Yüz kırpma kutusunu hesaplar.
  * @param {(input: { text: string, studentName: string, passportNo: string }) => { isPassport: boolean, reason?: string }} deps.evaluatePage - Pasaport sayfası doğrulamasını yapar.
  * @param {(page: { dataUrl?: string, text?: string }) => Promise<string>} [deps.ensurePageText] - Metni boş sayfalarda OCR ile metin üretir.
  * @param {(box: { x: number, y: number, width: number, height: number }) => boolean | void} deps.applyCrop - Hesaplanan kırpma kutusunu uygular.
@@ -307,12 +308,33 @@ export function createYknAutoFlow(deps) {
                 }
             }
 
-            const faceResult = await deps.detectFace(validPage.dataUrl, aspectRatio);
+            let faceResult = await deps.detectFace(validPage.dataUrl, aspectRatio, { tryRotations: true });
             if (!isRunCurrent(myRunId)) return;
 
             if (!faceResult || faceResult.error) {
                 cancel(faceErrorMessage(faceResult?.error));
                 return;
+            }
+
+            if (faceResult.rotation === 90 || faceResult.rotation === 180 || faceResult.rotation === 270) {
+                if (typeof deps.rotatePage !== 'function') {
+                    cancel(faceErrorMessage('no-face'));
+                    return;
+                }
+                const rotation = faceResult.rotation;
+                const rotatedPage = await deps.rotatePage(validPageIndex, rotation);
+                if (!isRunCurrent(myRunId)) return;
+                if (!rotatedPage || typeof rotatedPage.dataUrl !== 'string' || !rotatedPage.dataUrl) {
+                    cancel(faceErrorMessage('no-face'));
+                    return;
+                }
+                safeReport(`Pasaport sayfası ${rotation}° döndürülüp düzeltildi.`, 'info');
+                faceResult = await deps.detectFace(rotatedPage.dataUrl, aspectRatio);
+                if (!isRunCurrent(myRunId)) return;
+                if (!faceResult || faceResult.error) {
+                    cancel(faceErrorMessage(faceResult?.error));
+                    return;
+                }
             }
 
             const gender = readText(deps.getGender?.());

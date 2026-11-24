@@ -318,9 +318,10 @@ const CROPPER_PAGE_SWITCH_TIMEOUT_MS = 5000;
  * Kırpıcıyı belirtilen sayfa dizinine geçirir ve yeni sayfanın hazır olmasını bekler.
  *
  * @param {number} index - Hedef sayfa dizini (0 tabanlı).
+ * @param {{ force?: boolean }} [options={}] - Seçenekler; `force: true` mevcut sayfayı yeniden yükler.
  * @returns {Promise<boolean>} Sayfa başarıyla değiştirildiyse `true`, aksi halde `false`.
  */
-export function selectCropperPage(index) {
+export function selectCropperPage(index, { force = false } = {}) {
     if (!Number.isInteger(index) || !cropperPages || index < 0 || index >= cropperPages.length) {
         return Promise.resolve(false);
     }
@@ -333,7 +334,7 @@ export function selectCropperPage(index) {
     if (!passportCropperInstance && !image) {
         return Promise.resolve(false);
     }
-    if (index === currentCropperPageIndex && passportCropperInstance) {
+    if (!force && index === currentCropperPageIndex && passportCropperInstance) {
         return Promise.resolve(true);
     }
 
@@ -367,6 +368,29 @@ export function selectCropperPage(index) {
             finish(false);
         }
     });
+}
+
+/**
+ * Güncellenmiş sayfa görselini kırpıcıya yeniden yükler.
+ *
+ * @param {number} index - Yenilenecek sayfa dizini (0 tabanlı).
+ * @param {string} [dataUrl] - Sayfa nesnesine yazılacak yeni görsel data URL'i.
+ * @returns {Promise<boolean>} Sayfa yeniden yüklendiyse `true`, aksi halde `false`.
+ */
+export function reloadCropperPage(index, dataUrl) {
+    if (!Number.isInteger(index) || !cropperPages || index < 0 || index >= cropperPages.length) {
+        return Promise.resolve(false);
+    }
+    if (typeof dataUrl === 'string' && dataUrl) {
+        const pageItem = cropperPages[index];
+        if (pageItem && typeof pageItem === 'object') {
+            pageItem.dataUrl = dataUrl;
+            pageItem.rotate = 0;
+        } else {
+            cropperPages[index] = { dataUrl, pageNumber: index + 1, rotate: 0 };
+        }
+    }
+    return selectCropperPage(index, { force: true });
 }
 
 function formatDateDisplay(isoDate) {

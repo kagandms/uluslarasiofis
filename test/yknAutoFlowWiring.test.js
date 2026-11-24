@@ -817,3 +817,89 @@ test('selectCropperPage mevcut sayfa değiştirme akışını kullanarak hedef s
         env.cleanup();
     }
 });
+
+test('Döndürülmüş sayfa sözleşmesi: passportCropperModal reloadCropperPage dışa aktarır ve yknManager rotatePage bağlar', () => {
+    assert.match(cropperModalSource, /export\s+function\s+reloadCropperPage\s*\(/);
+    assert.match(
+        yknManagerSource,
+        /import\s*\{[\s\S]*?\breloadCropperPage\b[\s\S]*?\}\s*from\s*['"]\.\.\/ui\/passportCropperModal\.js['"]/
+    );
+    assert.match(
+        yknManagerSource,
+        /async\s+function\s+rotateAutoFlowPage\s*\([\s\S]*?rotatePassportCanvas\s*\([\s\S]*?toDataURL\(\s*['"]image\/jpeg['"]\s*,\s*0\.9\s*\)[\s\S]*?reloadCropperPage\s*\(/
+    );
+    assert.match(
+        yknManagerSource,
+        /createYknAutoFlow\s*\(\s*\{[\s\S]*?rotatePage\s*:\s*rotateAutoFlowPage/
+    );
+});
+
+test('reloadCropperPage mevcut sayfayı yeni görselle kırpıcıya yeniden yükler ve rotate değerini sıfırlar', async () => {
+    const env = createDomEnvironment();
+    try {
+        const {
+            openPassportCropper,
+            closePassportCropper,
+            selectCropperPage,
+            reloadCropperPage
+        } = await import('../src/ui/passportCropperModal.js');
+
+        assert.equal(await reloadCropperPage(0, 'data:image/jpeg;base64,NEW'), false);
+
+        const replacedUrls = [];
+        const readyEvents = [];
+        env.window.addEventListener('ykn:cropper-ready', (e) => readyEvents.push(e.detail));
+
+        env.window.Cropper = class MockCropper {
+            constructor(_image, options) {
+                this.options = options;
+                queueMicrotask(() => {
+                    this.options.ready?.();
+                });
+            }
+            getImageData() { return { rotate: 0 }; }
+            rotateTo() {}
+            replace(src) {
+                replacedUrls.push(src);
+                queueMicrotask(() => {
+                    this.options.ready?.();
+                });
+            }
+            destroy() {}
+        };
+
+        const pages = [
+            { dataUrl: 'data:image/jpeg;base64,ORIG_0', pageNumber: 1, rotate: 90 }
+        ];
+
+        openPassportCropper({
+            imageSrc: pages[0].dataUrl,
+            pages,
+            initialPageIndex: 0,
+            studentName: 'TEST OGRENCI',
+            passportNo: 'AB12345'
+        });
+
+        await Promise.resolve();
+        assert.equal(readyEvents.length, 1);
+
+        // selectCropperPage(0) olmadan replace tetiklenmez
+        assert.equal(await selectCropperPage(0), true);
+        assert.equal(replacedUrls.length, 0);
+
+        // reloadCropperPage(0, newUrl) mevcut sayfa nesnesini günceller ve replace ile yeniden yükler
+        assert.equal(await reloadCropperPage(0, 'data:image/jpeg;base64,UPRIGHT_0'), true);
+        assert.equal(pages[0].dataUrl, 'data:image/jpeg;base64,UPRIGHT_0');
+        assert.equal(pages[0].rotate, 0);
+        assert.deepEqual(replacedUrls, ['data:image/jpeg;base64,UPRIGHT_0']);
+        assert.equal(readyEvents.length, 2);
+        assert.equal(readyEvents[1].pageIndex, 0);
+
+        assert.equal(await reloadCropperPage(-1, 'data:image/jpeg;base64,X'), false);
+        assert.equal(await reloadCropperPage(5, 'data:image/jpeg;base64,X'), false);
+
+        closePassportCropper();
+    } finally {
+        env.cleanup();
+    }
+});

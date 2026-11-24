@@ -26,6 +26,7 @@ import {
     setCropperDefaults,
     getCropperGender,
     selectCropperPage,
+    reloadCropperPage,
     syncPassportCropperSilentState
 } from '../ui/passportCropperModal.js';
 import { scorePassportPageText } from '../utils/passportPageScore.js';
@@ -1012,6 +1013,62 @@ export function initYknManager() {
         }
     }
 
+    function getActiveCropPages() {
+        return Array.isArray(activeCropSourcePages) && activeCropSourcePages.length > 0
+            ? activeCropSourcePages
+            : (currentStudentData?.passportPages || []);
+    }
+
+    async function rotateAutoFlowPage(pageIndex, rotation) {
+        if (rotation !== 90 && rotation !== 180 && rotation !== 270) {
+            return false;
+        }
+        const pages = getActiveCropPages();
+        const page = Number.isInteger(pageIndex) && pageIndex >= 0 && pageIndex < pages.length
+            ? pages[pageIndex]
+            : null;
+        if (!page || typeof page.dataUrl !== 'string' || !page.dataUrl) {
+            return false;
+        }
+
+        let sourceCanvas = null;
+        let rotatedCanvas = null;
+        try {
+            sourceCanvas = await imageToCanvas(page.dataUrl);
+            if (!sourceCanvas || sourceCanvas.width <= 0 || sourceCanvas.height <= 0) {
+                return false;
+            }
+            rotatedCanvas = rotatePassportCanvas(sourceCanvas, rotation);
+            const rotatedDataUrl = rotatedCanvas.toDataURL('image/jpeg', 0.9);
+            if (typeof rotatedDataUrl !== 'string' || !rotatedDataUrl) {
+                return false;
+            }
+            page.dataUrl = rotatedDataUrl;
+            page.rotate = 0;
+            if (
+                currentStudentData &&
+                Array.isArray(currentStudentData.passportPages) &&
+                currentStudentData.passportPages[pageIndex] === page &&
+                currentStudentData.bestPassportPageIndex === pageIndex
+            ) {
+                currentStudentData.passportImageSrc = rotatedDataUrl;
+            }
+            const reloaded = await reloadCropperPage(pageIndex, rotatedDataUrl);
+            return reloaded ? page : false;
+        } catch {
+            return false;
+        } finally {
+            if (rotatedCanvas) {
+                rotatedCanvas.width = 0;
+                rotatedCanvas.height = 0;
+            }
+            if (sourceCanvas) {
+                sourceCanvas.width = 0;
+                sourceCanvas.height = 0;
+            }
+        }
+    }
+
     const autoFlow = createYknAutoFlow({
         enabled: isAutoFlowEnabled,
         click: (id) => {
@@ -1021,13 +1078,10 @@ export function initYknManager() {
                 btnCopy?.click();
             }
         },
-        getPages: () => (
-            Array.isArray(activeCropSourcePages) && activeCropSourcePages.length > 0
-                ? activeCropSourcePages
-                : (currentStudentData?.passportPages || [])
-        ),
+        getPages: getActiveCropPages,
         getPageIndex: () => latestCropperPageIndex,
         selectPage: selectCropperPage,
+        rotatePage: rotateAutoFlowPage,
         selectNextSource: selectNextAutoCropSource,
         detectFace: detectFaceCrop,
         evaluatePage: evaluatePassportPage,

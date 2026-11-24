@@ -13,6 +13,10 @@ const TILE_MIN_LONG_SIDE = 640;
 const TILE_MAX_UPSCALE = 3;
 const TILE_BORDER_MARGIN_RATIO = 0.02;
 const TILE_DUPLICATE_IOU_THRESHOLD = 0.3;
+const ROTATION_SEARCH_ANGLES = [90, 270, 180];
+// Toplam dedektör çağrısı üst sınırı:
+// Tam görüntüde en fazla 4 çağrı (1 dikey + 3 döndürülmüş [90°, 270°, 180°]);
+// karo yedek aramasında dikeyde en fazla 13 karo (2x2 + 3x3) ve döndürülmüşlerde en fazla 3 x 13 karo.
 
 function isValidBoundingBox(box) {
     return Boolean(
@@ -257,23 +261,20 @@ function canCreateDefaultTileSource() {
 }
 
 /**
- * Verilen görüntü bölgesini ölçekleyerek geçici bir 2D canvas üzerine çizer.
+ * Verilen boyutlarda 2D canvas ve bağlamını oluşturur.
  *
- * @param {unknown} source - Çizilebilir kaynak görüntü.
- * @param {{ sx: number, sy: number, sw: number, sh: number, scale: number }} region - Kaynak karo bölgesi ve ölçek faktörü.
- * @returns {OffscreenCanvas | HTMLCanvasElement | null} Çizilmiş canvas veya 2D bağlam yoksa null.
+ * @param {number} width - Hedef genişlik (piksel).
+ * @param {number} height - Hedef yükseklik (piksel).
+ * @returns {{ canvas: OffscreenCanvas | HTMLCanvasElement, ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D } | null} Oluşturulan canvas ve 2D bağlamı veya API yoksa null.
  */
-function createDefaultTileCanvas(source, { sx, sy, sw, sh, scale }) {
-    const targetWidth = Math.max(1, Math.round(sw * scale));
-    const targetHeight = Math.max(1, Math.round(sh * scale));
-
+function createCanvas2D(width, height) {
     let canvas = null;
     if (typeof OffscreenCanvas === 'function') {
-        canvas = new OffscreenCanvas(targetWidth, targetHeight);
+        canvas = new OffscreenCanvas(width, height);
     } else if (typeof document === 'object' && document !== null && typeof document.createElement === 'function') {
         canvas = document.createElement('canvas');
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
+        canvas.width = width;
+        canvas.height = height;
     }
 
     if (!canvas || typeof canvas.getContext !== 'function') {
@@ -287,8 +288,66 @@ function createDefaultTileCanvas(source, { sx, sy, sw, sh, scale }) {
         return null;
     }
 
+    return { canvas, ctx };
+}
+
+/**
+ * Verilen görüntü bölgesini ölçekleyerek geçici bir 2D canvas üzerine çizer.
+ *
+ * @param {unknown} source - Çizilebilir kaynak görüntü.
+ * @param {{ sx: number, sy: number, sw: number, sh: number, scale: number }} region - Kaynak karo bölgesi ve ölçek faktörü.
+ * @returns {OffscreenCanvas | HTMLCanvasElement | null} Çizilmiş canvas veya 2D bağlam yoksa null.
+ */
+function createDefaultTileCanvas(source, { sx, sy, sw, sh, scale }) {
+    const targetWidth = Math.max(1, Math.round(sw * scale));
+    const targetHeight = Math.max(1, Math.round(sh * scale));
+    const created = createCanvas2D(targetWidth, targetHeight);
+    if (!created) {
+        return null;
+    }
+    const { canvas, ctx } = created;
+
     try {
         ctx.drawImage(source, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+        return canvas;
+    } catch (error) {
+        canvas.width = 0;
+        canvas.height = 0;
+        throw error;
+    }
+}
+
+/**
+ * Kaynak görüntüyü saat yönünde `degrees` (90, 180 veya 270) döndürerek geçici bir 2D canvas üretir.
+ *
+ * @param {unknown} source - Çizilebilir kaynak görüntü.
+ * @param {number} degrees - Saat yönünde döndürme açısı (90, 180 veya 270).
+ * @returns {OffscreenCanvas | HTMLCanvasElement | null} Döndürülmüş canvas veya API yoksa null.
+ */
+function createDefaultRotatedCanvas(source, degrees) {
+    const srcWidth = Math.floor(source?.naturalWidth || source?.width || 0);
+    const srcHeight = Math.floor(source?.naturalHeight || source?.height || 0);
+    if (!Number.isFinite(srcWidth) || !Number.isFinite(srcHeight) || srcWidth <= 0 || srcHeight <= 0) {
+        return null;
+    }
+
+    const isQuarterTurn = degrees === 90 || degrees === 270;
+    const targetWidth = isQuarterTurn ? srcHeight : srcWidth;
+    const targetHeight = isQuarterTurn ? srcWidth : srcHeight;
+    const created = createCanvas2D(targetWidth, targetHeight);
+    if (!created) {
+        return null;
+    }
+    const { canvas, ctx } = created;
+
+    try {
+        if (typeof ctx.translate === 'function') {
+            ctx.translate(targetWidth / 2, targetHeight / 2);
+        }
+        if (typeof ctx.rotate === 'function') {
+            ctx.rotate((degrees * Math.PI) / 180);
+        }
+        ctx.drawImage(source, -srcWidth / 2, -srcHeight / 2, srcWidth, srcHeight);
         return canvas;
     } catch (error) {
         canvas.width = 0;
@@ -395,14 +454,174 @@ async function detectFacesInTiles(detector, source, imgWidth, imgHeight, options
     return { boxes: [] };
 }
 
+function extractValidFaces(faces) {
+    const valid = [];
+    for (const face of faces) {
+        const box = face?.boundingBox;
+        if (!isValidBoundingBox(box)) {
+            continue;
+        }
+        valid.push({
+            box,
+            score: Number.isFinite(face?.score) ? face.score : 0
+        });
+    }
+    return valid;
+}
+
+function resolveCropFromBoxes(boxes, imgWidth, imgHeight, aspectRatio) {
+    const sorted = [...boxes].sort((a, b) => (b.width * b.height) - (a.width * a.height));
+
+    if (sorted.length >= 2) {
+        const largestArea = sorted[0].width * sorted[0].height;
+        const secondLargestArea = sorted[1].width * sorted[1].height;
+        if (largestArea < secondLargestArea * DOMINANT_FACE_AREA_RATIO) {
+            return { error: 'multiple-faces' };
+        }
+    }
+
+    return computeCropBox(sorted[0], imgWidth, imgHeight, aspectRatio);
+}
+
+function resolveRotatedDescriptor(created, degrees, imgWidth, imgHeight) {
+    if (!created) {
+        return null;
+    }
+    const isQuarterTurn = degrees === 90 || degrees === 270;
+    const fallbackWidth = isQuarterTurn ? imgHeight : imgWidth;
+    const fallbackHeight = isQuarterTurn ? imgWidth : imgHeight;
+
+    const hasWrapper = typeof created === 'object' && 'source' in created && created.source != null;
+    const rotSource = hasWrapper ? created.source : created;
+    const rawWidth = Number(created.width);
+    const rawHeight = Number(created.height);
+
+    return {
+        degrees,
+        source: rotSource,
+        width: Number.isFinite(rawWidth) && rawWidth > 0 ? Math.floor(rawWidth) : fallbackWidth,
+        height: Number.isFinite(rawHeight) && rawHeight > 0 ? Math.floor(rawHeight) : fallbackHeight
+    };
+}
+
+/**
+ * Dikey arama yüz bulamadığında görüntüyü 90°, 270°, 180° döndürerek yüz arar.
+ * Tam görüntü araması üç açının tamamında çalıştırılıp en yüksek skora (eşitlikte büyük alana)
+ * sahip açıyı seçer; hiçbiri bulamazsa karo yedek araması ilk geçerli açıda durur.
+ */
+async function detectRotatedFaceCrop(detector, source, imgWidth, imgHeight, aspectRatio, options) {
+    const customRotator = typeof options?.createRotatedSource === 'function' ? options.createRotatedSource : null;
+    if (!customRotator && !canCreateDefaultTileSource()) {
+        return { error: 'no-face' };
+    }
+
+    const ownedCanvases = [];
+    const rotatedEntries = [];
+
+    try {
+        let bestFullCandidate = null;
+
+        for (const degrees of ROTATION_SEARCH_ANGLES) {
+            let descriptor = null;
+            if (customRotator) {
+                const created = await customRotator(source, degrees);
+                descriptor = resolveRotatedDescriptor(created, degrees, imgWidth, imgHeight);
+            } else {
+                const canvas = createDefaultRotatedCanvas(source, degrees);
+                if (canvas) {
+                    ownedCanvases.push(canvas);
+                    descriptor = resolveRotatedDescriptor(canvas, degrees, imgWidth, imgHeight);
+                }
+            }
+
+            if (!descriptor) {
+                continue;
+            }
+            rotatedEntries.push(descriptor);
+
+            const faces = await detector.detect(descriptor.source);
+            if (!Array.isArray(faces)) {
+                return { error: 'unavailable' };
+            }
+
+            const validFaces = extractValidFaces(faces);
+            if (validFaces.length === 0) {
+                continue;
+            }
+
+            const bestScore = Math.max(...validFaces.map((f) => f.score));
+            const largestArea = Math.max(...validFaces.map((f) => f.box.width * f.box.height));
+
+            if (
+                !bestFullCandidate ||
+                bestScore > bestFullCandidate.bestScore ||
+                (bestScore === bestFullCandidate.bestScore && largestArea > bestFullCandidate.largestArea)
+            ) {
+                bestFullCandidate = {
+                    descriptor,
+                    boxes: validFaces.map((f) => f.box),
+                    bestScore,
+                    largestArea
+                };
+            }
+        }
+
+        if (bestFullCandidate) {
+            const cropOrError = resolveCropFromBoxes(
+                bestFullCandidate.boxes,
+                bestFullCandidate.descriptor.width,
+                bestFullCandidate.descriptor.height,
+                aspectRatio
+            );
+            if (cropOrError.error) {
+                return cropOrError;
+            }
+            return { ...cropOrError, rotation: bestFullCandidate.descriptor.degrees };
+        }
+
+        // Tam görüntüde hiçbir açı yüz vermediyse karo yedek aramasına geç ve ilk bulguda dur.
+        for (const descriptor of rotatedEntries) {
+            const tileResult = await detectFacesInTiles(
+                detector,
+                descriptor.source,
+                descriptor.width,
+                descriptor.height,
+                options
+            );
+            if (tileResult.error) {
+                return { error: tileResult.error };
+            }
+            if (tileResult.boxes.length > 0) {
+                const cropOrError = resolveCropFromBoxes(
+                    tileResult.boxes,
+                    descriptor.width,
+                    descriptor.height,
+                    aspectRatio
+                );
+                if (cropOrError.error) {
+                    return cropOrError;
+                }
+                return { ...cropOrError, rotation: descriptor.degrees };
+            }
+        }
+
+        return { error: 'no-face' };
+    } finally {
+        for (const canvas of ownedCanvases) {
+            canvas.width = 0;
+            canvas.height = 0;
+        }
+    }
+}
+
 /**
  * Pasaport fotoğrafında yüzü algılar ve `aspectRatio` oranına uygun, görüntü sınırları içinde
  * baş + omuz paylı piksel kırpma kutusu döndürür.
  *
  * @param {string} imageDataUrl - Pasaport sayfası görüntü data URL'i.
  * @param {number} aspectRatio - Hedef en/boy oranı (genişlik / yükseklik).
- * @param {{ detector?: { detect: (source: unknown) => Promise<Array<{ boundingBox: { x: number, y: number, width: number, height: number } }>> } | null, loadImage?: (dataUrl: string) => Promise<{ width: number, height: number, source: unknown }>, loadFallbackDetector?: () => Promise<{ detect: (source: unknown) => Promise<Array<{ boundingBox: { x: number, y: number, width: number, height: number } }>> } | null>, createTileSource?: (source: unknown, region: { sx: number, sy: number, sw: number, sh: number, scale: number }) => unknown }} [options={}] - Test amaçlı bağımlılık enjeksiyonu; `createTileSource` ölçeklenmiş karo kaynağı üretmek için kullanılabilir.
- * @returns {Promise<{ x: number, y: number, width: number, height: number } | { error: 'no-face' | 'multiple-faces' | 'unavailable' }>} Kırpma kutusu veya hata kodu.
+ * @param {{ detector?: { detect: (source: unknown) => Promise<Array<{ boundingBox: { x: number, y: number, width: number, height: number }, score?: number }>> } | null, loadImage?: (dataUrl: string) => Promise<{ width: number, height: number, source: unknown }>, loadFallbackDetector?: () => Promise<{ detect: (source: unknown) => Promise<Array<{ boundingBox: { x: number, y: number, width: number, height: number }, score?: number }>> } | null>, createTileSource?: (source: unknown, region: { sx: number, sy: number, sw: number, sh: number, scale: number }) => unknown, tryRotations?: boolean, createRotatedSource?: (source: unknown, degrees: number) => unknown }} [options={}] - Test ve döndürme seçenekleri.
+ * @returns {Promise<{ x: number, y: number, width: number, height: number, rotation?: number } | { error: 'no-face' | 'multiple-faces' | 'unavailable' }>} Kırpma kutusu veya hata kodu.
  */
 export async function detectFaceCrop(imageDataUrl, aspectRatio, options = {}) {
     if (
@@ -435,9 +654,7 @@ export async function detectFaceCrop(imageDataUrl, aspectRatio, options = {}) {
             return { error: 'unavailable' };
         }
 
-        let validBoxes = faces
-            .map((face) => face?.boundingBox)
-            .filter(isValidBoundingBox);
+        let validBoxes = extractValidFaces(faces).map((f) => f.box);
 
         if (validBoxes.length === 0) {
             const tileResult = await detectFacesInTiles(detector, loaded.source, imgWidth, imgHeight, options);
@@ -447,21 +664,15 @@ export async function detectFaceCrop(imageDataUrl, aspectRatio, options = {}) {
             validBoxes = tileResult.boxes;
         }
 
-        if (validBoxes.length === 0) {
-            return { error: 'no-face' };
+        if (validBoxes.length > 0) {
+            return resolveCropFromBoxes(validBoxes, imgWidth, imgHeight, aspectRatio);
         }
 
-        validBoxes.sort((a, b) => (b.width * b.height) - (a.width * a.height));
-
-        if (validBoxes.length >= 2) {
-            const largestArea = validBoxes[0].width * validBoxes[0].height;
-            const secondLargestArea = validBoxes[1].width * validBoxes[1].height;
-            if (largestArea < secondLargestArea * DOMINANT_FACE_AREA_RATIO) {
-                return { error: 'multiple-faces' };
-            }
+        if (options?.tryRotations === true) {
+            return await detectRotatedFaceCrop(detector, loaded.source, imgWidth, imgHeight, aspectRatio, options);
         }
 
-        return computeCropBox(validBoxes[0], imgWidth, imgHeight, aspectRatio);
+        return { error: 'no-face' };
     } catch {
         return { error: 'unavailable' };
     }
