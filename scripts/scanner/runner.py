@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 import logging
 import os
 import shutil
@@ -22,6 +23,11 @@ from scanner_transport import Download, ScannerTransport
 
 LOGGER = logging.getLogger(__name__)
 STOP_EVENT = threading.Event()
+HEARTBEAT_INTERVAL_SECONDS = 60
+SIGNATURE_UPDATE_INTERVAL_SECONDS = 7200
+
+# Budget note for the owner: the Cloudflare free plan allows ~100k Worker requests/day;
+# idle polling every 10 s = 8,640 claim requests + ~1,440 heartbeats per day.
 
 @dataclass(frozen=True)
 class JobEvidence:
@@ -124,10 +130,19 @@ def update_signatures(config: ScannerConfig) -> bool:
         return False
 
 
-def run_once(config: ScannerConfig, transport: ScannerTransport) -> bool:
-    """Heartbeat then claim at most one job; degraded engines never claim fresh work."""
+def run_once(
+    config: ScannerConfig,
+    transport: ScannerTransport,
+    *,
+    send_heartbeat: bool = True,
+    on_heartbeat: Callable[[], None] | None = None,
+) -> bool:
+    """Heartbeat (when due) then claim at most one job; degraded engines never claim fresh work."""
     health = read_engine_health(config)
-    transport.request('heartbeat', make_heartbeat(config, health))
+    if send_heartbeat:
+        transport.request('heartbeat', make_heartbeat(config, health))
+        if on_heartbeat is not None:
+            on_heartbeat()
     if health.health != 'ready':
         return False
     claim: dict[str, object] = {'runner_id': config.runner_id}
@@ -142,25 +157,58 @@ def run_once(config: ScannerConfig, transport: ScannerTransport) -> bool:
     return True
 
 
-def run_loop(config: ScannerConfig, transport: ScannerTransport) -> None:
+def _select_poll_seconds(config: ScannerConfig, last_job_at: float | None, now: float) -> int:
+    """Return active polling cadence while within active_window_seconds of the last job, else idle."""
+    if last_job_at is not None and (now - last_job_at) < config.active_window_seconds:
+        return config.active_poll_seconds
+    return config.idle_poll_seconds
+
+
+def run_loop(
+    config: ScannerConfig,
+    transport: ScannerTransport,
+    *,
+    clock: Callable[[], float] | None = None,
+    stop_event: threading.Event | None = None,
+) -> None:
     """Poll durable jobs at concurrency one; network loss leaves authority in D1 until retry."""
-    next_update = 0.0
-    while not STOP_EVENT.is_set():
+    now_fn = time.monotonic if clock is None else clock
+    event = STOP_EVENT if stop_event is None else stop_event
+    next_update: float | None = None
+    last_heartbeat: float | None = None
+    last_job_at: float | None = None
+
+    def mark_heartbeat() -> None:
+        nonlocal last_heartbeat
+        last_heartbeat = now_fn()
+
+    while not event.is_set():
         try:
-            if time.monotonic() >= next_update:
-                next_update = time.monotonic() + 7200
+            now = now_fn()
+            if next_update is None or now >= next_update:
+                next_update = now + SIGNATURE_UPDATE_INTERVAL_SECONDS
                 if not update_signatures(config):
-                    next_update = 0.0
-                    transport.request('heartbeat', make_heartbeat(config, EngineHealth('update_failed')))
-                    STOP_EVENT.wait(60)
+                    next_update = None
+                    if last_heartbeat is None or (now - last_heartbeat) >= HEARTBEAT_INTERVAL_SECONDS:
+                        transport.request('heartbeat', make_heartbeat(config, EngineHealth('update_failed')))
+                        mark_heartbeat()
+                    event.wait(60)
                     continue
             clean_crash_residue(config.state_directory / 'tmp')
-            has_job = run_once(config, transport)
-            if not has_job:
-                STOP_EVENT.wait(30)
+            heartbeat_due = last_heartbeat is None or (now_fn() - last_heartbeat) >= HEARTBEAT_INTERVAL_SECONDS
+            has_job = run_once(
+                config,
+                transport,
+                send_heartbeat=heartbeat_due,
+                on_heartbeat=mark_heartbeat,
+            )
+            if has_job:
+                last_job_at = now_fn()
+                continue
+            event.wait(_select_poll_seconds(config, last_job_at, now_fn()))
         except Exception:
             LOGGER.warning('runner_iteration_failed; lease_retry_remains_in_D1')
-            STOP_EVENT.wait(30)
+            event.wait(_select_poll_seconds(config, last_job_at, now_fn()))
 
 
 def parse_options() -> argparse.Namespace:

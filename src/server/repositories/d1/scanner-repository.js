@@ -48,7 +48,19 @@ async function claim(database, input) {
     return database.prepare(`UPDATE document_scan_jobs SET status='leased',attempts=attempts+1,
         runner_id=?,lease_token_hash=?,lease_until=?,updated_at=?,object_etag=NULL,content_sha256=NULL
         WHERE id=(SELECT id FROM document_scan_jobs WHERE status='queued' AND available_at<=?
-            AND attempts<3 AND ${CURRENT_JOB} ${applicationScope} ORDER BY available_at,id LIMIT 1)
+            AND attempts<3 AND ${CURRENT_JOB} ${applicationScope}
+            ORDER BY CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM document_revision_files AS priority_files
+                    JOIN document_revisions AS priority_revisions ON priority_revisions.id=priority_files.revision_id
+                    JOIN document_records AS priority_records ON priority_records.id=priority_revisions.document_record_id
+                    JOIN applications AS priority_applications ON priority_applications.id=priority_records.application_id
+                    WHERE priority_files.id=document_scan_jobs.file_id
+                      AND priority_applications.status='resubmission_required'
+                ) THEN 0
+                WHEN result_code='staff_scan_requested' THEN 0
+                ELSE 1
+            END, available_at, id LIMIT 1)
           AND status='queued' RETURNING *
     `).bind(input.runnerId, input.tokenHash, leaseUntil, input.now, input.now, ...(input.applicationIds || [])).first();
 }
