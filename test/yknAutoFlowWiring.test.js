@@ -722,3 +722,13 @@ test('GİZLİLİK: yknManager.js içindeki console.* çağrıları belge/OCR met
         );
     }
 });
+
+test('OCR fallback sözleşmesi: yknManager.js ensurePageText bağımlılığını tembel OCR ve dataUrl önbelleği ile bağlar', () => {
+    assert.match(autoFlowSource, /ensurePageText/);
+    assert.match(yknManagerSource, /createYknAutoFlow\s*\(\s*\{[\s\S]*?ensurePageText\s*:\s*ensureAutoFlowPageText/);
+    assert.match(yknManagerSource, /autoFlowOcrTextCache\s*=\s*new\s+Map\s*\(\s*\)/);
+    assert.match(
+        yknManagerSource,
+        /async\s+function\s+ensureAutoFlowPageText\s*\([\s\S]*?import\s*\(\s*['"]\.\.\/services\/ocrService\.js['"]\s*\)[\s\S]*?runOCR\s*\(\s*canvas\s*,\s*true\s*,\s*false\s*,\s*true\s*\)/
+    );
+});

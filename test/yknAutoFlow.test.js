@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createYknAutoFlow } from '../src/managers/yknAutoFlow.js';
+import { evaluatePassportPage } from '../src/services/passportDocumentGuard.js';
 
 function createHarness(overrides = {}) {
     const clicks = [];
@@ -298,4 +299,135 @@ test('step exception cancels flow and reports error without submit', async () =>
     assert.equal(h.flow.isActive(), false);
     assert.equal(h.getSubmitCount(), 0);
     assert.ok(h.reports.some((r) => r.level === 'error'));
+});
+
+test('image-only page with empty text continues when ensurePageText returns passport MRZ text', async () => {
+    const ocrCalls = [];
+    const expectedBox = { x: 15, y: 25, width: 140, height: 180 };
+    const h = createHarness({
+        getPages: () => [{ dataUrl: 'data:image/jpeg;base64,scan-passport', text: '' }],
+        evaluatePage: evaluatePassportPage,
+        ensurePageText: async (page) => {
+            ocrCalls.push(page.dataUrl);
+            return 'P<EXMYILMAZ<<AHMET<<<<<<<<<<<<<<<<<<<\nAB12345670EXM9001011M3001015<<<<<<<<<<<<<<04';
+        },
+        detectFace: async () => expectedBox
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.deepEqual(ocrCalls, ['data:image/jpeg;base64,scan-passport']);
+    assert.deepEqual(h.appliedCrops, [expectedBox]);
+    assert.equal(h.getSubmitCount(), 1);
+    assert.equal(h.flow.isActive(), false);
+});
+
+test('image-only page where ensurePageText returns diploma text is rejected and next source is tried', async () => {
+    let sourceIdx = 0;
+    const sources = [
+        [{ dataUrl: 'data:image/jpeg;base64,scan-diploma', text: '   ' }],
+        [{ dataUrl: 'data:image/jpeg;base64,scan-passport-2', text: '' }]
+    ];
+    let nextCalls = 0;
+
+    const h = createHarness({
+        getPages: () => sources[sourceIdx],
+        getPageIndex: () => 0,
+        selectNextSource: async () => {
+            nextCalls += 1;
+            if (sourceIdx + 1 < sources.length) {
+                sourceIdx += 1;
+                return true;
+            }
+            return false;
+        },
+        evaluatePage: evaluatePassportPage,
+        ensurePageText: async (page) => {
+            if (page.dataUrl.includes('diploma')) {
+                return 'T.C. UNIVERSITE DIPLOMASI\nAHMET YILMAZ MEZUNIYET BELGESI';
+            }
+            return 'P<EXMYILMAZ<<AHMET<<<<<<<<<<<<<<<<<<<\nAB12345670EXM9001011M3001015<<<<<<<<<<<<<<04';
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.equal(nextCalls, 1);
+    assert.equal(h.appliedCrops.length, 1);
+    assert.equal(h.getSubmitCount(), 1);
+    assert.equal(h.flow.isActive(), false);
+});
+
+test('ensurePageText throwing falls back to empty text, reports existing message, and does not submit', async () => {
+    const h = createHarness({
+        getPages: () => [{ dataUrl: 'data:image/jpeg;base64,scan-error', text: '' }],
+        evaluatePage: evaluatePassportPage,
+        ensurePageText: async () => {
+            throw new Error('OCR failed');
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(
+        h.reports.some(
+            (r) => r.level === 'error'
+                && r.message.includes('Sayfada okunabilir metin bulunamadı; pasaport belgesini kontrol edin. Lütfen doğru pasaport belgesini elle seçip kırpın.')
+        )
+    );
+});
+
+test('each image-only page is OCRd at most once via cache and pages with text skip ensurePageText', async () => {
+    let ocrCalls = 0;
+    let nextCalls = 0;
+    const h = createHarness({
+        getPages: () => [{ dataUrl: 'data:image/jpeg;base64,scan-repeat', text: '' }],
+        selectNextSource: async () => {
+            nextCalls += 1;
+            return nextCalls === 1;
+        },
+        evaluatePage: evaluatePassportPage,
+        ensurePageText: async () => {
+            ocrCalls += 1;
+            return 'DIPLOMA BELGESI';
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.equal(nextCalls, 2);
+    assert.equal(ocrCalls, 1);
+    assert.equal(h.getSubmitCount(), 0);
+
+    let textPageOcrCalls = 0;
+    const hWithText = createHarness({
+        evaluatePage: evaluatePassportPage,
+        ensurePageText: async () => {
+            textPageOcrCalls += 1;
+            return '';
+        }
+    });
+
+    hWithText.flow.start('AB1234567');
+    hWithText.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    hWithText.flow.onYoksisReady();
+    await hWithText.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.equal(textPageOcrCalls, 0);
+    assert.equal(hWithText.getSubmitCount(), 1);
 });

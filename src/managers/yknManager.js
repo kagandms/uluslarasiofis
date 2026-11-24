@@ -900,6 +900,41 @@ export function initYknManager() {
         });
     }
 
+    const autoFlowOcrTextCache = new Map();
+
+    async function ensureAutoFlowPageText(page) {
+        const existingText = typeof page?.text === 'string' ? page.text : '';
+        if (existingText.trim()) return existingText;
+
+        const dataUrl = typeof page?.dataUrl === 'string' ? page.dataUrl : '';
+        if (!dataUrl) return '';
+        if (autoFlowOcrTextCache.has(dataUrl)) {
+            return autoFlowOcrTextCache.get(dataUrl);
+        }
+
+        let canvas = null;
+        try {
+            canvas = await imageToCanvas(dataUrl);
+            if (!canvas) {
+                autoFlowOcrTextCache.set(dataUrl, '');
+                return '';
+            }
+            const { runOCR } = await import('../services/ocrService.js');
+            const ocrResult = await runOCR(canvas, true, false, true);
+            const rawText = typeof ocrResult?._rawText === 'string' ? ocrResult._rawText : '';
+            autoFlowOcrTextCache.set(dataUrl, rawText);
+            return rawText;
+        } catch {
+            autoFlowOcrTextCache.set(dataUrl, '');
+            return '';
+        } finally {
+            if (canvas) {
+                canvas.width = 0;
+                canvas.height = 0;
+            }
+        }
+    }
+
     const autoFlow = createYknAutoFlow({
         enabled: isAutoFlowEnabled,
         click: (id) => {
@@ -918,6 +953,7 @@ export function initYknManager() {
         selectNextSource: selectNextAutoCropSource,
         detectFace: detectFaceCrop,
         evaluatePage: evaluatePassportPage,
+        ensurePageText: ensureAutoFlowPageText,
         applyCrop: applyCropBox,
         setDefaults: setCropperDefaults,
         getGender: getCropperGender,
