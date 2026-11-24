@@ -8,7 +8,11 @@ const identitySource = await readFile(new URL('../ykn_eklenti-main/yoksis-studen
 function createMatcher() {
     const dom = new JSDOM('', { runScripts: 'outside-only' });
     dom.window.eval(identitySource);
-    return { dom, matches: dom.window.YknStudentIdentity.matches };
+    return {
+        dom,
+        matches: dom.window.YknStudentIdentity.matches,
+        explain: dom.window.YknStudentIdentity.explain
+    };
 }
 
 test('matches the same passport regardless of punctuation and case', () => {
@@ -58,5 +62,220 @@ test('rejects a document mismatch without a complete secondary identity', () => 
             expectedName: 'Kevin', currentName: 'Kevin',
             expectedSurname: 'Mwali', currentSurname: 'Mwali'
         }), false);
+    } finally { dom.window.close(); }
+});
+
+test('explain matches result with matches() across all identity cases and exposes only booleans/null', () => {
+    const { dom, matches, explain } = createMatcher();
+    try {
+        const cases = [
+            {
+                name: 'same passport',
+                input: { expectedPassport: 'ab-123', currentDocument: 'AB 123' },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: true,
+                    passportMismatch: false,
+                    expectedNamePresent: false,
+                    nameEqual: false,
+                    expectedSurnamePresent: false,
+                    surnameEqual: false,
+                    expectedBirthDatePresent: false,
+                    expectedBirthDateValid: false,
+                    currentBirthDatePresent: false,
+                    currentBirthDateValid: false,
+                    birthDateEqual: false,
+                    result: true
+                }
+            },
+            {
+                name: 'different passport + same name/surname/birth date',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin Idi',
+                    currentName: 'KEVIN IDI',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'MWALI',
+                    expectedBirthDate: '2003-06-19',
+                    currentBirthDate: '19.06.2003'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: true,
+                    expectedBirthDatePresent: true,
+                    expectedBirthDateValid: true,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: true,
+                    birthDateEqual: true,
+                    result: true
+                }
+            },
+            {
+                name: 'different passport + no expected birth date',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin',
+                    currentName: 'Kevin',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'Mwali',
+                    currentBirthDate: '19.06.2003'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: true,
+                    expectedBirthDatePresent: false,
+                    expectedBirthDateValid: false,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: true,
+                    birthDateEqual: false,
+                    result: false
+                }
+            },
+            {
+                name: 'different birth date',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin',
+                    currentName: 'Kevin',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'Mwali',
+                    expectedBirthDate: '2003-06-19',
+                    currentBirthDate: '20.06.2003'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: true,
+                    expectedBirthDatePresent: true,
+                    expectedBirthDateValid: true,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: true,
+                    birthDateEqual: false,
+                    result: false
+                }
+            },
+            {
+                name: 'surname differs',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin',
+                    currentName: 'Kevin',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'Banda',
+                    expectedBirthDate: '2003-06-19',
+                    currentBirthDate: '19.06.2003'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: false,
+                    expectedBirthDatePresent: true,
+                    expectedBirthDateValid: true,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: true,
+                    birthDateEqual: true,
+                    result: false
+                }
+            },
+            {
+                name: 'empty inputs',
+                input: {},
+                expectedFlags: {
+                    expectedPassportPresent: false,
+                    currentDocumentPresent: false,
+                    passportEqual: false,
+                    passportMismatch: false,
+                    expectedNamePresent: false,
+                    nameEqual: false,
+                    expectedSurnamePresent: false,
+                    surnameEqual: false,
+                    expectedBirthDatePresent: false,
+                    expectedBirthDateValid: false,
+                    currentBirthDatePresent: false,
+                    currentBirthDateValid: false,
+                    birthDateEqual: false,
+                    result: null
+                }
+            },
+            {
+                name: 'invalid date strings',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin',
+                    currentName: 'Kevin',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'Mwali',
+                    expectedBirthDate: '2003-02-30',
+                    currentBirthDate: 'not-a-date'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: true,
+                    expectedBirthDatePresent: true,
+                    expectedBirthDateValid: false,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: false,
+                    birthDateEqual: false,
+                    result: false
+                }
+            }
+        ];
+
+        for (const testCase of cases) {
+            const rawExplained = explain(testCase.input);
+            const serialized = JSON.stringify(rawExplained);
+            const explained = JSON.parse(serialized);
+            const matched = matches(testCase.input);
+            assert.equal(explained.result, matched, `${testCase.name}: explain.result must equal matches()`);
+            assert.deepEqual(explained, testCase.expectedFlags, `${testCase.name}: flags mismatch`);
+
+            for (const [key, value] of Object.entries(explained)) {
+                if (key === 'result') {
+                    assert.ok(value === null || typeof value === 'boolean', `${testCase.name}: result must be boolean or null`);
+                } else {
+                    assert.equal(typeof value, 'boolean', `${testCase.name}: ${key} must be boolean`);
+                }
+            }
+            for (const rawValue of Object.values(testCase.input)) {
+                const text = String(rawValue || '').trim();
+                if (text) {
+                    assert.equal(serialized.includes(text), false, `${testCase.name}: serialized output leaked ${text}`);
+                }
+            }
+        }
     } finally { dom.window.close(); }
 });

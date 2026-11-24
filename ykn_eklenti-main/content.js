@@ -1480,7 +1480,7 @@ function checkYoksisErrorModal() {
     return null;
 }
 
-function checkSemanticStudentMatch(expectedStudent) {
+function buildIdentityMatchOptions(expectedStudent) {
     if (!expectedStudent) return null;
     const expPassport = (expectedStudent.passportNo || expectedStudent.pasaportNo || '').trim().toUpperCase();
     const expName = (expectedStudent.studentName || expectedStudent.ad || expectedStudent.adi || expectedStudent.firstName || '').trim().toUpperCase();
@@ -1497,7 +1497,7 @@ function checkSemanticStudentMatch(expectedStudent) {
     const currentSurname = (currentSurnameInput?.value || '').trim().toUpperCase();
     const currentBirthDate = currentBirthDateInput?.value || '';
 
-    return window.YknStudentIdentity.matches({
+    return {
         expectedPassport: expPassport,
         currentDocument: currentDocNo,
         expectedName: expName,
@@ -1506,8 +1506,34 @@ function checkSemanticStudentMatch(expectedStudent) {
         currentSurname,
         expectedBirthDate: expBirthDate,
         currentBirthDate
-    });
+    };
+}
 
+function buildExpectedKeysPresent(expectedStudent) {
+    const src = expectedStudent || {};
+    const hasValue = (val) => Boolean(String(val ?? '').trim());
+    return {
+        passportNo: hasValue(src.passportNo),
+        studentName: hasValue(src.studentName),
+        studentSurname: hasValue(src.studentSurname),
+        birthDate: hasValue(src.birthDate),
+        dogumTarihi: hasValue(src.dogumTarihi)
+    };
+}
+
+function buildIdentityDiagnostics(expectedStudent) {
+    const matchOptions = buildIdentityMatchOptions(expectedStudent);
+    const explained = matchOptions ? window.YknStudentIdentity.explain(matchOptions) : null;
+    return {
+        ...(explained || {}),
+        expectedKeysPresent: buildExpectedKeysPresent(expectedStudent)
+    };
+}
+
+function checkSemanticStudentMatch(expectedStudent) {
+    const matchOptions = buildIdentityMatchOptions(expectedStudent);
+    if (!matchOptions) return null;
+    return window.YknStudentIdentity.matches(matchOptions);
 }
 
 function waitForYoksisForm(timeoutMs = 6000, options = {}) {
@@ -1615,10 +1641,14 @@ function waitForYoksisForm(timeoutMs = 6000, options = {}) {
                 if (signals.semanticMatch === false) failureReasons.push('student_identity_mismatch');
                 if (signals.stableChecks < 2) failureReasons.push('form_not_stable');
                 if (signals.isZkBusy) failureReasons.push('yoksis_still_processing');
-                console.warn('[YKN_FORM_READINESS] Öğrenci formu doğrulanamadı.', JSON.stringify({
+                const readinessPayload = {
                     ...signals,
                     failureReasons
-                }));
+                };
+                if (signals.semanticMatch === false) {
+                    readinessPayload.identity = buildIdentityDiagnostics(expectedStudent);
+                }
+                console.warn('[YKN_FORM_READINESS] Öğrenci formu doğrulanamadı.', JSON.stringify(readinessPayload));
                 reject(error);
             }
         };

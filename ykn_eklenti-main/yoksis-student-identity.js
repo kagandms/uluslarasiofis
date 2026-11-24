@@ -37,5 +37,34 @@
         return true;
     }
 
-    globalThis.YknStudentIdentity = Object.freeze({ matches });
+    function explain(options) {
+        const opts = options || {};
+        const expectedPassport = normalizeText(opts.expectedPassport);
+        const currentDocument = normalizeText(opts.currentDocument);
+        const expectedName = normalizeText(opts.expectedName);
+        const currentName = normalizeText(opts.currentName);
+        const expectedSurname = normalizeText(opts.expectedSurname);
+        const currentSurname = normalizeText(opts.currentSurname);
+        const expectedBirthDate = normalizeDate(opts.expectedBirthDate);
+        const currentBirthDate = normalizeDate(opts.currentBirthDate);
+
+        return {
+            expectedPassportPresent: Boolean(expectedPassport),
+            currentDocumentPresent: Boolean(currentDocument),
+            passportEqual: Boolean(expectedPassport && currentDocument && expectedPassport === currentDocument),
+            passportMismatch: Boolean(expectedPassport && currentDocument && expectedPassport !== currentDocument),
+            expectedNamePresent: Boolean(expectedName),
+            nameEqual: Boolean(expectedName && currentName && expectedName === currentName),
+            expectedSurnamePresent: Boolean(expectedSurname),
+            surnameEqual: Boolean(expectedSurname && currentSurname && expectedSurname === currentSurname),
+            expectedBirthDatePresent: Boolean(String(opts.expectedBirthDate || '').trim()),
+            expectedBirthDateValid: Boolean(expectedBirthDate),
+            currentBirthDatePresent: Boolean(String(opts.currentBirthDate || '').trim()),
+            currentBirthDateValid: Boolean(currentBirthDate),
+            birthDateEqual: Boolean(expectedBirthDate && currentBirthDate && expectedBirthDate === currentBirthDate),
+            result: matches(opts)
+        };
+    }
+
+    globalThis.YknStudentIdentity = Object.freeze({ matches, explain });
 })();
