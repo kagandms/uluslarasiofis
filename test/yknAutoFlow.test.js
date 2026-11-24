@@ -688,3 +688,247 @@ test('global MAX_SOURCE_ATTEMPTS caps evaluations across many pages so loop cann
     assert.equal(h.flow.isActive(), false);
     assert.ok(h.reports.some((r) => r.level === 'error'));
 });
+
+test('rotation 90 result calls rotatePage once, reports info, re-runs detectFace without tryRotations, applies crop, and submits', async () => {
+    const detectCalls = [];
+    const rotateCalls = [];
+    const uprightBox = { x: 40, y: 50, width: 140, height: 180 };
+    const rotatedDataUrl = 'data:image/jpeg;base64,rotated-90';
+    const pages = [
+        { dataUrl: 'data:image/jpeg;base64,p0', text: 'TRANSKRIPT' },
+        { dataUrl: 'data:image/jpeg;base64,p1-sideways', text: 'P<EXMYILMAZ<<AHMET<<<\nAB1234567' }
+    ];
+
+    const h = createHarness({
+        getPages: () => pages,
+        getPageIndex: () => 0,
+        evaluatePage: ({ text }) => (text.includes('P<EXMYILMAZ')
+            ? {
+                isPassport: true,
+                hasMrz: true,
+                passportNoMatched: true,
+                nameMatched: true,
+                score: 180,
+                reason: 'Pasaport kimlik sayfası doğrulandı.'
+            }
+            : {
+                isPassport: false,
+                hasMrz: false,
+                passportNoMatched: false,
+                nameMatched: false,
+                score: 0,
+                reason: 'Sayfada pasaport MRZ alanı bulunamadı.'
+            }),
+        selectPage: async () => true,
+        rotatePage: async (index, rotation) => {
+            rotateCalls.push({ index, rotation });
+            h.order.push(`rotatePage:${index}:${rotation}`);
+            pages[index].dataUrl = rotatedDataUrl;
+            return pages[index];
+        },
+        detectFace: async (imageDataUrl, aspectRatio, options) => {
+            detectCalls.push({ imageDataUrl, aspectRatio, options });
+            h.order.push(`detectFace:${detectCalls.length}`);
+            if (detectCalls.length === 1) {
+                return { x: 10, y: 10, width: 100, height: 130, rotation: 90 };
+            }
+            return uprightBox;
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.deepEqual(rotateCalls, [{ index: 1, rotation: 90 }]);
+    assert.equal(detectCalls.length, 2);
+    assert.deepEqual(detectCalls[0], {
+        imageDataUrl: 'data:image/jpeg;base64,p1-sideways',
+        aspectRatio: 35 / 45,
+        options: { tryRotations: true }
+    });
+    assert.equal(detectCalls[1].imageDataUrl, rotatedDataUrl);
+    assert.equal(detectCalls[1].options?.tryRotations ?? false, false);
+    assert.deepEqual(h.appliedCrops, [uprightBox]);
+    assert.equal(h.getSubmitCount(), 1);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(
+        h.reports.some(
+            (r) => r.level === 'info' && r.message === 'Pasaport sayfası 90° döndürülüp düzeltildi.'
+        )
+    );
+    assert.deepEqual(h.order, [
+        'click:read-acceptance',
+        'click:copy',
+        'detectFace:1',
+        'rotatePage:1:90',
+        'detectFace:2',
+        'setDefaults',
+        'applyCrop',
+        'submit'
+    ]);
+});
+
+test('rotation 180 and 270 also rotate page once and report exact degree', async () => {
+    for (const deg of [180, 270]) {
+        const rotateCalls = [];
+        const detectCalls = [];
+        const uprightBox = { x: 30, y: 40, width: 120, height: 160 };
+
+        const h = createHarness({
+            rotatePage: async (index, rotation) => {
+                rotateCalls.push({ index, rotation });
+                return { dataUrl: `data:image/jpeg;base64,rot-${rotation}` };
+            },
+            detectFace: async (url, _ar, options) => {
+                detectCalls.push({ url, options });
+                if (detectCalls.length === 1) {
+                    return { x: 5, y: 5, width: 80, height: 100, rotation: deg };
+                }
+                return uprightBox;
+            }
+        });
+
+        h.flow.start('AB1234567');
+        h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+        h.flow.onYoksisReady();
+        await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+        assert.deepEqual(rotateCalls, [{ index: 0, rotation: deg }]);
+        assert.equal(detectCalls[1].url, `data:image/jpeg;base64,rot-${deg}`);
+        assert.equal(detectCalls[1].options, undefined);
+        assert.equal(h.getSubmitCount(), 1);
+        assert.ok(
+            h.reports.some(
+                (r) => r.level === 'info' && r.message === `Pasaport sayfası ${deg}° döndürülüp düzeltildi.`
+            )
+        );
+    }
+});
+
+test('rotatePage returning false cancels with existing manual-crop message without second detect or submit', async () => {
+    let detectCalls = 0;
+    const rotateCalls = [];
+
+    const h = createHarness({
+        rotatePage: async (index, rotation) => {
+            rotateCalls.push({ index, rotation });
+            return false;
+        },
+        detectFace: async () => {
+            detectCalls += 1;
+            return { x: 10, y: 20, width: 100, height: 130, rotation: 90 };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.deepEqual(rotateCalls, [{ index: 0, rotation: 90 }]);
+    assert.equal(detectCalls, 1);
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(
+        h.reports.some(
+            (r) => r.level === 'error'
+                && r.message === 'Pasaport sayfasında yüz algılanamadı. Lütfen fotoğrafı elle kırpın.'
+        )
+    );
+});
+
+test('absent rotatePage dep behaves as today and cancels with manual-crop message on rotated result', async () => {
+    let detectCalls = 0;
+
+    const h = createHarness({
+        detectFace: async () => {
+            detectCalls += 1;
+            return { x: 10, y: 20, width: 100, height: 130, rotation: 90 };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.equal(detectCalls, 1);
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(
+        h.reports.some(
+            (r) => r.level === 'error'
+                && r.message === 'Pasaport sayfasında yüz algılanamadı. Lütfen fotoğrafı elle kırpın.'
+        )
+    );
+});
+
+test('never rotates more than once per page and keeps manual-crop message if post-rotation detect fails', async () => {
+    let rotateCalls = 0;
+    let detectCalls = 0;
+
+    const h = createHarness({
+        rotatePage: async () => {
+            rotateCalls += 1;
+            return { dataUrl: 'data:image/jpeg;base64,rotated' };
+        },
+        detectFace: async () => {
+            detectCalls += 1;
+            if (detectCalls === 1) {
+                return { x: 10, y: 20, width: 100, height: 130, rotation: 90 };
+            }
+            return { error: 'no-face' };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    await h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    assert.equal(rotateCalls, 1);
+    assert.equal(detectCalls, 2);
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.flow.isActive(), false);
+    assert.ok(
+        h.reports.some(
+            (r) => r.level === 'error'
+                && r.message.includes('Lütfen fotoğrafı elle kırpın.')
+        )
+    );
+});
+
+test('stale run cancelled during rotatePage does not report info, re-detect, applyCrop, or submit', async () => {
+    let resolveRotate;
+    let detectCalls = 0;
+
+    const h = createHarness({
+        rotatePage: () => new Promise((resolve) => {
+            resolveRotate = resolve;
+        }),
+        detectFace: async () => {
+            detectCalls += 1;
+            return { x: 10, y: 20, width: 100, height: 130, rotation: 90 };
+        }
+    });
+
+    h.flow.start('AB1234567');
+    h.flow.onSearchDone({ studentName: 'AHMET YILMAZ', passportNo: 'AB1234567' });
+    h.flow.onYoksisReady();
+    const cropPromise = h.flow.onCropperReady({ aspectRatio: 35 / 45 });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.flow.cancel('Kullanıcı iptal etti.');
+    resolveRotate({ dataUrl: 'data:image/jpeg;base64,rotated' });
+    await cropPromise;
+
+    assert.equal(detectCalls, 1);
+    assert.equal(h.appliedCrops.length, 0);
+    assert.equal(h.getSubmitCount(), 0);
+    assert.equal(h.reports.some((r) => r.message.includes('döndürülüp düzeltildi')), false);
+});
