@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { listDocumentPolicies } from '../src/server/domain/documentPolicy.js';
 import { evaluateSubmissionReadiness } from '../src/server/services/submissionReadiness.js';
+import { readIstanbulDate } from '../src/shared/age.js';
 
 const CURRENT_DECLARATION = 'student-information-accuracy-v1';
 
@@ -81,8 +82,16 @@ test('clear-age adults do not need an exact residence application date', () => {
 });
 
 test('applicants between 18 and 19 must provide the e-İkamet date for the age decision', () => {
+    const today = readIstanbulDate();
+    const [year, month, day] = new Date(Date.UTC(
+        Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1, Number(today.slice(8, 10)) - 10
+    )).toISOString().slice(0, 10).split('-').map(Number);
+    const birthYear = year - 18;
+    const clampedDay = Math.min(day, new Date(Date.UTC(birthYear, month, 0)).getUTCDate());
+    const boundaryBirthDate = `${String(birthYear).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+
     const readiness = evaluate(createApplication({
-        date_of_birth: '2008-10-24', residence_application_date: null, is_under_18: 0,
+        date_of_birth: boundaryBirthDate, residence_application_date: null, is_under_18: 0,
         academic_year_start_date: null
     }));
 
