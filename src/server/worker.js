@@ -155,12 +155,12 @@ async function routeApi(request, environment, requestId, cache) {
         return prioritizeStaffDocumentScan(request, environment, applicationId, documentCode, requestId);
     }
     if (['/api/staff/scanner/status', '/api/staff/scanner/retry'].includes(pathname)) return handleStaffScannerRequest(request, environment, requestId);
-    const deletionMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/(archive|restore|purge)$/);
+    const deletionMatch = pathname.match(/^\/api\/staff\/applications\/([^/]+)\/delete$/);
     if (deletionMatch) {
         let applicationId;
         try { applicationId = decodeURIComponent(deletionMatch[1]); }
         catch { throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.'); }
-        return handleStaffApplicationDeletion(request, environment, applicationId, deletionMatch[2], requestId);
+        return handleStaffApplicationDeletion(request, environment, applicationId, requestId);
     }
     if (pathname === '/api/webhooks/whatsapp') {
         return handleMetaWhatsAppWebhook(request, environment, requestId);
