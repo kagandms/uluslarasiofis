@@ -48,6 +48,7 @@ function faceErrorMessage(errorCode) {
  * @param {() => Promise<boolean>} deps.selectNextSource - Bir sonraki belge kaynağına geçer; kaynak yoksa `false` döner.
  * @param {(imageDataUrl: string, aspectRatio: number) => Promise<{ x: number, y: number, width: number, height: number } | { error: string }>} deps.detectFace - Yüz kırpma kutusunu hesaplar.
  * @param {(input: { text: string, studentName: string, passportNo: string }) => { isPassport: boolean, reason?: string }} deps.evaluatePage - Pasaport sayfası doğrulamasını yapar.
+ * @param {(page: { dataUrl?: string, text?: string }) => Promise<string>} [deps.ensurePageText] - Metni boş sayfalarda OCR ile metin üretir.
  * @param {(box: { x: number, y: number, width: number, height: number }) => boolean | void} deps.applyCrop - Hesaplanan kırpma kutusunu uygular.
  * @param {(defaults: { medeni: string }) => void} deps.setDefaults - Boş alanlar için varsayılan değerleri yazar.
  * @param {() => string} deps.getGender - Kırpıcıdaki seçili cinsiyet değerini döndürür.
@@ -61,6 +62,10 @@ export function createYknAutoFlow(deps) {
     let forced = false;
     let currentPassportNo = '';
     let currentStudentName = '';
+    const pageTextCache = new Map();
+    const ensurePageText = typeof deps.ensurePageText === 'function'
+        ? deps.ensurePageText
+        : async (page) => (typeof page?.text === 'string' ? page.text : '');
 
     function isActive() {
         return state !== 'IDLE' && state !== 'DONE' && state !== 'STOPPED';
@@ -206,8 +211,26 @@ export function createYknAutoFlow(deps) {
                 const page = pages[pageIndex];
 
                 if (page) {
+                    let pageText = typeof page.text === 'string' ? page.text : '';
+                    if (!pageText.trim()) {
+                        const cacheKey = typeof page.dataUrl === 'string' && page.dataUrl ? page.dataUrl : '';
+                        if (cacheKey && pageTextCache.has(cacheKey)) {
+                            pageText = pageTextCache.get(cacheKey);
+                        } else {
+                            try {
+                                const ensured = await ensurePageText(page);
+                                pageText = typeof ensured === 'string' ? ensured : '';
+                            } catch {
+                                pageText = '';
+                            }
+                            if (cacheKey) {
+                                pageTextCache.set(cacheKey, pageText);
+                            }
+                            if (!isRunCurrent(myRunId)) return;
+                        }
+                    }
                     const evaluation = deps.evaluatePage({
-                        text: page.text,
+                        text: pageText,
                         studentName: currentStudentName,
                         passportNo: currentPassportNo
                     });
