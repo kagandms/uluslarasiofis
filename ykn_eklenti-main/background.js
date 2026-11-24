@@ -2195,7 +2195,8 @@ async function transferToYoksisOperation(request, totalStartedAt) {
         studentName: request.data?.ad || request.data?.name || request.data?.adi || request.data?.firstName || '',
         studentSurname: request.data?.soyad || request.data?.surname || request.data?.soyadi || request.data?.lastName || '',
         motherName: request.data?.anneAdi || '',
-        fatherName: request.data?.babaAdi || ''
+        fatherName: request.data?.babaAdi || '',
+        birthDate: request.data?.birthDate || request.data?.dogumTarihi || ''
     };
 
     const performSearch = async () => {
