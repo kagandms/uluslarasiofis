@@ -58,6 +58,7 @@ test('workspaceSideNav.css masaüstü dikey ızgara alanlarını, min-width: 901
     assert.match(SIDE_NAV_CSS, /grid-template-areas:\s*var\(--workspace-nav-areas\)/);
     assert.match(SIDE_NAV_CSS, /"toolbar nav"/, 'Sağ tarafta menü için yorum satırı örneği bulunmalıdır');
     assert.match(SIDE_NAV_CSS, /\.workspace-content\[hidden\]\s*\{[^}]*display:\s*none;/);
+    assert.match(SIDE_NAV_CSS, /\.workspace-content\s+\.view-panel\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/);
 });
 
 test('workspaceSideNav.css yapışkan dikey liste, satır kaydırma, karanlık mod ve focus-visible kurallarını içerir', () => {
