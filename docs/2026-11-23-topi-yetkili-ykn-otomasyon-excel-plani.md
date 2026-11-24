@@ -538,3 +538,9 @@ Paylaşılan dosyalar tek sahipli çalışır: `src/server/worker.js` (rota sat�
 
 - **Kullanıcı geri bildirimi:** Gelen Sorular ekranında form soruları ve Topi sohbetleri alt alta durunca hangisinin ne olduğu ancak açınca anlaşılıyordu; daha fazla süzgeç istendi. **Yapılanlar:** (1) `task/chat-log-staff-ui` 2eedd10: ekranın üstünde iki sekme, "Formdan gelen sorular" (yeni soru sayısı rozetiyle) ve "Topi sohbetleri"; aynı anda tek panel görünür, her sohbet satırında "Topi" etiketi; sohbet listesine dil, dönem (24 saat/7 gün/30 gün), metin arama, süzgeçleri temizleme ve "N sohbet" sayısı eklendi. (2) `task/chat-log-filters-api` 46bdf9b: `GET /api/staff/chat-sessions` artık `lang`, `period`, `q` (2–80 karakter, `ESCAPE` ile bağlı parametre, Türkçe İ/ı katlamalı) ve yanıtta `total` verir. (3) Yerel deneme için gerçek form ucundan 8 sentetik soru eklendi (5 yeni, 3 cevaplanmış; yalnız yerel D1).
 - Entegrasyon ba7bd02: 2140 test, 0 başarısız; build ve dry-run geçti. Arama LIKE ile tüm turlara bakar; bugünkü hacimde (binler) sorun yok, on binleri geçerse FTS ayrıca düşünülür.
+
+### 15.6 Milestone (2026-11-24)
+
+- **Etiket:** `milestone/topi-ykn-excel-chatlog-2026-11-24` (açıklamalı, yerel; `test/combined-2026-11-23` ba7bd02). İçindeki dal SHA'ları etiket mesajında yazılı. Durum: `production`'a merge/push/yayın yok; 2140 test, build ve dry-run geçti.
+- **Neden:** Kullanıcı kararı: YÖKSİS bağlantısı denemesinde sorun çıkmazsa büyük olasılıkla bu sürüm canlıya alınacak; sonraki arayüz değişiklikleri (yan menü) bu noktadan sonradır. Geri dönmek için `git checkout milestone/topi-ykn-excel-chatlog-2026-11-24` (birleşik dal da bu etiketten açılabilir).
+- **Canlıya alma adayı = bu milestone** (yan menü eklenirse ayrıca karar): tam yol (0046 + 0047 migration, package.json), her adım kullanıcı isteğiyle.
