@@ -776,3 +776,61 @@ test('application and yoksisAudit results render Turkish status labels and never
         assert.equal(logText.includes(rawCode), false, `Raw status code "${rawCode}" must not be rendered`);
     }
 });
+
+test('staff launcher mounts one aria-hidden playtime element, hides it while panel is open, and cleans up on destroy', (context) => {
+    const { window, doc } = createStaffDom(context, { authenticated: true });
+    const controller = initializeStaffAssistant({ root: doc });
+    assert.ok(controller);
+    context.after(() => controller.destroy());
+
+    const root = doc.getElementById('staff-assistant-root');
+    const launcher = doc.getElementById('staff-assistant-launcher');
+    const playtimes = launcher.querySelectorAll('.topi-playtime');
+
+    assert.equal(playtimes.length, 1);
+    const playtime = playtimes[0];
+    assert.equal(playtime.getAttribute('aria-hidden'), 'true');
+    assert.equal(playtime.hidden, false);
+    assert.equal(playtime.children.length, 1);
+
+    const initialToy = playtime.firstElementChild;
+    assert.equal(initialToy.className, 'topi-mouse');
+    assert.equal(initialToy.getAttribute('aria-hidden'), 'true');
+    assert.equal(initialToy.hidden, false);
+
+    controller.open();
+    assert.equal(root.classList.contains('is-panel-open'), true);
+    assert.equal(playtime.hidden, true);
+    assert.equal(initialToy.hidden, true);
+
+    controller.close();
+    assert.equal(root.classList.contains('is-panel-open'), false);
+    assert.equal(playtime.hidden, false);
+    assert.equal(initialToy.hidden, false);
+
+    controller.destroy();
+    initialToy.dispatchEvent(new window.Event('animationiteration'));
+    assert.equal(playtime.firstElementChild, initialToy);
+    assert.equal(doc.getElementById('staff-assistant-launcher'), null);
+});
+
+test('staff launcher omits playtime and toy elements when prefers-reduced-motion is active', (context) => {
+    const { window, doc } = createStaffDom(context, { authenticated: true });
+    window.matchMedia = (query) => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        addEventListener() {},
+        removeEventListener() {}
+    });
+
+    const controller = initializeStaffAssistant({ root: doc });
+    assert.ok(controller);
+    context.after(() => controller.destroy());
+
+    const root = doc.getElementById('staff-assistant-root');
+    const launcher = doc.getElementById('staff-assistant-launcher');
+
+    assert.equal(root.classList.contains('is-reduced-motion'), true);
+    assert.equal(launcher.querySelector('.topi-playtime'), null);
+    assert.equal(launcher.querySelector('.topi-mouse, .topi-yarn, .topi-ball, .topi-feather'), null);
+});

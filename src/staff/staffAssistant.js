@@ -4,7 +4,7 @@
  */
 
 import { OFFICE_DOCUMENTS } from '../config/documents-config.js';
-import { createTopi, ensureTopiStyles, setTopiState } from '../public/topiMascot.js';
+import { createTopi, createTopiPlaytime, ensureTopiStyles, setTopiState } from '../public/topiMascot.js';
 import {
     validateStaffAssistantAction,
     validateStaffAssistantResponse
@@ -217,7 +217,19 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
     const launcherText = doc.createElement('span');
     launcherText.className = 'staff-assistant-launcher-text';
     launcherText.textContent = 'Topi';
-    launcherButton.append(launcherTopi, launcherText);
+    const launcherPlaytime = createTopiPlaytime(doc, { reducedMotion, size: 22 });
+    if (launcherPlaytime.element) {
+        launcherButton.append(launcherTopi, launcherText, launcherPlaytime.element);
+    } else {
+        launcherButton.append(launcherTopi, launcherText);
+    }
+
+    function setPlaytimeHidden(hidden) {
+        if (!launcherPlaytime.element) return;
+        launcherPlaytime.element.hidden = hidden;
+        const activeToy = launcherPlaytime.element.firstElementChild;
+        if (activeToy) activeToy.hidden = hidden;
+    }
 
     const panel = doc.createElement('section');
     panel.id = 'staff-assistant-panel';
@@ -653,6 +665,7 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
         isOpen = true;
         panel.hidden = false;
         rootContainer.classList.add('is-panel-open');
+        setPlaytimeHidden(true);
         launcherButton.setAttribute('aria-expanded', 'true');
         doc.addEventListener('keydown', handleDocumentKeydown);
         input.focus();
@@ -663,6 +676,7 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
         isOpen = false;
         panel.hidden = true;
         rootContainer.classList.remove('is-panel-open');
+        setPlaytimeHidden(false);
         launcherButton.setAttribute('aria-expanded', 'false');
         doc.removeEventListener('keydown', handleDocumentKeydown);
         if (!isSending) {
@@ -740,6 +754,8 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
             urlApi?.revokeObjectURL?.(blobUrl);
         }
         activeBlobUrls.clear();
+
+        launcherPlaytime.destroy();
 
         rootContainer.remove();
         if (activeControllers.get(doc) === controller) {

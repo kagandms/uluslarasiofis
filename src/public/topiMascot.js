@@ -22,7 +22,11 @@ export const TOPI_MOUSE_SVG_SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" vi
 
 export const TOPI_YARN_SVG_SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="mascot-svg mascot-yarn" aria-hidden="true" focusable="false"><path class="yarn-tail" d="M5.2 17.5Q2.8 18.8 2 16.4 1.4 14.3 3.6 13.6" fill="none" stroke="var(--public-burgundy,#7e1830)" stroke-width="1.4" stroke-linecap="round"/><circle cx="12.5" cy="12.5" r="7.5" fill="var(--public-burgundy-border,#e2c0c8)" stroke="var(--mascot-outline,var(--public-burgundy-hover,#641126))" stroke-width="1.3"/><path d="M7.2 8.2Q12.5 11.4 18.5 8.8M6 12.2Q12.2 15.2 19.6 12.6M7.6 16.4Q12.8 18.2 17.8 15.8M9.5 5.8Q12 12.2 9.4 18.8M14.4 5.4Q16.2 12.2 13.8 19.4" fill="none" stroke="var(--public-burgundy,#7e1830)" stroke-width="1.2" stroke-linecap="round"/></svg>';
 
-const TOPI_TOYS = Object.freeze(['mouse', 'yarn']);
+export const TOPI_BALL_SVG_SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="mascot-svg mascot-ball" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="7.5" fill="var(--mascot-accent,#d89b27)" stroke="var(--mascot-outline,var(--public-burgundy-hover,#641126))" stroke-width="1.3"/><path d="M5.4 8.4Q12 11.4 18.6 8.4M5.4 15.6Q12 12.6 18.6 15.6" fill="none" stroke="var(--public-burgundy,#7e1830)" stroke-width="1.5" stroke-linecap="round"/><path d="M12 4.5Q14.8 12 12 19.5" fill="none" stroke="var(--mascot-surface,#fffbf8)" stroke-width="1.3" stroke-linecap="round"/><circle cx="9.2" cy="8.8" r="1.2" fill="var(--mascot-surface,#fffbf8)"/></svg>';
+
+export const TOPI_FEATHER_SVG_SOURCE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="mascot-svg mascot-feather" aria-hidden="true" focusable="false"><path d="M19.8 4.2C14.8 4.6 9.8 7.5 6.8 12.2L8.7 12.7 6 14.2C5.4 15.3 5 16.5 4.8 17.6 6.2 17.4 7.7 17 9.2 16.3L10.3 14.5 11.4 15.2C15.8 12.6 19 8.6 19.8 4.2Z" fill="var(--public-burgundy-border,#e2c0c8)" stroke="var(--mascot-outline,var(--public-burgundy-hover,#641126))" stroke-width="1.2" stroke-linejoin="round"/><path d="M19.2 4.8C16.2 5.4 13.8 7 12.4 9.2L15.4 10.6C17.4 8.8 18.8 6.8 19.2 4.8Z" fill="var(--mascot-accent,#d89b27)"/><path d="M3.2 20.6Q9.6 13.8 18.6 5.4" fill="none" stroke="var(--public-burgundy,#7e1830)" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
+export const TOPI_TOYS = Object.freeze(['mouse', 'yarn', 'ball', 'feather']);
 
 let instanceSeq = 0;
 
@@ -216,30 +220,70 @@ export function createTopiYarn(document, { size = 22 } = {}) {
 }
 
 /**
- * Picks the next Topi toy (`'mouse'` or `'yarn'`), ensuring the same toy never appears more than 2 rounds in a row.
- * @param {Array<'mouse'|'yarn'>} [previous] List of past toy picks.
+ * Creates a decorative inline bouncing-ball SVG wrapped in `<span class="topi-ball" aria-hidden="true">`.
+ * @param {Document} document Target document.
+ * @param {{size?: number}} [options]
+ * @returns {HTMLSpanElement|null}
+ */
+export function createTopiBall(document, { size = 22 } = {}) {
+    return createTopiToyElement(document, TOPI_BALL_SVG_SOURCE, {
+        className: 'topi-ball',
+        svgClassName: 'mascot-svg mascot-ball',
+        size
+    });
+}
+
+/**
+ * Creates a decorative inline feather SVG wrapped in `<span class="topi-feather" aria-hidden="true">`.
+ * @param {Document} document Target document.
+ * @param {{size?: number}} [options]
+ * @returns {HTMLSpanElement|null}
+ */
+export function createTopiFeather(document, { size = 22 } = {}) {
+    return createTopiToyElement(document, TOPI_FEATHER_SVG_SOURCE, {
+        className: 'topi-feather',
+        svgClassName: 'mascot-svg mascot-feather',
+        size
+    });
+}
+
+const TOPI_TOY_FACTORIES = Object.freeze({
+    mouse: createTopiMouse,
+    yarn: createTopiYarn,
+    ball: createTopiBall,
+    feather: createTopiFeather
+});
+
+/**
+ * Picks the next Topi toy (`'mouse'`, `'yarn'`, `'ball'`, or `'feather'`),
+ * ensuring the same toy never appears more than 2 rounds in a row.
+ * Calls `random` exactly once per pick, including overridden picks.
+ * @param {Array<'mouse'|'yarn'|'ball'|'feather'>} [previous] List of past toy picks.
  * @param {() => number} [random] Random number generator returning `[0, 1)`.
- * @returns {'mouse'|'yarn'}
+ * @returns {'mouse'|'yarn'|'ball'|'feather'}
  */
 export function pickTopiToy(previous = [], random = Math.random) {
-    const roll = typeof random === 'function' ? random() : Math.random();
+    const rawRoll = typeof random === 'function' ? random() : Math.random();
+    const roll = Number.isFinite(rawRoll) ? rawRoll : 0;
 
+    let choices = TOPI_TOYS;
     if (Array.isArray(previous) && previous.length >= 2) {
         const last = previous[previous.length - 1];
         const prev = previous[previous.length - 2];
         if (TOPI_TOYS.includes(last) && last === prev) {
-            return last === 'mouse' ? 'yarn' : 'mouse';
+            choices = TOPI_TOYS.filter((toy) => toy !== last);
         }
     }
 
-    return roll < 0.5 ? 'mouse' : 'yarn';
+    const index = Math.min(choices.length - 1, Math.max(0, Math.floor(roll * choices.length)));
+    return choices[index];
 }
 
 /**
  * Creates an animated launcher playtime wrapper that alternates between Topi toys on animation cycles.
  * @param {Document} document Target document.
- * @param {{reducedMotion?: boolean, random?: () => number, size?: number, initialToy?: 'mouse'|'yarn'}} [options]
- * @returns {{element: HTMLSpanElement|null, next: () => ('mouse'|'yarn'|null), destroy: () => void}}
+ * @param {{reducedMotion?: boolean, random?: () => number, size?: number, initialToy?: 'mouse'|'yarn'|'ball'|'feather'}} [options]
+ * @returns {{element: HTMLSpanElement|null, next: () => ('mouse'|'yarn'|'ball'|'feather'|null), destroy: () => void}}
  */
 export function createTopiPlaytime(
     document,
@@ -274,9 +318,9 @@ export function createTopiPlaytime(
 
     function mountToy(toyName) {
         detachListeners(currentToyEl);
-        const nextEl = toyName === 'yarn'
-            ? createTopiYarn(document, { size })
-            : createTopiMouse(document, { size });
+        const normalizedToy = TOPI_TOYS.includes(toyName) ? toyName : 'mouse';
+        const createToy = TOPI_TOY_FACTORIES[normalizedToy];
+        const nextEl = createToy(document, { size });
         if (!nextEl) {
             currentToyEl = null;
             return null;
@@ -285,8 +329,8 @@ export function createTopiPlaytime(
         currentToyEl = nextEl;
         currentToyEl.addEventListener('animationiteration', handleAnimationCycle);
         currentToyEl.addEventListener('animationend', handleAnimationCycle);
-        history.push(toyName);
-        return toyName;
+        history.push(normalizedToy);
+        return normalizedToy;
     }
 
     function next() {
@@ -301,7 +345,7 @@ export function createTopiPlaytime(
         currentToyEl = null;
     }
 
-    mountToy(initialToy === 'yarn' ? 'yarn' : 'mouse');
+    mountToy(TOPI_TOYS.includes(initialToy) ? initialToy : 'mouse');
 
     return {
         element: wrapper,
