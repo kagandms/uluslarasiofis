@@ -18,6 +18,8 @@ const MAX_HISTORY_ITEMS = 6;
 const BLOB_REVOKE_DELAY_MS = 60_000;
 const UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor.';
 const INVALID_ACTION_MESSAGE = 'İşlem doğrulanamadığı için uygulanmadı.';
+const WELCOME_MESSAGE =
+    "Merhaba, ben Topi, yetkili asistanınız. Başvuru bulma, YKN zincirini çalıştırma, tebliğ arama, dilekçe ve çalışma saati kaydı konularında yardımcı olabilirim. Örneğin: «Kagan'ın tebliğine bak» ya da «A1234567 için YKN ver».";
 
 const APPLICATION_STATUS_LABELS = Object.freeze({
     draft: 'Taslak',
@@ -96,7 +98,9 @@ function buildResultsElement(doc, results) {
 
     const totalLine = doc.createElement('p');
     totalLine.className = 'staff-assistant-results-total';
-    totalLine.textContent = `Toplam ${results.total}`;
+    totalLine.textContent = results.kind === 'tebligat' && results.truncated
+        ? `Toplam ${results.total} (ilk ${results.items.length})`
+        : `Toplam ${results.total}`;
     section.append(totalLine);
 
     const list = doc.createElement('ul');
@@ -162,6 +166,35 @@ function buildResultsElement(doc, results) {
 
             list.append(li);
         }
+    } else if (results.kind === 'tebligat') {
+        for (const item of results.items) {
+            const li = doc.createElement('li');
+            li.className = 'staff-assistant-result-item';
+
+            const primary = doc.createElement('div');
+            primary.className = 'staff-assistant-result-primary';
+            primary.textContent = item.name || 'İsimsiz kayıt';
+
+            const metaParts = [];
+            if (item.sheet) metaParts.push(`Sayfa: ${item.sheet}`);
+            metaParts.push(`No: ${item.number || '-'}`);
+            if (item.date && item.date !== item.sheet) {
+                metaParts.push(`Tarih: ${item.date}`);
+            }
+
+            const meta = doc.createElement('div');
+            meta.className = 'staff-assistant-result-meta';
+            meta.textContent = metaParts.join(' · ');
+
+            const statusBadge = doc.createElement('span');
+            statusBadge.className = item.marked
+                ? 'staff-assistant-tebligat-status is-marked'
+                : 'staff-assistant-tebligat-status';
+            statusBadge.textContent = item.marked ? 'İşaretlendi' : 'İşaretlenmedi';
+
+            li.append(primary, meta, statusBadge);
+            list.append(li);
+        }
     }
 
     if (list.childElementCount > 0) {
@@ -193,6 +226,7 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
     const reducedMotion = prefersReducedMotion(doc);
     let isOpen = false;
     let isSending = false;
+    let hasShownWelcome = false;
     let destroyed = false;
     let conversationHistory = [];
     const activeTimers = new Set();
@@ -334,9 +368,9 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
         log.scrollTop = log.scrollHeight;
     }
 
-    function appendMessage({ role, text, isError = false, results = null, extraNode = null }) {
+    function appendMessage({ role, text, isError = false, isWelcome = false, results = null, extraNode = null }) {
         const wrapper = doc.createElement('div');
-        wrapper.className = `staff-assistant-message staff-assistant-message-${isError ? 'error' : role}`;
+        wrapper.className = `staff-assistant-message staff-assistant-message-${isError ? 'error' : role}${isWelcome ? ' staff-assistant-message-welcome' : ''}`;
         wrapper.dataset.timestamp = String(now());
 
         const bubble = doc.createElement('p');
@@ -667,6 +701,13 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
         rootContainer.classList.add('is-panel-open');
         setPlaytimeHidden(true);
         launcherButton.setAttribute('aria-expanded', 'true');
+        if (!hasShownWelcome) {
+            hasShownWelcome = true;
+            appendMessage({ role: 'assistant', text: WELCOME_MESSAGE, isWelcome: true });
+            if (!isSending) {
+                setMascotState('hello');
+            }
+        }
         doc.addEventListener('keydown', handleDocumentKeydown);
         input.focus();
     }

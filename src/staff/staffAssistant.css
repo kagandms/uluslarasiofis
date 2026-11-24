@@ -418,6 +418,10 @@
     color: var(--text-primary, #1a1a24);
 }
 
+.staff-assistant-message-welcome {
+    border-inline-start: 3px solid var(--accent, #7e1830);
+}
+
 .staff-assistant-message-error {
     align-self: flex-start;
     background: rgba(220, 53, 69, 0.1);
@@ -482,6 +486,22 @@
     font-weight: 600;
     background: rgba(220, 53, 69, 0.14);
     color: var(--danger, #dc3545);
+}
+
+.staff-assistant-tebligat-status {
+    display: inline-block;
+    margin-block-start: 0.25rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: rgba(92, 108, 124, 0.14);
+    color: var(--text-secondary, #5c6c7c);
+}
+
+.staff-assistant-tebligat-status.is-marked {
+    background: rgba(40, 167, 69, 0.14);
+    color: var(--success, #28a745);
 }
 
 .staff-assistant-confirm-row {
@@ -614,6 +634,16 @@ body.dark-mode .staff-assistant-confirm-save {
 body.dark-mode .staff-assistant-badge-stale {
     background: rgba(220, 53, 69, 0.24);
     color: #ff9aa2;
+}
+
+body.dark-mode .staff-assistant-tebligat-status {
+    background: rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+}
+
+body.dark-mode .staff-assistant-tebligat-status.is-marked {
+    background: rgba(40, 167, 69, 0.24);
+    color: #7ae582;
 }
 
 @media (max-width: 900px) {

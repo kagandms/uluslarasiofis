@@ -839,3 +839,113 @@ test('staff launcher omits playtime and toy elements when prefers-reduced-motion
     assert.equal(launcher.querySelector('.topi-playtime'), null);
     assert.equal(launcher.querySelector('.topi-mouse, .topi-yarn'), null);
 });
+
+test('welcome message appears once on first open, sets hello state, and stays out of counter and API history', async (context) => {
+    const { window, doc } = createStaffDom(context, { authenticated: true });
+    const requests = [];
+    const fetcher = async (_url, options) => {
+        requests.push(JSON.parse(options.body));
+        return createJsonResponse({
+            reply: 'Merhaba!',
+            state: 'understood'
+        });
+    };
+
+    const controller = initializeStaffAssistant({ root: doc, fetcher });
+    assert.ok(controller);
+    context.after(() => controller.destroy());
+
+    const log = doc.querySelector('[role="log"]');
+    const counter = doc.querySelector('.staff-assistant-counter');
+    const headerTopi = doc.querySelector('.staff-assistant-header svg.mascot-cat');
+    const launcherTopi = doc.querySelector('.staff-assistant-launcher svg.mascot-cat');
+    const input = doc.getElementById('staff-assistant-input');
+
+    assert.equal(log.children.length, 0);
+    assert.equal(counter.textContent, '0 / 300');
+
+    controller.open();
+    assert.equal(requests.length, 0);
+    assert.equal(log.querySelectorAll('.staff-assistant-message-welcome').length, 1);
+    assert.match(log.textContent, /Merhaba, ben Topi, yetkili asistanınız\./);
+    assert.equal(headerTopi.classList.contains('is-hello'), true);
+    assert.equal(launcherTopi.classList.contains('is-hello'), true);
+    assert.equal(counter.textContent, '0 / 300');
+
+    controller.close();
+    controller.open();
+    assert.equal(log.querySelectorAll('.staff-assistant-message-welcome').length, 1);
+    assert.equal(requests.length, 0);
+
+    input.value = 'Selam';
+    input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    assert.equal(requests.length, 1);
+    assert.deepEqual(requests[0].history, []);
+});
+
+test('tebligat results render compactly via textContent in chat without opening Tebliğ Bul screen', async (context) => {
+    const { window, doc } = createStaffDom(context, { authenticated: true });
+    let tebligNavClicks = 0;
+    let toggleClicks = 0;
+
+    doc.querySelector('button[data-workspace-view="teblig"]').addEventListener('click', () => {
+        tebligNavClicks += 1;
+    });
+    doc.getElementById('tebligat-search-toggle').addEventListener('click', () => {
+        toggleClicks += 1;
+    });
+
+    const fetcher = async () => createJsonResponse({
+        reply: '"Ahmet" için 2026 yılında 7 kayıt buldum; ilk 5\'ini gösteriyorum; adı ve soyadıyla daraltın.',
+        state: 'understood',
+        results: {
+            kind: 'tebligat',
+            total: 7,
+            truncated: true,
+            items: [
+                {
+                    name: '<script>alert(1)</script> AHMET YILMAZ',
+                    sheet: 'Liste 1',
+                    number: '12',
+                    date: '24.11.2026',
+                    marked: true
+                },
+                {
+                    name: 'AHMET KAYA',
+                    sheet: '20.11.2026',
+                    number: '',
+                    date: '20.11.2026',
+                    marked: false
+                }
+            ]
+        }
+    });
+
+    const controller = initializeStaffAssistant({ root: doc, fetcher });
+    context.after(() => controller.destroy());
+    controller.open();
+
+    const input = doc.getElementById('staff-assistant-input');
+    input.value = "Ahmet'in tebliğine bak";
+    input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    assert.equal(tebligNavClicks, 0);
+    assert.equal(toggleClicks, 0);
+    assert.equal(doc.getElementById('tebligat-search-input').value, '');
+
+    const log = doc.querySelector('[role="log"]');
+    assert.equal(log.querySelector('script'), null);
+    assert.match(log.textContent, /7 kayıt buldum/);
+    assert.match(log.textContent, /Toplam 7 \(ilk 2\)/);
+    assert.match(log.textContent, /<script>alert\(1\)<\/script> AHMET YILMAZ/);
+    assert.match(log.textContent, /Sayfa: Liste 1/);
+    assert.match(log.textContent, /No: 12/);
+    assert.match(log.textContent, /Tarih: 24\.11\.2026/);
+    assert.match(log.textContent, /İşaretlendi/);
+    assert.match(log.textContent, /Sayfa: 20\.11\.2026/);
+    assert.match(log.textContent, /No: -/);
+    assert.match(log.textContent, /İşaretlenmedi/);
+});

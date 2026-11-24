@@ -12,6 +12,7 @@ import {
 import { requireStaff } from '../auth/staffAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { createStaffAssistantRepository } from '../repositories/d1/staffAssistantRepository.js';
+import { callAppsScript } from '../services/appsScriptProxy.js';
 import { ApiError } from './errors.js';
 import { normalizeTurkishText, resolvePerson } from './staffAssistantIntent.js';
 
@@ -122,7 +123,7 @@ export const STAFF_ASSISTANT_TOOLS = Object.freeze([
     }),
     Object.freeze({
         name: 'search_tebligat',
-        description: 'Tebligat arama kutusunu açıp verilen sorguyla arama yapar.',
+        description: 'Tebligat kayıtlarında ad veya numaraya göre salt okunur arama yapar ve sonucu sohbette gösterir.',
         parameters: Object.freeze({
             type: 'object',
             properties: Object.freeze({
@@ -604,6 +605,47 @@ async function runYknFlow(args, context) {
     };
 }
 
+const TEBLIGAT_YEAR_PATTERN = /^\d{4}$/;
+const TEBLIGAT_UNAVAILABLE_REPLY =
+    'Tebliğ servisine şu anda ulaşamadım; biraz sonra tekrar deneyin veya Tebliğ Bul ekranını kullanın.';
+
+function getIstanbulCalendarYear(now = Date.now) {
+    const timestamp = typeof now === 'function' ? now() : now;
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+    const year = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Istanbul',
+        year: 'numeric'
+    }).format(safeDate);
+    return TEBLIGAT_YEAR_PATTERN.test(year) ? year : String(safeDate.getUTCFullYear());
+}
+
+function extractTebligatDate(record, sheet) {
+    const rawDate = record?.tarih ?? record?.date ?? null;
+    if (typeof rawDate === 'string' && rawDate.trim().length > 0) {
+        return rawDate.trim();
+    }
+    const isoMatch = sheet.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    if (isoMatch) return isoMatch[1];
+    const dotMatch = sheet.match(/\b(\d{2}\.\d{2}\.\d{4})\b/);
+    if (dotMatch) return dotMatch[1];
+    const shortDotMatch = sheet.match(/\b(\d{2}\.\d{2})\b/);
+    if (shortDotMatch) return shortDotMatch[1];
+    return null;
+}
+
+function mapTebligatRecord(record) {
+    const name = String(record?.isim ?? record?.name ?? '').trim();
+    const sheet = String(record?.sayfa ?? record?.sheet ?? '').trim();
+    const rawNo = record?.no !== undefined && record?.no !== null
+        ? record.no
+        : record?.number;
+    const number = rawNo !== undefined && rawNo !== null ? String(rawNo).trim() : '';
+    const date = extractTebligatDate(record, sheet);
+    const marked = Boolean(record?.isMarked || record?.isaretli || record?.marked);
+    return { name, sheet, number, date, marked };
+}
+
 async function runSearchTebligat(args, context) {
     await resolveStaffForTool(context);
     const query = args.query.trim();
@@ -613,10 +655,49 @@ async function runSearchTebligat(args, context) {
             state: 'confused'
         };
     }
+
+    const year = getIstanbulCalendarYear(context?.now);
+    if (!TEBLIGAT_YEAR_PATTERN.test(year)) {
+        return { reply: TEBLIGAT_UNAVAILABLE_REPLY, state: 'confused' };
+    }
+
+    let payload;
+    try {
+        payload = await callAppsScript('search', { q: query, year }, context?.environment || {}, context?.fetcher);
+    } catch {
+        return { reply: TEBLIGAT_UNAVAILABLE_REPLY, state: 'confused' };
+    }
+
+    if (!Array.isArray(payload?.results)) {
+        return { reply: TEBLIGAT_UNAVAILABLE_REPLY, state: 'confused' };
+    }
+
+    const mapped = payload.results.map(mapTebligatRecord);
+    const total = mapped.length;
+    const truncated = total > MAX_RESULT_ITEMS;
+    const items = mapped.slice(0, MAX_RESULT_ITEMS);
+    const results = { kind: 'tebligat', total, truncated, items };
+
+    if (total === 0) {
+        return {
+            reply: `"${query}" için ${year} yılında kayıt bulamadım.`,
+            state: 'confused',
+            results
+        };
+    }
+
+    if (truncated) {
+        return {
+            reply: `"${query}" için ${year} yılında ${total} kayıt buldum; ilk ${MAX_RESULT_ITEMS}'ini gösteriyorum; adı ve soyadıyla daraltın.`,
+            state: 'understood',
+            results
+        };
+    }
+
     return {
-        reply: `"${query}" için tebligat araması açılıyor.`,
+        reply: `"${query}" için ${year} yılında ${total} kayıt buldum.`,
         state: 'understood',
-        action: { type: 'tebligat.search', query }
+        results
     };
 }
 

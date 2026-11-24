@@ -387,7 +387,7 @@ export function parseStaffIntent(message) {
         const hasSearchOrActionArgs =
             (navView === 'work-hours' && parseHoursText(trimmed) !== null)
             || (navView === 'documents' && parseCount(trimmed) !== null)
-            || (navView === 'teblig' && cleanQueryTokens(trimmed, /\b(?:teblig\w*|ekran\w*|sekme\w*|sayfa\w*|ac|git|gec|goster)\b/giu).length >= 2)
+            || (navView === 'teblig' && cleanQueryTokens(normalized, /\b(?:teblig\w*(?:\s+bul)?|ekran\w*|sekme\w*|sayfa\w*|ac|git|gec|goster)\b/giu).length >= 2)
             || (navView === 'applications' && /\d{4,}/.test(trimmed))
             || (navView === 'yoksis-audit' && /\d{4,}/.test(trimmed));
         if (!hasSearchOrActionArgs) {
@@ -397,9 +397,13 @@ export function parseStaffIntent(message) {
 
     // 3. Tebligat search.
     if (TEBLIGAT_TRIGGER_PATTERN.test(normalized)) {
+        const withoutApostropheSuffixes = trimmed.replace(
+            /['’](?:y?[ıiuü]|n?[ıiuü]n|n?[ae]|y[ae]|d[ae]n?|t[ae]n?)(?=$|[^\p{L}])/giu,
+            ''
+        );
         const query = cleanQueryTokens(
-            trimmed,
-            /(?:^|[^\p{L}])(?:tebli[gğ][\p{L}\p{N}]*|bul[\p{L}\p{N}]*|ara[\p{L}\p{N}]*|sorgula[\p{L}\p{N}]*|getir[\p{L}\p{N}]*|kontrol\s+et|i[cç]in|var\s+m[iı]|l[uü]tfen)(?=$|[^\p{L}])/giu
+            withoutApostropheSuffixes,
+            /(?:^|[^\p{L}])(?:tebli[gğ][\p{L}\p{N}]*|bul(?:un|ur[\p{L}\p{N}]*|abilir[\p{L}\p{N}]*)?|ara(?:y[iı]n|r[\p{L}\p{N}]*|b[iı]l[\p{L}\p{N}]*)?|sorgula[\p{L}\p{N}]*|getir[\p{L}\p{N}]*|bak[\p{L}\p{N}]*|g[oö]ster[\p{L}\p{N}]*|listele[\p{L}\p{N}]*|kontrol\s+et|i[cç]in|var\s+m[iı]|nedir|l[uü]tfen)(?=$|[^\p{L}])/giu
         );
         return { tool: 'search_tebligat', args: { query } };
     }

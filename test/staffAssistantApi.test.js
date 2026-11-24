@@ -620,7 +620,7 @@ test('propose_documents_print validates documents-config allowlist, copy limits 
     assert.match(ambiguousPayload.reply, /Taksit Dilekçesi/u);
 });
 
-test('run_ykn_flow, search_tebligat, and navigate return validated actions and YKN states red-line guarantees', async () => {
+test('run_ykn_flow and navigate return validated actions and YKN states red-line guarantees', async () => {
     const { environment } = await createFixture();
 
     const yknResp = await worker.fetch(createAssistantRequest({ message: "ab123456 pasaportunu ykn'ye ver" }), environment, {});
@@ -629,11 +629,6 @@ test('run_ykn_flow, search_tebligat, and navigate return validated actions and Y
     assert.deepEqual(yknPayload.action, { type: 'ykn.run', passportNo: 'AB123456' });
     assert.match(yknPayload.reply, /Kaydet/u);
     assert.match(yknPayload.reply, /talep/iu);
-
-    const tebResp = await worker.fetch(createAssistantRequest({ message: 'Mehmet Kaya tebligat bul' }), environment, {});
-    const tebPayload = validateStaffAssistantResponse(await tebResp.json());
-    assert.equal(tebResp.status, 200);
-    assert.deepEqual(tebPayload.action, { type: 'tebligat.search', query: 'Mehmet Kaya' });
 
     const navResp = await worker.fetch(createAssistantRequest({ message: 'Belgeler ekranını aç' }), environment, {});
     const navPayload = validateStaffAssistantResponse(await navResp.json());
@@ -644,6 +639,220 @@ test('run_ykn_flow, search_tebligat, and navigate return validated actions and Y
     const archivePayload = validateStaffAssistantResponse(await archiveResp.json());
     assert.equal(archiveResp.status, 200);
     assert.equal(archivePayload.action, undefined);
+});
+
+test('search_tebligat searches server-side for 0, 1, and 7 (truncated to 5) records with no action and no leaked raw fields', async (context) => {
+    const { environment, fakeAi } = await createFixture();
+    environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/SECRET_SCRIPT_ID/exec';
+    environment.APPS_SCRIPT_API_KEY = 'SUPER_SECRET_APPS_SCRIPT_KEY';
+
+    const fetchedCalls = [];
+    let nextResults = [];
+    context.mock.method(globalThis, 'fetch', async (url, options) => {
+        const body = options?.body ? JSON.parse(options.body) : null;
+        fetchedCalls.push({ url: String(url), method: options?.method, body });
+        return new Response(JSON.stringify({ success: true, results: nextResults }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    });
+
+    // 0 records
+    nextResults = [];
+    const zeroResp = await worker.fetch(createAssistantRequest({ message: 'Olmayan Kişi tebligat bul' }), environment, {});
+    const zeroPayload = validateStaffAssistantResponse(await zeroResp.json());
+    assert.equal(zeroResp.status, 200);
+    assert.equal(zeroPayload.state, 'confused');
+    assert.equal(zeroPayload.action, undefined);
+    assert.match(zeroPayload.reply, /Olmayan Kişi/u);
+    assert.match(zeroPayload.reply, /kayıt bulamadım/u);
+    assert.deepEqual(zeroPayload.results, {
+        kind: 'tebligat',
+        total: 0,
+        truncated: false,
+        items: []
+    });
+
+    // 1 record with extra raw upstream fields that must be stripped
+    nextResults = [{
+        isim: 'MEHMET KAYA',
+        sayfa: '24.11.2026',
+        no: 12,
+        isaretli: true,
+        secretRowId: 'RAW_INTERNAL_TOKEN',
+        internalNote: 'SECRET_ROW_NOTE'
+    }];
+    const oneResp = await worker.fetch(createAssistantRequest({ message: 'Mehmet Kaya tebligat bul' }), environment, {});
+    const oneJsonText = await oneResp.text();
+    const onePayload = validateStaffAssistantResponse(JSON.parse(oneJsonText));
+    assert.equal(oneResp.status, 200);
+    assert.equal(onePayload.state, 'understood');
+    assert.equal(onePayload.action, undefined);
+    assert.match(onePayload.reply, /1 kayıt buldum/u);
+    assert.deepEqual(onePayload.results, {
+        kind: 'tebligat',
+        total: 1,
+        truncated: false,
+        items: [{
+            name: 'MEHMET KAYA',
+            sheet: '24.11.2026',
+            number: '12',
+            date: '24.11.2026',
+            marked: true
+        }]
+    });
+    assert.equal(oneJsonText.includes('SUPER_SECRET_APPS_SCRIPT_KEY'), false);
+    assert.equal(oneJsonText.includes('SECRET_SCRIPT_ID'), false);
+    assert.equal(oneJsonText.includes('RAW_INTERNAL_TOKEN'), false);
+    assert.equal(oneJsonText.includes('SECRET_ROW_NOTE'), false);
+
+    // 7 records -> truncated to 5 with guidance reply and no action
+    nextResults = Array.from({ length: 7 }, (_, idx) => ({
+        isim: `AHMET YILMAZ ${idx + 1}`,
+        sayfa: 'Liste 2',
+        no: String(idx + 1),
+        tarih: '2026-11-20',
+        isMarked: idx % 2 === 0
+    }));
+    const manyResp = await worker.fetch(createAssistantRequest({ message: 'Ahmet tebligat bul' }), environment, {});
+    const manyPayload = validateStaffAssistantResponse(await manyResp.json());
+    assert.equal(manyResp.status, 200);
+    assert.equal(manyPayload.state, 'understood');
+    assert.equal(manyPayload.action, undefined);
+    assert.match(manyPayload.reply, /7 kayıt buldum/u);
+    assert.match(manyPayload.reply, /ilk 5'ini gösteriyorum; adı ve soyadıyla daraltın/u);
+    assert.equal(manyPayload.results?.kind, 'tebligat');
+    assert.equal(manyPayload.results?.total, 7);
+    assert.equal(manyPayload.results?.truncated, true);
+    assert.equal(manyPayload.results?.items.length, 5);
+    assert.equal(manyPayload.results?.items[0].name, 'AHMET YILMAZ 1');
+    assert.equal(manyPayload.results?.items[4].name, 'AHMET YILMAZ 5');
+    assert.equal(fakeAi.callCount, 0);
+    assert.equal(fetchedCalls.length, 3);
+});
+
+test('search_tebligat rejects queries shorter than 2 characters without calling Apps Script', async (context) => {
+    const { environment } = await createFixture();
+    environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
+    environment.APPS_SCRIPT_API_KEY = 'test-key';
+
+    let fetchCount = 0;
+    context.mock.method(globalThis, 'fetch', async () => {
+        fetchCount += 1;
+        return new Response(JSON.stringify({ success: true, results: [] }), { status: 200 });
+    });
+
+    const resp = await worker.fetch(createAssistantRequest({ message: 'a tebligat bul' }), environment, {});
+    const payload = validateStaffAssistantResponse(await resp.json());
+    assert.equal(resp.status, 200);
+    assert.equal(payload.state, 'confused');
+    assert.equal(payload.action, undefined);
+    assert.equal(payload.results, undefined);
+    assert.match(payload.reply, /2 ile 80/u);
+    assert.equal(fetchCount, 0);
+});
+
+test('search_tebligat returns calm reply and no action on config error or upstream timeout without leaking internals', async (context) => {
+    // Missing configuration
+    const missingEnvFixture = await createFixture();
+    const missingResp = await worker.fetch(
+        createAssistantRequest({ message: 'Mehmet Kaya tebligat bul' }),
+        missingEnvFixture.environment,
+        {}
+    );
+    const missingJson = await missingResp.text();
+    const missingPayload = validateStaffAssistantResponse(JSON.parse(missingJson));
+    assert.equal(missingResp.status, 200);
+    assert.equal(missingPayload.state, 'confused');
+    assert.equal(missingPayload.action, undefined);
+    assert.equal(
+        missingPayload.reply,
+        'Tebliğ servisine şu anda ulaşamadım; biraz sonra tekrar deneyin veya Tebliğ Bul ekranını kullanın.'
+    );
+
+    // Invalid URL configuration must not leak URL or API key
+    const invalidEnvFixture = await createFixture();
+    invalidEnvFixture.environment.APPS_SCRIPT_URL = 'http://internal.secret.local/exec?token=LEAK_TOKEN';
+    invalidEnvFixture.environment.APPS_SCRIPT_API_KEY = 'LEAK_API_KEY';
+    const invalidResp = await worker.fetch(
+        createAssistantRequest({ message: 'Mehmet Kaya tebligat bul' }),
+        invalidEnvFixture.environment,
+        {}
+    );
+    const invalidJson = await invalidResp.text();
+    const invalidPayload = validateStaffAssistantResponse(JSON.parse(invalidJson));
+    assert.equal(invalidResp.status, 200);
+    assert.equal(invalidPayload.state, 'confused');
+    assert.equal(invalidPayload.action, undefined);
+    assert.equal(invalidJson.includes('internal.secret.local'), false);
+    assert.equal(invalidJson.includes('LEAK_TOKEN'), false);
+    assert.equal(invalidJson.includes('LEAK_API_KEY'), false);
+
+    // Upstream timeout
+    const timeoutFixture = await createFixture();
+    timeoutFixture.environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/LEAK_TIMEOUT_PATH/exec';
+    timeoutFixture.environment.APPS_SCRIPT_API_KEY = 'LEAK_TIMEOUT_KEY';
+    context.mock.method(globalThis, 'fetch', async () => {
+        const error = new Error('SECRET_TIMEOUT_DETAIL https://internal.upstream');
+        error.name = 'TimeoutError';
+        throw error;
+    });
+    const timeoutResp = await worker.fetch(
+        createAssistantRequest({ message: 'Mehmet Kaya tebligat bul' }),
+        timeoutFixture.environment,
+        {}
+    );
+    const timeoutJson = await timeoutResp.text();
+    const timeoutPayload = validateStaffAssistantResponse(JSON.parse(timeoutJson));
+    assert.equal(timeoutResp.status, 200);
+    assert.equal(timeoutPayload.state, 'confused');
+    assert.equal(timeoutPayload.action, undefined);
+    assert.equal(
+        timeoutPayload.reply,
+        'Tebliğ servisine şu anda ulaşamadım; biraz sonra tekrar deneyin veya Tebliğ Bul ekranını kullanın.'
+    );
+    assert.equal(timeoutJson.includes('SECRET_TIMEOUT_DETAIL'), false);
+    assert.equal(timeoutJson.includes('internal.upstream'), false);
+    assert.equal(timeoutJson.includes('LEAK_TIMEOUT_PATH'), false);
+    assert.equal(timeoutJson.includes('LEAK_TIMEOUT_KEY'), false);
+});
+
+test('search_tebligat derives year from Europe/Istanbul clock and logs no query or names', async (context) => {
+    const { environment } = await createFixture();
+    environment.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/test/exec';
+    environment.APPS_SCRIPT_API_KEY = 'test-key';
+
+    // 2026-12-31T21:30:00Z is 2027-01-01T00:30:00+03:00 in Europe/Istanbul.
+    context.mock.method(Date, 'now', () => Date.parse('2026-12-31T21:30:00.000Z'));
+
+    const infoLogs = [];
+    context.mock.method(console, 'info', (...args) => {
+        infoLogs.push(args);
+    });
+
+    const sentParams = [];
+    context.mock.method(globalThis, 'fetch', async (_url, options) => {
+        sentParams.push(JSON.parse(options.body));
+        return new Response(JSON.stringify({
+            success: true,
+            results: [{ isim: 'KAGAN SAMET', sayfa: '01.01.2027', no: 1, isaretli: false }]
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const resp = await worker.fetch(createAssistantRequest({ message: "Kagan'ın tebliğine bak" }), environment, {});
+    const payload = validateStaffAssistantResponse(await resp.json());
+    assert.equal(resp.status, 200);
+    assert.equal(sentParams[0].q, 'Kagan');
+    assert.equal(sentParams[0].year, '2027');
+    assert.match(payload.reply, /2027 yılında/u);
+    assert.equal(payload.action, undefined);
+
+    assert.equal(infoLogs.length, 1);
+    const serializedLog = JSON.stringify(infoLogs[0]);
+    assert.equal(infoLogs[0][1].tool, 'search_tebligat');
+    assert.equal(infoLogs[0][1].outcome, 'ok');
+    assert.equal(serializedLog.includes('Kagan'), false);
+    assert.equal(serializedLog.includes('KAGAN'), false);
 });
 
 test('POST /api/staff/assistant enforces per-staff rate limits (429) and logs no message text or personal data', async (context) => {

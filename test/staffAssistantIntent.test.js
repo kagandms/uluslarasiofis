@@ -79,6 +79,15 @@ test('parseStaffIntent matches deterministic Turkish commands for supported tool
     assert.equal(tebligatIntent?.tool, 'search_tebligat');
     assert.equal(tebligatIntent?.args.query, 'Ahmet Demir');
 
+    const tebligatLookIntent = parseStaffIntent("Kagan'ın tebliğine bak");
+    assert.deepEqual(tebligatLookIntent, { tool: 'search_tebligat', args: { query: 'Kagan' } });
+
+    const tebligatShowIntent = parseStaffIntent('Mehmet Kaya tebligatını göster');
+    assert.deepEqual(tebligatShowIntent, { tool: 'search_tebligat', args: { query: 'Mehmet Kaya' } });
+
+    assert.deepEqual(parseStaffIntent('Tebliğ Bul ekranını aç'), { tool: 'navigate', args: { view: 'teblig' } });
+    assert.deepEqual(parseStaffIntent('Tebliğ ekranını aç'), { tool: 'navigate', args: { view: 'teblig' } });
+
     const yoksisIntent = parseStaffIntent('20260000001 eksik evrak durumu');
     assert.equal(yoksisIntent?.tool, 'lookup_yoksis_audit');
     assert.ok(yoksisIntent?.args.query.includes('20260000001'));
