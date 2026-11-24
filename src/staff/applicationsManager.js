@@ -4,6 +4,8 @@ import { listRequiredDocumentAnswers } from '../shared/document-conditions.js';
 import { isPlausibleBirthDate } from '../shared/age.js';
 import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
 import { downloadApplicationArchive, createArchiveFilename } from './applicationArchive.js';
+import { createStudentFilename } from '../shared/studentFilename.js';
+import { mergeDocumentsToPdf, downloadPdfFile } from '../services/pdfMergerService.js';
 import { listSentToMigrationApplications, runMigrationBulkExport } from './migrationBulkArchive.js';
 import { readDocumentAccessMessage } from './documentAccessMessages.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
@@ -215,7 +217,7 @@ function createMigrationBulkExportAction(document, state, onExport) {
     return wrapper;
 }
 
-function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDeleteApplication, archiveApplicationId, deletingApplicationId, onSendToMigration, onRevertFromMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
+function createQueueTable(document, items, onOpenDetail, onDownloadPdf, onDeleteApplication, combinedPdfApplicationId, deletingApplicationId, onSendToMigration, onRevertFromMigration, onResetDraftAccess, spreadsheetPending, spreadsheetErrors, onSpreadsheetTransfer, gocnetPending, gocnetResults, onGocnetTransfer, noteOptions = null) {
     const table = document.createElement('table');
     table.className = 'staff-applications-table';
     const headers = ['', 'Pasaport No', 'Ad Soyad', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
@@ -329,14 +331,15 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
         action.textContent = 'Detay';
         action.disabled = isRowDeleting;
         action.addEventListener('click', () => onOpenDetail(item.id));
+        const isDownloadingPdf = combinedPdfApplicationId === item.id;
         const download = document.createElement('button');
         download.type = 'button';
         download.className = 'btn btn-outline';
-        download.dataset.action = 'download-application-archive';
-        download.textContent = archiveApplicationId === item.id ? 'İptal' : 'İndir';
+        download.dataset.action = 'download-application-pdf';
+        download.textContent = isDownloadingPdf ? 'İptal' : 'İndir';
         download.disabled = isRowDeleting;
-        download.setAttribute('aria-label', archiveApplicationId === item.id ? 'ZIP indirmeyi iptal et' : 'Virüs taramasından geçmiş belgeleri ZIP olarak indir');
-        download.addEventListener('click', () => onDownloadArchive(item.id));
+        download.setAttribute('aria-label', isDownloadingPdf ? 'Tek PDF indirmeyi iptal et' : 'Belgeleri tek PDF olarak indir');
+        download.addEventListener('click', () => onDownloadPdf(item.id));
         const deleteButton = document.createElement('button');
         deleteButton.type = 'button';
         deleteButton.className = 'btn btn-danger btn-permanent-delete';
@@ -499,7 +502,7 @@ function renderQueue(root, state, handlers) {
         const tableWrap = document.createElement('div');
         tableWrap.className = 'staff-applications-table-wrap';
         tableWrap.append(createQueueTable(document, state.result.items, handlers.onOpenDetail,
-            handlers.onDownloadArchive, handlers.onDeleteApplication, state.archiveApplicationId, state.deletingApplicationId, handlers.onSendToMigration,
+            handlers.onDownloadPdf, handlers.onDeleteApplication, state.combinedPdfApplicationId, state.deletingApplicationId, handlers.onSendToMigration,
             handlers.onRevertFromMigration, handlers.onResetDraftAccess, state.spreadsheetPending, state.spreadsheetErrors, handlers.onSpreadsheetTransfer,
             state.gocnetPending, state.gocnetResults, handlers.onGocnetTransfer, {
                 notesById: state.recordNotes,
@@ -1192,9 +1195,15 @@ function createStaffApplicationsApi() {
  * Initializes the authenticated, read-only staff application queue and detail workspace.
  * @param {HTMLElement} root Manager mount element inside the applications workspace.
  * @param {{queryApplications: (query: object) => Promise<object>, readApplicationDetail: (id: string) => Promise<object>}|null} [api] Optional API adapter for tests.
+ * @param {{mergeDocumentsToPdf?: Function, downloadPdfFile?: Function, openPdfMergerModal?: Function}} [services] Optional PDF service overrides for tests.
  * @returns {void} Registers the workspace view handler.
  */
-export function initializeStaffApplicationsManager(root, api = createStaffApplicationsApi()) {
+export function initializeStaffApplicationsManager(root, api = createStaffApplicationsApi(), services = {}) {
+    const mergePdf = services?.mergeDocumentsToPdf || mergeDocumentsToPdf;
+    const savePdfFile = services?.downloadPdfFile || downloadPdfFile;
+    const loadOpenPdfMergerModal = typeof services?.openPdfMergerModal === 'function'
+        ? async () => services.openPdfMergerModal
+        : async () => (await import('../ui/pdfMergerModal.js')).openPdfMergerModal;
     const document = root.ownerDocument;
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
@@ -1266,7 +1275,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         });
         else renderQueue(root, state, {
             onSearch: submitSearch, onQueryChange: scheduleSearch, onRetry: loadQueue, onPageChange: changePage, onOpenDetail: openDetail,
-            onDownloadArchive: downloadArchive, onDeleteApplication: deleteApplication,
+            onDownloadPdf: downloadApplicationPdf, onDeleteApplication: deleteApplication,
             onResetDraftAccess: resetDraftAccess,
             onSendToMigration: sendToMigration, onRevertFromMigration: revertFromMigration, onDismissToast: dismissToast,
             onSpreadsheetTransfer: transferApplicationToSpreadsheet, onGocnetTransfer: checkGocnetTransfer,
@@ -1303,14 +1312,24 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         state.preview = null;
         previewTriggerCode = null;
     }
+    function findApplicationRecord(applicationId) {
+        if (state.detail?.application?.id === applicationId) return state.detail.application;
+        return state.result?.items?.find((item) => item.id === applicationId) || null;
+    }
     function readArchiveFilename(applicationId) {
-        const applicationObj = state.detail?.application?.id === applicationId
-            ? state.detail.application
-            : state.result?.items?.find((item) => item.id === applicationId);
+        const applicationObj = findApplicationRecord(applicationId);
         return createArchiveFilename({
             firstName: applicationObj?.first_name,
             lastName: applicationObj?.last_name,
             studentNumber: applicationObj?.student_number
+        });
+    }
+    function readStudentPdfFilename(applicationId) {
+        const applicationObj = findApplicationRecord(applicationId);
+        return createStudentFilename({
+            firstName: applicationObj?.first_name,
+            lastName: applicationObj?.last_name,
+            passportNumber: applicationObj?.passport_number
         });
     }
     async function exportMigrationApplications() {
@@ -1408,44 +1427,118 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         render();
         await completeArchiveDownload(applicationId, archiveController, requestId);
     }
-    async function prepareYoksisPdf(applicationId) {
-        if (!api.createArchiveManifest || !api.readArchiveFile || state.archiveController || state.combinedPdfController) return;
+    async function fetchOrderedCleanFiles(applicationId, signal) {
+        const manifest = await readCleanArchiveManifest(applicationId, signal, state, api);
+        if (!Array.isArray(manifest?.files) || manifest.files.length === 0) {
+            throw new Error('Birleştirilecek güncel ve güvenli evrak bulunamadı.');
+        }
+        if (manifest.files.length > 30) throw new Error('PDF için en fazla 30 evrak birleştirilebilir.');
+        const FileClass = document.defaultView?.File || File;
+        // Download a few documents at a time; results keep the manifest order.
+        const orderedFiles = new Array(manifest.files.length);
+        let nextIndex = 0;
+        const downloadNext = async () => {
+            while (nextIndex < manifest.files.length) {
+                const index = nextIndex;
+                nextIndex += 1;
+                const file = manifest.files[index];
+                if (signal.aborted) throw new DOMException('Canceled', 'AbortError');
+                const response = await api.readArchiveFile(applicationId, file, signal);
+                if (!response.ok || !response.body) throw new Error(`“${file.entry_name}” güvenli biçimde alınamadı; PDF oluşturulmadı.`);
+                const blob = await response.blob();
+                if (blob.size !== file.byte_size) throw new Error(`“${file.entry_name}” boyutu doğrulanamadı; PDF oluşturulmadı.`);
+                orderedFiles[index] = new FileClass([blob], file.entry_name, { type: file.media_type });
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(4, manifest.files.length) }, downloadNext));
+        return orderedFiles;
+    }
+    function cancelCombinedPdf() {
+        archiveRequestId += 1;
+        state.combinedPdfController.abort();
+        state.combinedPdfApplicationId = null;
+        state.combinedPdfController = null;
+        state.archiveError = null;
+        state.archiveMessage = 'Tek PDF indirme iptal edildi.';
+        render();
+    }
+    async function downloadApplicationPdf(applicationId) {
+        if (state.combinedPdfController && state.combinedPdfApplicationId === applicationId) {
+            cancelCombinedPdf();
+            return;
+        }
+        if (!api.createArchiveManifest || !api.readArchiveFile || state.archiveController || state.combinedPdfController || state.bulkExportController) return;
         const controller = new AbortController();
         const requestId = ++archiveRequestId;
         state.combinedPdfApplicationId = applicationId;
         state.combinedPdfController = controller;
         state.archiveError = null;
+        state.archiveMessage = 'Belgeler hazırlanıyor…';
         render();
         try {
-            const manifest = await readCleanArchiveManifest(applicationId, controller.signal, state, api);
-            if (!Array.isArray(manifest?.files) || manifest.files.length === 0) {
-                throw new Error('Birleştirilecek güncel ve güvenli evrak bulunamadı.');
-            }
-            if (manifest.files.length > 30) throw new Error('PDF için en fazla 30 evrak birleştirilebilir.');
-            const FileClass = document.defaultView.File;
-            // Download a few documents at a time; results keep the manifest order.
-            const orderedFiles = new Array(manifest.files.length);
-            let nextIndex = 0;
-            const downloadNext = async () => {
-                while (nextIndex < manifest.files.length) {
-                    const index = nextIndex;
-                    nextIndex += 1;
-                    const file = manifest.files[index];
-                    if (controller.signal.aborted) throw new DOMException('Canceled', 'AbortError');
-                    const response = await api.readArchiveFile(applicationId, file, controller.signal);
-                    if (!response.ok || !response.body) throw new Error(`“${file.entry_name}” güvenli biçimde alınamadı; PDF oluşturulmadı.`);
-                    const blob = await response.blob();
-                    if (blob.size !== file.byte_size) throw new Error(`“${file.entry_name}” boyutu doğrulanamadı; PDF oluşturulmadı.`);
-                    orderedFiles[index] = new FileClass([blob], file.entry_name, { type: file.media_type });
-                }
-            };
-            await Promise.all(Array.from({ length: Math.min(4, manifest.files.length) }, downloadNext));
+            const orderedFiles = await fetchOrderedCleanFiles(applicationId, controller.signal);
             if (requestId !== archiveRequestId || controller.signal.aborted) return;
-            const { openPdfMergerModal } = await import('../ui/pdfMergerModal.js');
+            state.archiveMessage = 'Belgeler tek PDF olarak birleştiriliyor…';
+            render();
+            const result = await mergePdf(orderedFiles, (progress) => {
+                if (requestId !== archiveRequestId || controller.signal.aborted) return;
+                if (progress?.message) {
+                    state.archiveMessage = progress.message;
+                    render();
+                }
+            });
+            if (requestId !== archiveRequestId || controller.signal.aborted) return;
+            const downloadFilename = readStudentPdfFilename(applicationId);
+            if (result?.metrics?.targetReached) {
+                savePdfFile(result.bytes, downloadFilename);
+                state.archiveError = null;
+                state.archiveMessage = 'Tek PDF indirildi.';
+            } else {
+                const openPdfMergerModal = await loadOpenPdfMergerModal();
+                if (requestId !== archiveRequestId || controller.signal.aborted) return;
+                state.archiveMessage = null;
+                state.archiveError = 'Birleştirilen PDF 9 MiB YÖKSİS sınırını aştığı için indirilemedi; açılan pencereden sayfaları düzenleyin.';
+                openPdfMergerModal({
+                    initialFiles: orderedFiles,
+                    maxFiles: 30,
+                    downloadFilename,
+                    contextLabel: 'Birleştirilen PDF 9 MiB sınırını aştı. Sayfaları azaltıp veya düzenleyip tekrar oluşturun.'
+                });
+            }
+        } catch (error) {
+            if (requestId !== archiveRequestId) return;
+            state.archiveMessage = null;
+            state.archiveError = error?.name === 'AbortError'
+                ? 'Tek PDF indirme iptal edildi.'
+                : (typeof error?.message === 'string' && /evrak|belge|PDF/i.test(error.message)
+                    ? error.message : 'Tek PDF hazırlanamadı. Evrak güvenlik durumlarını kontrol edip tekrar deneyin.');
+        } finally {
+            if (requestId === archiveRequestId) {
+                state.combinedPdfApplicationId = null;
+                state.combinedPdfController = null;
+                render();
+            }
+        }
+    }
+    async function prepareYoksisPdf(applicationId) {
+        if (!api.createArchiveManifest || !api.readArchiveFile || state.archiveController || state.combinedPdfController || state.bulkExportController) return;
+        const controller = new AbortController();
+        const requestId = ++archiveRequestId;
+        state.combinedPdfApplicationId = applicationId;
+        state.combinedPdfController = controller;
+        state.archiveError = null;
+        state.archiveMessage = null;
+        render();
+        try {
+            const orderedFiles = await fetchOrderedCleanFiles(applicationId, controller.signal);
+            if (requestId !== archiveRequestId || controller.signal.aborted) return;
+            const openPdfMergerModal = await loadOpenPdfMergerModal();
+            if (requestId !== archiveRequestId || controller.signal.aborted) return;
             render();
             openPdfMergerModal({
                 initialFiles: orderedFiles,
                 maxFiles: 30,
+                downloadFilename: readStudentPdfFilename(applicationId),
                 contextLabel: 'Tüm temiz evraklar başvurudaki sırayla eklendi. Tek PDF oluşturup boyutunu ve okunabilirliğini kontrol edin.'
             });
         } catch (error) {

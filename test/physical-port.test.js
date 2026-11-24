@@ -325,15 +325,26 @@ test('physical registration and approval work without a verdict and never change
 
     const approved = await portRequest(context, `${base}/status`, {method:'PATCH',cookie:context.staffCookie,json:{lock_version:1,status:'approved_for_processing'}});
     const opened = await portRequest(context, `${base}/files/${receipt.id}/download`, {cookie:context.staffCookie});
+    const previewed = await portRequest(context, `${base}/files/${receipt.id}/preview`, {cookie:context.staffCookie});
 
     assert.equal(approved.status,200);
     assert.equal(opened.status,200);
-    assert.match(opened.headers.get('Content-Disposition'), /^attachment; filename="Synthetic Student\.pdf"; filename\*=UTF-8''Synthetic%20Student\.pdf$/);
+    assert.equal(previewed.status,200);
+    assert.equal(opened.headers.get('Content-Disposition'), 'attachment; filename="synthetic_student_test.pdf"; filename*=UTF-8\'\'synthetic_student_test.pdf');
+    assert.equal(previewed.headers.get('Content-Disposition'), 'inline; filename="synthetic_student_test.pdf"; filename*=UTF-8\'\'synthetic_student_test.pdf');
     assert.deepEqual(new Uint8Array(await opened.arrayBuffer()),receipt.bytes);
     await context.database.prepare('UPDATE physical_intakes SET first_name=?,last_name=? WHERE id=?').bind('Çağrı','Öğrenci',receipt.id).run();
     const localizedDownload = await portRequest(context, `${base}/files/${receipt.id}/download`, {cookie:context.staffCookie});
+    const localizedPreview = await portRequest(context, `${base}/files/${receipt.id}/preview`, {cookie:context.staffCookie});
 
-    assert.match(localizedDownload.headers.get('Content-Disposition'), /filename\*=UTF-8''%C3%87a%C4%9Fr%C4%B1%20%C3%96%C4%9Frenci\.pdf$/);
+    assert.equal(localizedDownload.headers.get('Content-Disposition'), 'attachment; filename="cagri_ogrenci_test.pdf"; filename*=UTF-8\'\'cagri_ogrenci_test.pdf');
+    assert.equal(localizedPreview.headers.get('Content-Disposition'), 'inline; filename="cagri_ogrenci_test.pdf"; filename*=UTF-8\'\'cagri_ogrenci_test.pdf');
+    await context.database.prepare('UPDATE physical_intakes SET passport_number=? WHERE id=?').bind('',receipt.id).run();
+    const missingPassportDownload = await portRequest(context, `${base}/files/${receipt.id}/download`, {cookie:context.staffCookie});
+    const missingPassportPreview = await portRequest(context, `${base}/files/${receipt.id}/preview`, {cookie:context.staffCookie});
+
+    assert.equal(missingPassportDownload.headers.get('Content-Disposition'), 'attachment; filename="cagri_ogrenci.pdf"; filename*=UTF-8\'\'cagri_ogrenci.pdf');
+    assert.equal(missingPassportPreview.headers.get('Content-Disposition'), 'inline; filename="cagri_ogrenci.pdf"; filename*=UTF-8\'\'cagri_ogrenci.pdf');
     assert.equal((await context.database.prepare('SELECT scan_status FROM physical_intake_files').first()).scan_status,'pending');
     assert.equal((await context.database.prepare("SELECT status FROM applications WHERE id='online'").first()).status,'under_review');
     assert.equal((await context.database.prepare('SELECT count(*) AS total FROM document_scan_jobs').first()).total,0);

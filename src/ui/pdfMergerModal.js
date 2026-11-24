@@ -44,8 +44,19 @@ function playCaptureFeedback() {
     }
 }
 
+/** Resolves the merged PDF download filename, falling back to a dated default when unset.
+ * @param {{downloadFilename?: unknown}} [options] Modal options possibly containing a custom filename.
+ * @param {Date} [now] Reference date used for the fallback filename.
+ * @returns {string} Trimmed custom filename or `Birlestirilmis_Belgeler_<YYYY-MM-DD>.pdf`.
+ */
+export function resolveMergedPdfFilename(options = {}, now = new Date()) {
+    const customName = typeof options?.downloadFilename === 'string' ? options.downloadFilename.trim() : '';
+    if (customName) return customName;
+    return `Birlestirilmis_Belgeler_${now.toISOString().slice(0, 10)}.pdf`;
+}
+
 /** Opens the PDF builder, optionally saving to a captured student receipt.
- * @param {{contextLabel?: string, initialFiles?: File[], onSave?: Function, onPrepare?: Function, mergeLabel?: string, confirmLabel?: string, successMessage?: string, maxFiles?: number}} options Destination and preparation callbacks.
+ * @param {{contextLabel?: string, initialFiles?: File[], onSave?: Function, onPrepare?: Function, mergeLabel?: string, confirmLabel?: string, successMessage?: string, maxFiles?: number, downloadFilename?: string}} options Destination and preparation callbacks.
  * @returns {void} Mounts the dialog.
  */
 export function openPdfMergerModal(options = {}) {
@@ -475,7 +486,7 @@ export function openPdfMergerModal(options = {}) {
         if (readyPdf) {
             if (!readyPdfCanBeUsed) return;
             if (typeof options.onSave === 'function') { await saveReadyPdf(); return; }
-            downloadPdfFile(readyPdf, `Birlestirilmis_Belgeler_${new Date().toISOString().slice(0, 10)}.pdf`);
+            downloadPdfFile(readyPdf, resolveMergedPdfFilename(options));
             return;
         }
         isContinuousCameraMode = false;
