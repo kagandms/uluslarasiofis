@@ -263,6 +263,8 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
         });
         const actionCell = document.createElement('td');
         actionCell.dataset.label = 'Detay';
+        const actionGroup = document.createElement('div');
+        actionGroup.className = 'staff-queue-actions';
         const canCheckGocnet = Boolean(item.submitted_at) && !item.deletion_state
             && !['draft', 'completed', 'cancelled', 'rejected'].includes(item.status);
         if (canCheckGocnet) {
@@ -275,11 +277,11 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
             gocnetButton.textContent = gocnetPending.has(item.id) ? 'GöçNet’e aktarılıyor…' : 'GöçNet’e aktar';
             gocnetButton.setAttribute('aria-label', gocnetButton.textContent);
             gocnetButton.addEventListener('click', () => onGocnetTransfer(item.id));
-            actionCell.append(gocnetButton);
+            actionGroup.append(gocnetButton);
             if (result) {
                 const status = createText(document, 'span', 'staff-gocnet-transfer-status', result);
                 status.setAttribute('role', 'status');
-                actionCell.append(status);
+                actionGroup.append(status);
             }
         }
         const terminalStatus = ['cancelled', 'rejected'].includes(item.status);
@@ -304,11 +306,11 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
                 ? (activeSpreadsheetTransfer === item.id ? 'E-Tablo işlemi sürüyor' : 'E-Tablo işlemi sırada')
                 : spreadsheetButton.textContent);
             spreadsheetButton.addEventListener('click', () => onSpreadsheetTransfer(item.id, retryAction || (isPresent ? 'remove' : 'add')));
-            actionCell.append(spreadsheetButton);
+            actionGroup.append(spreadsheetButton);
             if (spreadsheetErrors[item.id]) {
                 const error = createText(document, 'span', 'staff-spreadsheet-transfer-error', spreadsheetErrors[item.id]);
                 error.setAttribute('role', 'alert');
-                actionCell.append(error);
+                actionGroup.append(error);
             }
         }
         if (item.status === 'draft') {
@@ -318,7 +320,7 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
             reset.dataset.action = 'staff-reset-access-code';
             reset.textContent = 'Devam kodunu yenile';
             reset.addEventListener('click', () => onResetDraftAccess(item.id));
-            actionCell.append(reset);
+            actionGroup.append(reset);
         }
         const action = document.createElement('button');
         action.type = 'button';
@@ -343,7 +345,7 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
         deleteButton.disabled = isRowDeleting;
         deleteButton.setAttribute('aria-label', `${studentName || item.student_number || 'Başvuru'} kaydını kalıcı olarak sil`);
         deleteButton.addEventListener('click', (event) => onDeleteApplication(item, event.currentTarget));
-        actionCell.append(action, download, deleteButton);
+        actionGroup.append(action, download, deleteButton);
         if (['submitted', 'under_review', 'resubmission_required', 'approved_for_processing'].includes(item.status)) {
             const send = document.createElement('button');
             send.type = 'button';
@@ -352,7 +354,7 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
             send.textContent = 'Göçe İletildi';
             send.disabled = isRowDeleting;
             send.addEventListener('click', () => onSendToMigration(item));
-            actionCell.append(send);
+            actionGroup.append(send);
         } else if (item.status === 'sent_to_migration') {
             const revert = document.createElement('button');
             revert.type = 'button';
@@ -362,8 +364,9 @@ function createQueueTable(document, items, onOpenDetail, onDownloadArchive, onDe
             revert.disabled = isRowDeleting;
             revert.setAttribute('aria-label', `${item.student_number} başvurusunu Göç İdaresinden geri al`);
             revert.addEventListener('click', () => onRevertFromMigration(item));
-            actionCell.append(revert);
+            actionGroup.append(revert);
         }
+        actionCell.append(actionGroup);
         if (isRowDeleting) {
             actionCell.querySelectorAll('button').forEach((btn) => { btn.disabled = true; });
         }

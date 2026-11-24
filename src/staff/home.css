@@ -484,7 +484,7 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .work-hours-reminder p { margin: 0; font-size: 0.72rem; line-height: 1.25; font-weight: 700; }
 .work-hours-reminder .btn { min-height: 34px; padding: 0.3rem 0.6rem; font-size: 0.7rem; }
 
-/* Başvuru kuyruğu tablosu yatay kaydırma kapsayıcısı ve satır işlem düğmesi sarmalama */
+/* Başvuru kuyruğu tablosu yatay kaydırma kapsayıcısı ve sıkı 2 sütunlu işlem ızgarası */
 .staff-applications-table-wrap {
     width: 100%;
     max-width: 100%;
@@ -493,18 +493,37 @@ body.dark-mode #home-screen .home-action:focus-visible {
     -webkit-overflow-scrolling: touch;
 }
 
-.staff-applications-table td.staff-queue-actions-cell,
-.staff-applications-table td[data-label="Detay"] {
-    max-width: 100%;
-    white-space: normal;
-}
+@media (min-width: 901px) {
+    .staff-applications-table th {
+        white-space: normal;
+    }
 
-.staff-applications-table td.staff-queue-actions-cell > *,
-.staff-applications-table td[data-label="Detay"] > * {
-    display: inline-block;
-    margin: 0.2rem 0.25rem 0.2rem 0;
-    vertical-align: middle;
-    max-width: 100%;
+    .staff-applications-table td.staff-queue-actions-cell,
+    .staff-applications-table td[data-label="Detay"] {
+        white-space: normal;
+    }
+
+    .staff-applications-table .staff-queue-actions {
+        display: grid;
+        grid-template-columns: repeat(2, max-content);
+        gap: 0.25rem 0.3rem;
+        align-items: center;
+        justify-content: start;
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .staff-applications-table td.staff-queue-actions-cell .btn,
+    .staff-applications-table td.staff-queue-actions-cell button,
+    .staff-applications-table td[data-label="Detay"] .btn,
+    .staff-applications-table td[data-label="Detay"] button {
+        margin: 0;
+        min-width: 0;
+        min-height: 30px;
+        padding: 0.3rem 0.55rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+    }
 }
 
 .staff-applications-table td.staff-queue-actions-cell .staff-gocnet-transfer-status,
@@ -512,6 +531,7 @@ body.dark-mode #home-screen .home-action:focus-visible {
 .staff-applications-table td[data-label="Detay"] .staff-gocnet-transfer-status,
 .staff-applications-table td[data-label="Detay"] .staff-spreadsheet-transfer-error {
     display: block;
+    grid-column: 1 / -1;
     width: 100%;
     min-width: 0;
     overflow-wrap: anywhere;
@@ -630,6 +650,14 @@ body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #app-content > m
     flex-direction: column;
     margin: 0 auto;
     padding-block: 0.25rem 0;
+}
+
+/* Çalışma alanı açıkken masaüstü kapsayıcısı genişler; ana ekran, genel site ve mobil (<=900px) değişmez */
+@media (min-width: 901px) {
+    body:has(#app-content:not([hidden]) #workspace-content:not([hidden])) #app-content > main.container {
+        max-width: min(1600px, calc(100vw - 2rem));
+        padding-inline: 1rem;
+    }
 }
 
 body:has(#app-content:not([hidden]) #home-screen:not([hidden])) #app-content > .app-footer {
