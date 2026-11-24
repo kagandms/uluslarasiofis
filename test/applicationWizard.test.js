@@ -8,6 +8,7 @@ import {
     renderStudentDocumentRequirements
 } from '../src/public/applicationWizard.js';
 import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
+import { readIstanbulDate } from '../src/shared/age.js';
 
 const TEST_PRIVACY_NOTICE = Object.freeze({
     available: true,
@@ -80,6 +81,22 @@ test('an existing draft opens without reading or accepting the new-application p
 function createRoot() {
     const document = new JSDOM('<!doctype html><html lang="tr"><body><section></section></body></html>').window.document;
     return { document, root: document.querySelector('section') };
+}
+
+function shiftIsoDays(isoDate, days) {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+function subtractYearsClamped(isoDate, years) {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    const targetYear = year - years;
+    const daysInMonth = new Date(Date.UTC(targetYear, month, 0)).getUTCDate();
+    return `${String(targetYear).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(Math.min(day, daysInMonth)).padStart(2, '0')}`;
+}
+
+function formatDmyDate(isoDate) {
+    return `${isoDate.slice(8, 10)}.${isoDate.slice(5, 7)}.${isoDate.slice(0, 4)}`;
 }
 
 function fillRequiredResidenceFields(root) {
@@ -578,18 +595,21 @@ test('birth date uses a keyboard-friendly day-month-year text field and saves a 
 });
 
 test('date fields insert day-month-year separators while the user types or pastes', async () => {
+    const today = readIstanbulDate();
+    const boundaryBirthDate = subtractYearsClamped(shiftIsoDays(today, -10), 18);
+    const recentResidenceDate = shiftIsoDays(today, -5);
     const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
     const birthDate = root.querySelector('[name="date_of_birth"]');
     birthDate.value = '31102005';
     birthDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
     assert.equal(birthDate.value, '31.10.2005');
-    birthDate.value = '24.10.2008';
+    birthDate.value = formatDmyDate(boundaryBirthDate);
     birthDate.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     const residenceDate = root.querySelector('[name="residence_application_date"]');
-    residenceDate.value = '2026-10-20';
+    residenceDate.value = recentResidenceDate;
     residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
-    assert.equal(residenceDate.value, '20.10.2026');
+    assert.equal(residenceDate.value, formatDmyDate(recentResidenceDate));
     document.defaultView.close();
 });
 
@@ -873,14 +893,20 @@ test('under-18 answer is derived from the birth date and cannot be manually chan
 });
 
 test('age boundary requires the e-İkamet date and calculates minor status from it', async () => {
+    const today = readIstanbulDate();
+    const turned18Date = shiftIsoDays(today, -10);
+    const boundaryBirthDate = subtractYearsClamped(turned18Date, 18);
+    const beforeTurned18Date = shiftIsoDays(today, -15);
     const { document, root } = await createFingerprintWizard('registered', 'FP-A/42');
     const birthDate = root.querySelector('[name="date_of_birth"]');
-    birthDate.value = '24.10.2008';
+    birthDate.value = formatDmyDate(boundaryBirthDate);
     birthDate.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     const residenceDate = root.querySelector('[name="residence_application_date"]');
     assert.ok(residenceDate);
+    residenceDate.value = formatDmyDate(beforeTurned18Date);
+    residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
     assert.equal(root.querySelector('[name="is_under_18"]').value, 'true');
-    residenceDate.value = '24.10.2026';
+    residenceDate.value = formatDmyDate(turned18Date);
     residenceDate.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
 
     assert.equal(root.querySelector('[name="is_under_18"]').value, 'false');
