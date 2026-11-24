@@ -21,6 +21,28 @@ class ScannerConfig:
     ca_file: str | None
     scan_timeout_seconds: int
     application_ids: tuple[str, ...] = ()
+    idle_poll_seconds: int = 10
+    active_poll_seconds: int = 3
+    active_window_seconds: int = 180
+
+
+def _read_bounded_int(
+    settings: Mapping[str, str],
+    key: str,
+    default: int,
+    minimum: int,
+    maximum: int,
+    error_code: str,
+) -> int:
+    """Parse and range-check an integer setting; raises ValueError with error_code on invalid input."""
+    raw = settings.get(key, str(default))
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(error_code) from exc
+    if not minimum <= value <= maximum:
+        raise ValueError(error_code)
+    return value
 
 
 def read_secret(secret_path: Path) -> str:
@@ -50,9 +72,10 @@ def load_config(settings: Mapping[str, str]) -> ScannerConfig:
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name != 'nt' and state.stat().st_mode & 0o077:
         raise ValueError('state_directory_permissions')
-    timeout = int(settings.get('SCANNER_SCAN_TIMEOUT_SECONDS', '120'))
-    if not 1 <= timeout <= 120:
-        raise ValueError('scan_timeout_invalid')
+    timeout = _read_bounded_int(settings, 'SCANNER_SCAN_TIMEOUT_SECONDS', 120, 1, 120, 'scan_timeout_invalid')
+    idle_poll = _read_bounded_int(settings, 'SCANNER_IDLE_POLL_SECONDS', 10, 2, 120, 'idle_poll_invalid')
+    active_poll = _read_bounded_int(settings, 'SCANNER_ACTIVE_POLL_SECONDS', 3, 1, 30, 'active_poll_invalid')
+    active_window = _read_bounded_int(settings, 'SCANNER_ACTIVE_WINDOW_SECONDS', 180, 0, 900, 'active_window_invalid')
     raw_application_ids = settings.get('SCANNER_APPLICATION_IDS', '')
     application_ids = tuple(value.strip() for value in raw_application_ids.split(',') if value.strip())
     if len(application_ids) > 50 or len(set(application_ids)) != len(application_ids) or any(
@@ -66,4 +89,4 @@ def load_config(settings: Mapping[str, str]) -> ScannerConfig:
         Path(settings.get('SCANNER_CERTS_DIR', str(Path(__file__).parent / 'certs'))),
         settings.get('SCANNER_CLAMSCAN', 'clamscan'),
         settings.get('SCANNER_FRESHCLAM', 'freshclam'), state / 'freshclam.conf', settings.get('SCANNER_CA_FILE'), timeout,
-        application_ids)
+        application_ids, idle_poll, active_poll, active_window)
