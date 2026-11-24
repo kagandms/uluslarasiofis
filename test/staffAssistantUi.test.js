@@ -239,7 +239,7 @@ test('workHours.propose does not POST to /api/staff/work-hours until Kaydet is c
     assert.equal(requests.filter((entry) => entry.url === '/api/staff/work-hours').length, 1);
 });
 
-test('ykn.run navigates to ykn, only dispatches ykn:auto-run, never touches YKN DOM, and reflects ykn:auto-flow-status', async (context) => {
+test('ykn.run runs silently without navigating to ykn, dispatches ykn:auto-run with silent:true, never touches YKN DOM, and reflects ykn:auto-flow-status', async (context) => {
     const { window, doc } = createStaffDom(context, { authenticated: true });
     let yknNavClicked = 0;
     let yknButtonClicks = 0;
@@ -272,8 +272,8 @@ test('ykn.run navigates to ykn, only dispatches ykn:auto-run, never touches YKN 
     input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await flushPromises();
 
-    assert.equal(yknNavClicked, 1);
-    assert.deepEqual(dispatchedEvents, [{ passportNo: 'AB123456' }]);
+    assert.equal(yknNavClicked, 0);
+    assert.deepEqual(dispatchedEvents, [{ passportNo: 'AB123456', silent: true }]);
     assert.equal(yknButtonClicks, 0);
     assert.equal(doc.getElementById('ykn-passport-input').value, '');
 

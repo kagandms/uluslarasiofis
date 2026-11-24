@@ -533,11 +533,10 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
             return;
         }
         case 'ykn.run': {
-            clickWorkspaceView(doc, 'ykn');
             const CustomEventCtor = view?.CustomEvent || globalThis.CustomEvent;
             if (CustomEventCtor && typeof view?.dispatchEvent === 'function') {
                 view.dispatchEvent(new CustomEventCtor('ykn:auto-run', {
-                    detail: { passportNo: action.passportNo }
+                    detail: { passportNo: action.passportNo, silent: true }
                 }));
             }
             return;
