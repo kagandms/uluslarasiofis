@@ -8,6 +8,7 @@ import { createPhysicalIntakeRepository } from '../repositories/d1/physical-inta
 import { normalizePhysicalStudentNumber, listPhysicalTransitions,
     requirePhysicalVersion, requirePhysicalRejectionReason, PHYSICAL_STATUS_FILTERS } from '../domain/physical-intake-policy.js';
 import { savePhysicalPdf, openPhysicalPdf, removePhysicalPdf } from './physical-pdf-routes.js';
+import { purgePhysicalIntakeById } from '../services/physicalIntakePurge.js';
 
 function requireKeys(body, allowed) {
     if (Object.keys(body).some(key => !allowed.includes(key))) throw new ApiError(400, 'VALIDATION_ERROR', 'İstek alanlarını kontrol edin.');
@@ -34,14 +35,15 @@ function readQuery(body) {
     const pageSize = body.page_size ?? 25;
     const fromDate = readOptionalDate(body.from_date, 'Başlangıç tarihi');
     const toDate = readOptionalDate(body.to_date, 'Bitiş tarihi');
-    if (typeof q !== 'string' || q.length > 120 || typeof status !== 'string' || !Object.hasOwn(PHYSICAL_STATUS_FILTERS, status)
+    if (typeof q !== 'string' || q.length > 120 || typeof status !== 'string'
+        || status === 'deleted' || !Object.hasOwn(PHYSICAL_STATUS_FILTERS, status)
         || !Number.isSafeInteger(page) || page < 1 || page > 100_000
         || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100
         || (fromDate && toDate && fromDate > toDate)) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve sayfalama alanlarını kontrol edin.');
     }
     return {
-        q: q.trim(), statuses: PHYSICAL_STATUS_FILTERS[status], isDeleted: status === 'deleted',
+        q: q.trim(), statuses: PHYSICAL_STATUS_FILTERS[status],
         hasNote: hasNote === 'all' ? null : hasNote, fromDate, toDate, page, pageSize
     };
 }
@@ -71,35 +73,64 @@ async function lookupReceipt(request, context) {
     return { student_number: studentNumber, application };
 }
 
-async function mutateReceipt(request, context, action) {
-    requireMethod(request, action === 'delete' ? 'DELETE' : action === 'status' ? 'PATCH' : 'POST');
+async function updateReceiptStatus(request, context) {
+    requireMethod(request, 'PATCH');
     const body = await readJsonBody(request);
-    requireKeys(body, action === 'status' ? ['lock_version', 'status', 'rejection_reason'] : ['lock_version']);
+    requireKeys(body, ['lock_version', 'status', 'rejection_reason']);
     const version = requirePhysicalVersion(body.lock_version);
-    if (action === 'status') {
-        if (!listPhysicalTransitions(context.intake).includes(body.status)) throw new ApiError(409, 'PHYSICAL_STATUS_INVALID', 'Durum değişikliği için kaydı kontrol edin.');
+    if (!listPhysicalTransitions(context.intake).includes(body.status)) {
+        throw new ApiError(409, 'PHYSICAL_STATUS_INVALID', 'Durum değişikliği için kaydı kontrol edin.');
     }
     let changed;
-    try { changed = await context.repository.update({ id: context.intake.id, version, action, now: context.now,
-        reason: action === 'status' && body.status === 'rejected' ? requirePhysicalRejectionReason(body.rejection_reason) : '',
-        value: action === 'status' ? body.status : action === 'delete' ? context.now : null,
-        staffId: context.staff.id, requestId: context.requestId }); }
-    catch (error) { throw translateWriteError(error); }
+    try {
+        changed = await context.repository.update({
+            id: context.intake.id,
+            version,
+            now: context.now,
+            status: body.status,
+            reason: body.status === 'rejected' ? requirePhysicalRejectionReason(body.rejection_reason) : '',
+            staffId: context.staff.id,
+            requestId: context.requestId
+        });
+    } catch (error) {
+        throw translateWriteError(error);
+    }
     if (!changed) throw new ApiError(409, 'PHYSICAL_UPDATE_CONFLICT', 'Kayıt değişti. Yenileyip tekrar deneyin.');
     return readDetail(context.repository, context.intake.id);
 }
 
+async function deleteReceipt(request, context, intakeId) {
+    if (context.staff.role !== 'admin') {
+        throw new ApiError(403, 'FORBIDDEN', 'Kalıcı silme işlemi yalnızca yönetici yetkisindedir.');
+    }
+    const body = await readJsonBody(request, 1024);
+    requireKeys(body, ['lock_version', 'confirmed']);
+    if (body.confirmed !== true) {
+        throw new ApiError(400, 'CONFIRMATION_REQUIRED', 'Kalıcı silme işlemi için onay gerekli.');
+    }
+    const expectedLockVersion = requirePhysicalVersion(body.lock_version);
+    return purgePhysicalIntakeById({
+        environment: context.environment,
+        intakeId,
+        staff: context.staff,
+        requestId: context.requestId,
+        expectedLockVersion
+    });
+}
+
 async function routeReceipt(request, context, pathname) {
-    const match = pathname.match(/^\/api\/staff\/physical-intakes\/([0-9a-f-]{36})(?:\/(status|restore|pdf|files\/([0-9a-f-]{36})\/(preview|download)))?$/i);
+    const match = pathname.match(/^\/api\/staff\/physical-intakes\/([0-9a-f-]{36})(?:\/(status|pdf|files\/([0-9a-f-]{36})\/(preview|download)))?$/i);
     if (!match) throw new ApiError(404, 'NOT_FOUND', 'İstenen kaynak bulunamadı.');
+    if (!match[2] && request.method === 'DELETE') {
+        return deleteReceipt(request, context, match[1]);
+    }
     const detail = await readDetail(context.repository, match[1]);
     const scoped = { ...context, intake: detail.intake };
     if (!match[2]) {
-        if (request.method === 'DELETE') return mutateReceipt(request, scoped, 'delete');
         requireMethod(request, 'GET');
         return detail;
     }
-    if (match[2] === 'status' || match[2] === 'restore') return mutateReceipt(request, scoped, match[2]);
+    if (match[2] === 'status') return updateReceiptStatus(request, scoped);
     if (match[2] === 'pdf') {
         if (request.method === 'DELETE') return removePhysicalPdf(request, scoped);
         requireMethod(request, 'POST');
