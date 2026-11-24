@@ -6,11 +6,11 @@ echo ===================================================
 echo   Istanbul Topkapi Universitesi - ClamAV Runner
 echo ===================================================
 
-:: Default target: production (or passed as argument %1)
-if "%~1"=="" (
-    set "SCANNER_ORIGIN=https://goc.topkapiuni.workers.dev"
-) else (
-    set "SCANNER_ORIGIN=%~1"
+:: Default target: production (or passed as argument %1 if it starts with http)
+set "SCANNER_ORIGIN=https://goc.topkapiuni.workers.dev"
+set "FIRST_ARG=%~1"
+if defined FIRST_ARG (
+    if /i "!FIRST_ARG:~0,4!"=="http" set "SCANNER_ORIGIN=%~1"
 )
 
 set "SCANNER_RUNNER_ID=okul-pc-runner-1"
@@ -67,7 +67,7 @@ if not exist "%SCANNER_STATE_DIR%\freshclam.conf" (
 
 :: Check if signatures exist
 if not exist "%SCANNER_DATABASE_DIR%\daily.cvd" if not exist "%SCANNER_DATABASE_DIR%\daily.cld" (
-    echo [BILGI] Ilk calisma: Virus imzalari indiriliyor (bu birkac dakika surebilir)...
+    echo [BILGI] Ilk calisma: Virus imzalari indiriliyor, bu birkac dakika surebilir...
     freshclam --config-file="%SCANNER_STATE_DIR%\freshclam.conf"
 )
 
@@ -77,5 +77,5 @@ echo Hedef Sunucu: %SCANNER_ORIGIN%
 echo Runner ID:    %SCANNER_RUNNER_ID%
 echo.
 
-python scripts\scanner\runner.py
-pause
+python scripts\scanner\runner.py %*
+if "%~1"=="" pause
