@@ -1,6 +1,26 @@
 const CHAT_SESSION_PAGE_SIZE = 25;
 const CHAT_SESSION_PREVIEW_MAX_CHARS = 120;
 
+/**
+ * SQLite LIKE kalıbı için özel karakterleri (`\`, `%`, `_`) ters eğik çizgiyle kaçırır.
+ * @param {string} value Ham arama metni.
+ * @returns {string} `%...%` biçiminde güvenli LIKE kalıbı (`ESCAPE '\'` ile kullanılır).
+ */
+function escapeLikePattern(value) {
+    return `%${value.replace(/[\\%_]/g, '\\$&')}%`;
+}
+
+/**
+ * SQLite'ın yerleşik LIKE işleci yalnızca ASCII harflerde büyük/küçük harf duyarsızdır.
+ * Türkçe büyük harfleri (`İ`, `I`, `Ş`, `Ğ`, `Ü`, `Ö`, `Ç`) sütun tarafında küçük karşılıklarına
+ * indirgeyerek `toLocaleLowerCase('tr-TR')` kalıbıyla eşleşmesini sağlar.
+ * @param {'t.user_text'|'t.assistant_text'} columnSql Sabit sütun ifadesi.
+ * @returns {string} Türkçe büyük harfleri küçültülmüş SQL ifadesi.
+ */
+function buildTurkishFoldedColumnSql(columnSql) {
+    return `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${columnSql}, 'İ', 'i'), 'I', 'ı'), 'Ş', 'ş'), 'Ğ', 'ğ'), 'Ü', 'ü'), 'Ö', 'ö'), 'Ç', 'ç')`;
+}
+
 function truncatePreview(text) {
     if (typeof text !== 'string' || !text) return '';
     const chars = [...text];
@@ -163,58 +183,115 @@ export function createChatLogRepository(database) {
         },
 
         /**
-         * Sohbet oturumlarını en yeniden eskiye imleçli sayfalama ve süzgeçle listeler.
-         * @param {{filter?: 'all'|'down'|'handoff'|'refused'|'fallback', cursor?: {lastAt: string, id: string}|null, limit?: number}} [options] Liste seçenekleri.
-         * @returns {Promise<{items: Array<{id: string, language: string, created_at: string, last_at: string, turn_count: number, has_down_vote: boolean, first_user_text: string}>, nextCursor: string|null}>} Sayfa sonucu.
+         * Sohbet oturumlarını en yeniden eskiye imleçli sayfalama ve süzgeçlerle listeler.
+         * Metin araması (`query`) `user_text` ve `assistant_text` üzerinde `ESCAPE '\'` ile
+         * parametreli `LIKE` uygular. SQLite `LIKE` yalnızca ASCII için büyük/küçük harf
+         * duyarsız olduğundan, ham terimin yanında JS tarafında `toLocaleLowerCase('tr-TR')`
+         * ve `toLowerCase()` ile üretilen çeşitlemeler `OR` ile eşleştirilir ve sütun tarafında
+         * Türkçe büyük harf katlaması uygulanarak `İ`/`ı` aramalarının iki yönde de çalışması sağlanır.
+         * `total` alanı tüm etkin süzgeçlere uyan toplam oturum sayısını döndürür ve imleci yok sayar.
+         * @param {{filter?: 'all'|'down'|'handoff'|'refused'|'fallback', lang?: 'tr'|'en'|'ru'|'tk'|'ar'|null, sinceIso?: string|null, query?: string|null, cursor?: {lastAt: string, id: string}|null, limit?: number}} [options] Liste seçenekleri.
+         * @returns {Promise<{items: Array<{id: string, language: string, created_at: string, last_at: string, turn_count: number, has_down_vote: boolean, first_user_text: string}>, nextCursor: string|null, total: number}>} Sayfa sonucu ve toplam eşleşme sayısı.
          */
-        async listSessions({ filter = 'all', cursor = null, limit = CHAT_SESSION_PAGE_SIZE } = {}) {
+        async listSessions({
+            filter = 'all',
+            lang = null,
+            sinceIso = null,
+            query = null,
+            cursor = null,
+            limit = CHAT_SESSION_PAGE_SIZE
+        } = {}) {
             const safeLimit = Math.max(
                 1,
                 Math.min(CHAT_SESSION_PAGE_SIZE, Number.isSafeInteger(limit) ? limit : CHAT_SESSION_PAGE_SIZE)
             );
-            const whereClauses = [];
-            const bindings = [];
+            const filterClauses = [];
+            const filterBindings = [];
 
             if (filter === 'down') {
-                whereClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.feedback = 'down')");
+                filterClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.feedback = 'down')");
             } else if (filter === 'handoff') {
-                whereClauses.push(`EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND (t.outcome = 'handoff' OR t.tools LIKE '%"handoff_to_office"%'))`);
+                filterClauses.push(`EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND (t.outcome = 'handoff' OR t.tools LIKE '%"handoff_to_office"%'))`);
             } else if (filter === 'refused') {
-                whereClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.outcome = 'refusal')");
+                filterClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.outcome = 'refusal')");
             } else if (filter === 'fallback') {
-                whereClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.outcome = 'fallback')");
+                filterClauses.push("EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND t.outcome = 'fallback')");
             }
+
+            if (typeof lang === 'string' && lang) {
+                filterClauses.push('s.language = ?');
+                filterBindings.push(lang);
+            }
+
+            if (typeof sinceIso === 'string' && sinceIso) {
+                filterClauses.push('datetime(s.last_at) >= datetime(?)');
+                filterBindings.push(sinceIso);
+            }
+
+            if (typeof query === 'string' && query) {
+                const trLower = query.toLocaleLowerCase('tr-TR');
+                const plainLower = query.toLowerCase();
+                const rawPatterns = [...new Set([query, trLower, plainLower])].map(escapeLikePattern);
+                const trFoldedPattern = escapeLikePattern(trLower);
+                const textMatchClauses = [];
+                const textBindings = [];
+
+                for (const pattern of rawPatterns) {
+                    textMatchClauses.push(`t.user_text LIKE ? ESCAPE '\\'`);
+                    textBindings.push(pattern);
+                    textMatchClauses.push(`t.assistant_text LIKE ? ESCAPE '\\'`);
+                    textBindings.push(pattern);
+                }
+                textMatchClauses.push(`${buildTurkishFoldedColumnSql('t.user_text')} LIKE ? ESCAPE '\\'`);
+                textBindings.push(trFoldedPattern);
+                textMatchClauses.push(`${buildTurkishFoldedColumnSql('t.assistant_text')} LIKE ? ESCAPE '\\'`);
+                textBindings.push(trFoldedPattern);
+
+                filterClauses.push(`EXISTS (SELECT 1 FROM chat_turns t WHERE t.session_id = s.id AND (${textMatchClauses.join(' OR ')}))`);
+                filterBindings.push(...textBindings);
+            }
+
+            const filterWhereSql = filterClauses.length > 0 ? `WHERE ${filterClauses.join(' AND ')}` : '';
+            const pageClauses = [...filterClauses];
+            const pageBindings = [...filterBindings];
 
             if (cursor && typeof cursor.lastAt === 'string' && typeof cursor.id === 'string') {
-                whereClauses.push('(s.last_at < ? OR (s.last_at = ? AND s.id < ?))');
-                bindings.push(cursor.lastAt, cursor.lastAt, cursor.id);
+                pageClauses.push('(s.last_at < ? OR (s.last_at = ? AND s.id < ?))');
+                pageBindings.push(cursor.lastAt, cursor.lastAt, cursor.id);
             }
 
-            const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-            bindings.push(safeLimit + 1);
+            const pageWhereSql = pageClauses.length > 0 ? `WHERE ${pageClauses.join(' AND ')}` : '';
+            pageBindings.push(safeLimit + 1);
 
-            const result = await database.prepare(`
-                SELECT
-                    s.id,
-                    s.language,
-                    s.created_at,
-                    s.last_at,
-                    s.turn_count,
-                    EXISTS (
-                        SELECT 1 FROM chat_turns td
-                        WHERE td.session_id = s.id AND td.feedback = 'down'
-                    ) AS has_down_vote,
-                    (
-                        SELECT tf.user_text FROM chat_turns tf
-                        WHERE tf.session_id = s.id
-                        ORDER BY tf.seq ASC
-                        LIMIT 1
-                    ) AS first_user_text
-                FROM chat_sessions AS s
-                ${whereSql}
-                ORDER BY s.last_at DESC, s.id DESC
-                LIMIT ?
-            `).bind(...bindings).all();
+            const [countRow, result] = await Promise.all([
+                database.prepare(`
+                    SELECT COUNT(*) AS total
+                    FROM chat_sessions AS s
+                    ${filterWhereSql}
+                `).bind(...filterBindings).first(),
+                database.prepare(`
+                    SELECT
+                        s.id,
+                        s.language,
+                        s.created_at,
+                        s.last_at,
+                        s.turn_count,
+                        EXISTS (
+                            SELECT 1 FROM chat_turns td
+                            WHERE td.session_id = s.id AND td.feedback = 'down'
+                        ) AS has_down_vote,
+                        (
+                            SELECT tf.user_text FROM chat_turns tf
+                            WHERE tf.session_id = s.id
+                            ORDER BY tf.seq ASC
+                            LIMIT 1
+                        ) AS first_user_text
+                    FROM chat_sessions AS s
+                    ${pageWhereSql}
+                    ORDER BY s.last_at DESC, s.id DESC
+                    LIMIT ?
+                `).bind(...pageBindings).all()
+            ]);
 
             const rows = result.results ?? [];
             const hasMore = rows.length > safeLimit;
@@ -230,7 +307,8 @@ export function createChatLogRepository(database) {
             }));
             const lastItem = items[items.length - 1];
             const nextCursor = hasMore && lastItem ? encodeChatSessionCursor(lastItem.last_at, lastItem.id) : null;
-            return { items, nextCursor };
+            const total = Number(countRow?.total) || 0;
+            return { items, nextCursor, total };
         },
 
         /**
