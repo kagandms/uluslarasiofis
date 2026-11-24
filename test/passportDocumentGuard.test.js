@@ -143,3 +143,122 @@ test('evaluatePassportPage rejects empty or non-string OCR text', () => {
     assert.equal(missing.isPassport, false);
     assert.equal(missing.score, 0);
 });
+
+test('evaluatePassportPage accepts MRZ line 1 alone with visual passport number and name', () => {
+    const line1OnlyOcr = [
+        'PASSPORT',
+        'Surname: HUDAYKULOVA',
+        'Given Names: ARZIU',
+        'Passport No: A3578965',
+        'P<TKMHUDAYKULOVA<<ARZIU<<<<<<<<<<<<<<<<<<<<<<'
+    ].join('\n');
+
+    const result = evaluatePassportPage({
+        text: line1OnlyOcr,
+        studentName: 'ARZIU HUDAYKULOVA',
+        passportNo: 'A3578965'
+    });
+
+    assert.equal(result.hasMrz, true);
+    assert.equal(result.isPassport, true);
+});
+
+test('evaluatePassportPage accepts OCR-garbled MRZ line 1 without P< or <<<', () => {
+    const garbledLine1Ocr = [
+        'PASSPORT',
+        'Surname: HUDAYKULOVA',
+        'Given Names: ARZIU',
+        'Passport No: A3578965',
+        'POTKMHUDAYKULOVA<ARZIU<1<2<3<4'
+    ].join('\n');
+
+    const result = evaluatePassportPage({
+        text: garbledLine1Ocr,
+        studentName: 'ARZIU HUDAYKULOVA',
+        passportNo: 'A3578965'
+    });
+
+    assert.equal(result.hasMrz, true);
+    assert.equal(result.isPassport, true);
+});
+
+test('evaluatePassportPage accepts MRZ line 2 style with matching name', () => {
+    const line2OnlyOcr = [
+        'HUDAYKULOVA ARZIU',
+        'A3578965<3TKM9210158F3104208LG00091160<<<<<06'
+    ].join('\n');
+
+    const result = evaluatePassportPage({
+        text: line2OnlyOcr,
+        studentName: 'ARZIU HUDAYKULOVA',
+        passportNo: 'A3578965'
+    });
+
+    assert.equal(result.hasMrz, true);
+    assert.equal(result.isPassport, true);
+});
+
+test('evaluatePassportPage accepts OCR-garbled MRZ line 2 without <<< or <<', () => {
+    const garbledLine2Ocr = [
+        'HUDAYKULOVA ARZIU',
+        'A3578965<3TKM9210158F3104208LG00091160<1<2<06'
+    ].join('\n');
+
+    const result = evaluatePassportPage({
+        text: garbledLine2Ocr,
+        studentName: 'ARZIU HUDAYKULOVA',
+        passportNo: 'A3578965'
+    });
+
+    assert.equal(result.hasMrz, true);
+    assert.equal(result.isPassport, true);
+});
+
+test('evaluatePassportPage accepts text with at least two << filler runs', () => {
+    const twoShortRunsOcr = [
+        'HUDAYKULOVA<<ARZIU',
+        'END<<06'
+    ].join('\n');
+
+    const result = evaluatePassportPage({
+        text: twoShortRunsOcr,
+        studentName: 'ARZIU HUDAYKULOVA',
+        passportNo: 'A3578965'
+    });
+
+    assert.equal(result.hasMrz, true);
+    assert.equal(result.isPassport, true);
+});
+
+test('evaluatePassportPage rejects ordinary text with one stray < or a single short << run', () => {
+    const strayChevronOcr = [
+        'ISTANBUL TOPKAPI UNIVERSITY',
+        'Student Name: AHMET YILMAZ',
+        'Passport No: AB1234567',
+        'GPA < 4.00'
+    ].join('\n');
+
+    const strayResult = evaluatePassportPage({
+        text: strayChevronOcr,
+        studentName: 'AHMET YILMAZ',
+        passportNo: 'AB1234567'
+    });
+
+    assert.equal(strayResult.hasMrz, false);
+    assert.equal(strayResult.isPassport, false);
+
+    const singleShortRunOcr = [
+        'HIGH SCHOOL TRANSCRIPT',
+        'Student Name: AHMET YILMAZ',
+        'Passport Registration Number << AB1234567'
+    ].join('\n');
+
+    const shortRunResult = evaluatePassportPage({
+        text: singleShortRunOcr,
+        studentName: 'AHMET YILMAZ',
+        passportNo: 'AB1234567'
+    });
+
+    assert.equal(shortRunResult.hasMrz, false);
+    assert.equal(shortRunResult.isPassport, false);
+});
