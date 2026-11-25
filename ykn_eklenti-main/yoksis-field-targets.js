@@ -86,20 +86,42 @@
         return readSingleControl(parent, kind);
     }
 
-    function readLabelCandidates(scope, labels, kind) {
-        const candidates = new Set();
+    function readLabelMatches(scope, labels, kind) {
+        const candidates = new Map();
         for (const node of scope.querySelectorAll(LABEL_SELECTOR)) {
             if (!labels.has(normalize(node.textContent))) continue;
             if (node.tagName !== 'LABEL' && node.querySelector('input, textarea, select, table')) continue;
             const control = readAssociatedControl(node, scope, kind) || readPairedControl(node, kind);
-            if (control && scope.contains(control)) candidates.add(control);
+            if (control && scope.contains(control) && !candidates.has(control)) {
+                candidates.set(control, String(node.textContent || '').replace(/\s+/g, ' ').trim());
+            }
         }
         return candidates;
     }
 
-    function readMetadataCandidates(scope, labels, kind) {
-        return readControls(scope, kind).filter(control =>
-            ['aria-label', 'placeholder', 'title', 'name', 'id'].some(attribute => labels.has(normalize(control.getAttribute(attribute)))));
+    function readMetadataMatches(scope, labels, kind) {
+        const candidates = new Map();
+        for (const control of readControls(scope, kind)) {
+            const attr = ['aria-label', 'placeholder', 'title', 'name', 'id']
+                .find(attribute => labels.has(normalize(control.getAttribute(attribute))));
+            if (attr && !candidates.has(control)) {
+                candidates.set(control, String(control.getAttribute(attr) || '').replace(/\s+/g, ' ').trim());
+            }
+        }
+        return candidates;
+    }
+
+    function collectMatches(options) {
+        const labels = new Set((options?.labels || []).map(normalize).filter(Boolean));
+        const candidates = new Map();
+        for (const scope of readScopes(options.root, options.kind)) {
+            const matches = readLabelMatches(scope, labels, options.kind);
+            const entries = matches.size ? matches : readMetadataMatches(scope, labels, options.kind);
+            for (const [control, matchedLabel] of entries) {
+                if (!candidates.has(control)) candidates.set(control, matchedLabel);
+            }
+        }
+        return candidates;
     }
 
     /**
@@ -108,15 +130,24 @@
      * @returns {HTMLElement|null} Unique matching control, or null for unavailable/ambiguous fields.
      */
     function find(options) {
-        const labels = new Set(options.labels.map(normalize).filter(Boolean));
-        const candidates = new Set();
-        for (const scope of readScopes(options.root, options.kind)) {
-            const matches = readLabelCandidates(scope, labels, options.kind);
-            const controls = matches.size ? matches : readMetadataCandidates(scope, labels, options.kind);
-            for (const control of controls) candidates.add(control);
-        }
-        return candidates.size === 1 ? [...candidates][0] : null;
+        const candidates = collectMatches(options);
+        return candidates.size === 1 ? [...candidates.keys()][0] : null;
     }
 
-    globalThis.YknFieldTargets = Object.freeze({ version: VERSION, find });
+    /**
+     * Returns the matched static label text, candidate count, and distinct matching controls.
+     * @param {{root: Document, labels: readonly string[], kind: string}} options Exact aliases and control kind.
+     * @returns {{labelMatched: string, count: number, candidates: HTMLElement[]}} Match summary without field values.
+     */
+    function describeMatch(options) {
+        const candidates = collectMatches(options);
+        const controls = [...candidates.keys()];
+        return {
+            labelMatched: controls.length ? candidates.get(controls[0]) : '',
+            count: controls.length,
+            candidates: controls
+        };
+    }
+
+    globalThis.YknFieldTargets = Object.freeze({ version: VERSION, find, describeMatch });
 })();
