@@ -86,7 +86,9 @@ try {
     }
     const headers = { Origin: base, 'Content-Type': 'application/json' };
     const post = (path, body) => fetch(base + path, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
-    let response = await post('/api/public/chat', { messages: [{ role: 'user', content: 'merhaba' }], language: 'tr' });
+    let greeting = await post('/api/public/chat', { messages: [{ role: 'user', content: 'merhaba' }], language: 'tr' });
+    assert.equal(greeting.status, 200, 'Greeting-only chat is answered deterministically without AI binding');
+    let response = await post('/api/public/chat', { messages: [{ role: 'user', content: 'Bugün hava nasıl olacak?' }], language: 'tr' });
     assert.equal(response.status, 503, 'Chatbot without AI binding must return 503');
     const chatUnavailable = await response.json();
     assert.equal(chatUnavailable.error?.code, 'CHATBOT_UNAVAILABLE');
