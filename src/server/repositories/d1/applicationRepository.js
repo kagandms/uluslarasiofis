@@ -5,6 +5,8 @@ import { mapDocumentRequirementCodeForTypeSwitch } from '../../domain/documentPo
 import { createAccessCodeRotationStatements } from './application-access-statements.js';
 import { APPLICATION_OWNER_GUARD } from './application-owner-guard.js';
 import { generateApplicationReference } from '../../auth/applicationAccessCode.js';
+import { searchTokens } from '../../../shared/searchFold.js';
+import { buildNameSearchClause } from './search-fold-sql.js';
 
 const PUBLIC_APPLICATION_FIELDS = Object.freeze({
     applicationType: 'application_type',
@@ -73,6 +75,13 @@ const STAFF_EDITABLE_APPLICATION_COLUMNS = new Set([
 const STAFF_COUNT_CACHE_MS = 60_000;
 // Per-isolate, per-binding cache of staff list totals; only the pagination label may lag by this TTL.
 const staffCountCache = new WeakMap();
+
+function tokensFromLikePattern(searchPattern) {
+    const inner = searchPattern.startsWith('%') && searchPattern.endsWith('%') && searchPattern.length >= 2
+        ? searchPattern.slice(1, -1)
+        : searchPattern;
+    return searchTokens(inner.replace(/\\([%_\\])/g, '$1'));
+}
 
 export function createApplicationRepository(database) {
     return Object.freeze({
@@ -235,7 +244,7 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
-        async queryStaffApplications({ statuses, isDraft = false, searchPattern, submittedAtFrom = null, submittedAtUntil = null, hasNote = null, pageSize, offset }) {
+        async queryStaffApplications({ statuses, isDraft = false, searchPattern, searchNameTokens, submittedAtFrom = null, submittedAtUntil = null, hasNote = null, pageSize, offset }) {
             const conditions = [
                 isDraft ? "applications.status = 'draft'" : "applications.status <> 'draft'",
                 'NOT EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id)'
@@ -254,16 +263,27 @@ export function createApplicationRepository(database) {
                 queryValues.push(submittedAtUntil);
             }
             if (searchPattern) {
-                conditions.push(`(
-                    COALESCE(applications.reference_number, '') LIKE ? ESCAPE '\\'
-                    OR students.student_number LIKE ? ESCAPE '\\'
-                    OR COALESCE(applications.first_name, '') LIKE ? ESCAPE '\\'
-                    OR COALESCE(applications.last_name, '') LIKE ? ESCAPE '\\'
-                    OR (COALESCE(applications.first_name, '') || ' ' || COALESCE(applications.last_name, '')) LIKE ? ESCAPE '\\'
-                    OR (COALESCE(applications.last_name, '') || ' ' || COALESCE(applications.first_name, '')) LIKE ? ESCAPE '\\'
-                    OR COALESCE(applications.passport_number, '') LIKE ? ESCAPE '\\'
-                )`);
-                queryValues.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+                const tokens = Array.isArray(searchNameTokens)
+                    ? searchNameTokens
+                    : tokensFromLikePattern(searchPattern);
+                // Keep literal LIKE on the 3 code columns; fold only name columns (at most 9 bindings total, well under D1's 100-param limit).
+                const searchClauses = [
+                    "COALESCE(applications.reference_number, '') LIKE ? ESCAPE '\\'",
+                    "students.student_number LIKE ? ESCAPE '\\'",
+                    "COALESCE(applications.passport_number, '') LIKE ? ESCAPE '\\'"
+                ];
+                const searchBindings = [searchPattern, searchPattern, searchPattern];
+                const nameClause = buildNameSearchClause({
+                    firstNameColumn: 'applications.first_name',
+                    lastNameColumn: 'applications.last_name',
+                    tokens
+                });
+                if (nameClause) {
+                    searchClauses.push(`(${nameClause.sql})`);
+                    searchBindings.push(...nameClause.bindings);
+                }
+                conditions.push(`(${searchClauses.join(' OR ')})`);
+                queryValues.push(...searchBindings);
             }
             const noteExistsClause = "EXISTS (SELECT 1 FROM staff_record_notes AS notes WHERE notes.record_kind = 'online' AND notes.record_id = applications.id)";
             if (hasNote === 'yes') {

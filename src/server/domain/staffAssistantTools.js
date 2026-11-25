@@ -4,6 +4,7 @@
  */
 
 import { OFFICE_DOCUMENTS } from '../../config/documents-config.js';
+import { searchTokens } from '../../shared/searchFold.js';
 import {
     STAFF_ASSISTANT_MAX_COPIES,
     STAFF_ASSISTANT_PEOPLE,
@@ -312,6 +313,7 @@ async function runSearchApplications(args, context) {
         isDeleted: false,
         includeDeleted: false,
         searchPattern: escapeLikeTerm(args.query),
+        searchNameTokens: searchTokens(args.query),
         pageSize: MAX_RESULT_ITEMS,
         offset: 0
     });
