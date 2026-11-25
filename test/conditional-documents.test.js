@@ -73,9 +73,12 @@ test('transition route UETS requires an existing fingerprint code regardless of 
     assert.equal(listApplicationDocumentPolicies({ ...application, is_under_18: 1 }).some(({ code }) => code === 'uets'), true);
 });
 
-test('married hosts require spouse undertaking and host identity copy is not requested', () => {
+test('married hosts use the single undertaking item without a separate spouse undertaking and host identity copy is not requested', () => {
     const application = { ...ADULT, accommodation_type: 'undertaking', host_is_married: 'yes' };
-    assert.ok(readCodes(application).includes('host_spouse_undertaking'));
+    const marriedCodes = readCodes(application);
+    assert.ok(marriedCodes.includes('address_undertaking'));
+    assert.equal(marriedCodes.includes('host_spouse_undertaking'), false);
+    assert.equal(readDocumentPolicy('host_spouse_undertaking', 'initial', false, application), null);
     assert.equal(readCodes({ ...application, host_is_married: 'no' }).includes('host_spouse_undertaking'), false);
     assert.equal(readCodes({ ...application, accommodation_type: 'hotel' }).includes('host_spouse_undertaking'), false);
     assert.equal(readDocumentPolicy('host_identity_copy', 'initial', false, application), null);

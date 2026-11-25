@@ -5,6 +5,7 @@ import { listDocumentPolicies, listPublicDocumentOverview, readDocumentPolicy, m
 import { listDocumentPolicies as listPreviousPolicies, readDocumentPolicy as readPreviousPolicy } from '../src/server/domain/document-policy-v2.js';
 import { listDocumentPolicies as listLegacyPolicies, readDocumentPolicy as readLegacyPolicy } from '../src/server/domain/document-policy-v1.js';
 import { readDocumentConditionSql } from '../src/server/repositories/d1/document-condition-sql.js';
+import { PUBLIC_MESSAGES, SESSION3_MESSAGES, SUPPORTED_LOCALES } from '../src/public/i18n/messages.js';
 
 const COMMON = ['residence_application_form', 'passport', 'photographs', 'student_certificate', 'health_insurance', 'residence_permit_fee'];
 const BRANCHES = {
@@ -51,7 +52,6 @@ test('final document list covers every type, accommodation, age, host and finger
         if (type === 'renewal' || (type === 'transition' && context.fingerprint_code)) expected.push('uets');
         if (isUnder18) expected.push('minor_consent');
         if (context.address_evidence_type === 'undertaking') {
-            if (context.host_is_married === 'yes') expected.push('host_spouse_undertaking');
             if (context.host_is_turkish === 'yes') expected.push('host_population_record');
         }
         assert.deepEqual(policies.map(({ code }) => code).sort(), expected.sort(), JSON.stringify(context));
@@ -147,7 +147,34 @@ test('common insurance document never depends on insurance basis and DASK appear
     const overview = listPublicDocumentOverview();
     assert.equal(overview.find(({ code }) => code === 'address_residence_certificate').group_key, 'address_evidence');
     assert.equal(overview.find(({ code }) => code === 'uets').scope_key, 'homeDocumentConditional');
-    for (const code of ['visa', 'birth_certificate_under18', 'parent_permit_copy', 'minor_family_evidence', 'address_hotel_receipt']) {
+    for (const code of ['visa', 'birth_certificate_under18', 'parent_permit_copy', 'minor_family_evidence', 'address_hotel_receipt', 'host_spouse_undertaking']) {
         assert.equal(overview.some((policy) => policy.code === code), false, code);
+    }
+});
+
+test('married host uses a single address_undertaking item without host_spouse_undertaking and keeps undertaking help text unchanged in all locales', () => {
+    const married = { address_evidence_type: 'undertaking', host_is_married: 'yes', host_is_turkish: 'no' };
+    const unmarried = { address_evidence_type: 'undertaking', host_is_married: 'no', host_is_turkish: 'no' };
+    const marriedCodes = listDocumentPolicies('initial', false, married).map(({ code }) => code);
+    const unmarriedCodes = listDocumentPolicies('initial', false, unmarried).map(({ code }) => code);
+
+    assert.deepEqual(marriedCodes, unmarriedCodes);
+    assert.equal(marriedCodes.filter((code) => code.includes('undertaking')).length, 1);
+    assert.ok(marriedCodes.includes('address_undertaking'));
+    assert.equal(marriedCodes.includes('host_spouse_undertaking'), false);
+    assert.equal(readDocumentPolicy('host_spouse_undertaking', 'initial', false, married), null);
+    assert.equal(mapDocumentRequirementCodeForTypeSwitch('host_spouse_undertaking'), 'host_spouse_undertaking');
+    assert.equal(listPreviousPolicies('initial', false, married).some(({ code }) => code === 'host_spouse_undertaking'), false);
+
+    const expectedUndertakingHelp = {
+        tr: 'Noter onaylı taahhütnameyi yükleyin.',
+        en: 'Upload the notarized undertaking.',
+        ru: 'Загрузите нотариально заверенное обязательство.',
+        tk: 'Notarius tarapyndan tassyklanan borçnamany ýükläň.',
+        ar: 'ارفع التعهد الموثق.'
+    };
+    for (const locale of SUPPORTED_LOCALES) {
+        assert.equal(PUBLIC_MESSAGES[locale].documentAddressUndertakingHelp, undefined);
+        assert.equal(SESSION3_MESSAGES[locale].documentAddressUndertakingHelp, expectedUndertakingHelp[locale]);
     }
 });

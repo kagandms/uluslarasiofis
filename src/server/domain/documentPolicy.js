@@ -60,7 +60,7 @@ const POLICIES = Object.freeze([
     { code: 'dormitory_tax_certificate', order: 17, label: 'documentDormitoryTaxCertificate', help: 'documentDormitoryTaxCertificateHelp', address_evidence_type: 'dormitory', parent_code: 'address_dormitory' },
     { code: 'dormitory_signature_circular', order: 18, label: 'documentDormitorySignatureCircular', help: 'documentDormitorySignatureCircularHelp', address_evidence_type: 'dormitory', parent_code: 'address_dormitory' },
     { code: 'address_hotel', order: 19, label: 'documentAddressHotel', help: 'documentAddressHotelHelp', address_evidence_type: 'hotel' },
-    { code: 'host_spouse_undertaking', order: 20, label: 'documentHostSpouseUndertaking', help: 'documentHostSpouseUndertakingHelp', address_evidence_type: 'undertaking', parent_code: 'address_undertaking', conditional_rule: 'host_spouse_undertaking' },
+    { code: 'host_spouse_undertaking', active: false, order: 20, label: 'documentHostSpouseUndertaking', help: 'documentHostSpouseUndertakingHelp', address_evidence_type: 'undertaking', parent_code: 'address_undertaking', conditional_rule: 'host_spouse_undertaking' },
     { code: 'minor_consent', order: 21, label: 'documentMinorConsent', help: 'documentMinorConsentHelp', conditional_rule: 'minor_consent' }
 ].map((policy) => Object.freeze({
     code: policy.code,
@@ -71,7 +71,7 @@ const POLICIES = Object.freeze([
     description_key: policy.help,
     accepted_media_types: Object.freeze([...(policy.accepted_media_types || MEDIA_TYPES)]),
     max_byte_size: MAX_DOCUMENT_BYTES,
-    active: true,
+    active: policy.active !== false,
     conditional_rule: policy.conditional_rule
         || (policy.address_evidence_type ? `address_evidence:${policy.address_evidence_type}` : null),
     address_evidence_type: policy.address_evidence_type || null,
@@ -103,7 +103,7 @@ function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) 
         || (applicationType === 'transition' && context.fingerprint_status === 'registered'
             && typeof context.fingerprint_code === 'string' && context.fingerprint_code.trim().length > 0);
     case 'host_population_record': return accommodation === 'undertaking' && context.host_is_turkish === 'yes';
-    case 'host_spouse_undertaking': return accommodation === 'undertaking' && context.host_is_married === 'yes';
+    case 'host_spouse_undertaking': return false;
     case 'minor_consent': return isUnder18;
     default: return true;
     }
@@ -204,7 +204,7 @@ export function listDocumentPolicies(applicationType, isUnder18, addressEvidence
  * @returns {Array<object>} Public-safe policy labels with applicability and grouping metadata.
  */
 export function listPublicDocumentOverview() {
-    return POLICIES.map((policy) => {
+    return POLICIES.filter((policy) => policy.active).map((policy) => {
         let scopeKey = 'homeDocumentAllApplications';
         if (policy.code === 'uets') scopeKey = 'homeDocumentConditional';
         else if (['under18', 'minor_consent', 'minor_family_evidence'].includes(policy.conditional_rule)) scopeKey = 'homeDocumentUnder18';

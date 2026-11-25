@@ -430,35 +430,30 @@ test('address_evidence mentions only documents present in the policy list for so
             mentions: {
                 tr: [
                     ['noter onaylı taahhütname', 'address_undertaking'],
-                    ['eşinin de taahhütnamesi', 'host_spouse_undertaking'],
                     ['yerleşim yeri belgesi', 'host_residence_certificate'],
                     ['adına fatura', 'home_utility_bill'],
                     ['vukuatlı nüfus kayıt örneği', 'host_population_record']
                 ],
                 en: [
                     ['notarized undertaking', 'address_undertaking'],
-                    ['spouse’s', 'host_spouse_undertaking'],
                     ['host’s address certificate', 'host_residence_certificate'],
                     ['utility bill', 'home_utility_bill'],
                     ['detailed population record', 'host_population_record']
                 ],
                 ru: [
                     ['нотариальное обязательство', 'address_undertaking'],
-                    ['супруга', 'host_spouse_undertaking'],
                     ['справка о месте жительства', 'host_residence_certificate'],
                     ['счёт', 'home_utility_bill'],
                     ['выписка реестра населения', 'host_population_record']
                 ],
                 tk: [
                     ['notarial borçnama', 'address_undertaking'],
-                    ['ýanýoldaşynyňky', 'host_spouse_undertaking'],
                     ['ýaşaýan ýeri şahadatnamasy', 'host_residence_certificate'],
                     ['töleg hasaby', 'home_utility_bill'],
                     ['giňişleýin ilat ýazgysy', 'host_population_record']
                 ],
                 ar: [
                     ['تعهد موثق', 'address_undertaking'],
-                    ['من زوجه', 'host_spouse_undertaking'],
                     ['شهادة محل إقامته', 'host_residence_certificate'],
                     ['فاتورة باسمه', 'home_utility_bill'],
                     ['قيد نفوس مفصل', 'host_population_record']

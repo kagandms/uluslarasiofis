@@ -10,7 +10,7 @@ const SCENARIOS = [
     { address_evidence_type: 'own_home', codes: ['address_title_deed', 'address_numbering', 'address_dask'] },
     { address_evidence_type: 'dormitory', codes: ['address_dormitory', 'dormitory_tax_certificate', 'dormitory_signature_circular'] },
     { address_evidence_type: 'hotel', codes: ['address_hotel'] },
-    { address_evidence_type: 'undertaking', host_is_married: 'yes', host_is_turkish: 'yes', codes: ['home_utility_bill', 'host_spouse_undertaking', 'host_population_record'] },
+    { address_evidence_type: 'undertaking', host_is_married: 'yes', host_is_turkish: 'yes', codes: ['address_undertaking', 'home_utility_bill', 'host_population_record'] },
     { application_type: 'transition', address_evidence_type: 'rental_contract', fingerprint_status: 'registered', fingerprint_code: 'FP-SYNTHETIC', codes: ['address_rental_contract', 'uets'] },
     { application_type: 'renewal', address_evidence_type: 'residence_certificate', codes: ['address_residence_certificate', 'uets'] },
     { address_evidence_type: 'undertaking', host_is_married: 'no', host_is_turkish: 'no', codes: ['home_utility_bill'] },
@@ -38,6 +38,14 @@ for (const scenario of SCENARIOS) {
 
         for (const code of scenario.codes) {
             await finalizeSyntheticFile({ context, app, bytes: Buffer.from('%PDF synthetic'), code });
+        }
+        if (scenario.host_is_married === 'yes') {
+            const spouse = await portalRequest(context, '/api/public/applications/current/documents/upload-intent', {
+                cookie: app.cookie, method: 'POST', body: {
+                    code: 'host_spouse_undertaking', filename: 'spouse.pdf', media_type: 'application/pdf', byte_size: 4
+                }
+            });
+            assert.equal(spouse.status, 404);
         }
         assert.equal(context.database.prepare('PRAGMA foreign_key_check').all().results.length, 0);
     });
