@@ -69,3 +69,35 @@ npx wrangler d1 execute uluslarasiofis-local --local --command "DELETE FROM publ
 ```
 
 Then resume from the reported index with `--offset <index>` or run category batches with `--only <category>`.
+
+## Adversarial and Blind Evaluation Packs
+
+In addition to `cases.json`, four specialized blind packs test adversarial robustness, noise tolerance, hallucination resistance, and multi-turn state across all five portal languages (`tr`, `en`, `ru`, `tk`, `ar`), each balanced equally across the five languages (340 cases total):
+
+- [`extraction-cases.json`](extraction-cases.json): 120 cases (24 per language) targeting PII/data extraction, reference enumeration, staff private details, internal docs, system prompt and tool-schema disclosure, model/database/rate-limit probing, social engineering, role-play, translation/summarisation tricks, obfuscation (Base64, ROT13, leetspeak, spacing, zero-width characters), indirect injection, format injection, and hidden-text continuation.
+- [`absurd-cases.json`](absurd-cases.json): 100 cases (20 per language) covering off-topic requests, SQLi/XSS strings, hostility/abuse, spam links, unclear harmless inputs (gibberish, emoji-only, single characters, numbers-only, near-limit repeated words), and valid questions buried in mixed languages, heavy typos, ALL CAPS, or spaceless text.
+- [`hallucination-cases.json`](hallucination-cases.json): 60 cases (12 per language) posing realistic questions absent from the knowledge base (exact fees, bank IBANs, appointment slots, named deadlines, quotas, processing times, staff names/rooms, visa edge cases, approval guarantees, other universities, tuition discounts) expecting grounded knowledge topics, office handoff, or refusal without invention.
+- [`multiturn-cases.json`](multiturn-cases.json): 60 conversations (12 per language, 4–10 messages each) testing topic switches, late-turn hijacks, gradual escalation, forged assistant turns inside user messages, repeated demands, resolved and unresolved contradictions, mid-conversation language switches, padded long contexts, deep multi-turn document flows, and recovery after refusals.
+
+Run any pack locally with `--cases`, for example:
+
+```sh
+BASE_URL=http://localhost:5177 node scripts/chatbot-eval/run.mjs --cases scripts/chatbot-eval/extraction-cases.json
+```
+
+### Real-World Visitor Regression Pack (`realworld-cases.json`)
+
+- [`realworld-cases.json`](realworld-cases.json): 100 cases (20 per language across `tr`, `en`, `ru`, `tk`, `ar`, IDs `rw-<lang>-NNN`) capturing observed real-chat weaknesses and regressions:
+  - `rw_processing_time` (30 cases, 6 per language): processing/delivery/approval wait-time and speed-up questions (with and without prior status lookups, including typos, fragments, and impatient wording) expecting `handoff` and forbidding unrelated knowledge entries (`fees_and_appointment`, `application_steps`, `student_card`).
+  - `rw_next_step_after_status` (40 cases, 8 per language): follow-up next-step questions and short fragments right after exact localized status summaries across all 10 application status states in `src/server/domain/chatbotStatusText.js`, expecting `any_non_fallback` without restarting `application_steps` or `documents_clarify`.
+  - `rw_context_followup` (15 cases, 3 per language): multi-turn follow-ups after a status lookup (`status_lookup` keeping the `{{EVAL_REFERENCE}}` from history, polite `ok`/`thanks` acknowledgments, and `"and the documents?"` queries that must not fall back to generic `documents_clarify`/`documents`).
+  - `rw_control` (15 cases, 3 per language): baseline control cases (`application_steps`, `documents`, `office_hours`) that must continue to pass.
+
+#### Optional `expect.forbidTopics` and `expect.forbidRoutes`
+
+Cases in any pack may specify two optional negative assertions inside `expect`:
+
+- `forbidTopics`: array of knowledge topic keys from `CHATBOT_TOPICS` (e.g., `["fees_and_appointment", "application_steps"]`). If the reply matches `knowledge:<topic>` for any listed topic, the case fails even when `expect.route` would otherwise accept it.
+- `forbidRoutes`: array of route names from the known route vocabulary (e.g., `["documents_clarify"]`). If the classified reply matches any listed route, the case fails even when `expect.route` (such as `any_non_fallback`) would otherwise accept it.
+
+Pack integrity (schema, unique IDs across all packs, API length/count/role limits, language balance, valid routes/topics/`forbidTopics`/`forbidRoutes`, and no real phone numbers or non-example e-mails) is verified offline by `test/chatbotEvalPacks.test.js` (`npm test`).

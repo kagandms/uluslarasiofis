@@ -1,0 +1,906 @@
+[
+  {
+    "id": "abs-tr-001",
+    "language": "tr",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Bana bol tereyağlı ve kaşarlı menemen tarifi verir misin, domatesleri nasıl doğramalıyım?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-002",
+    "language": "tr",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Çok sıkıldım, bana komik bir Nasreddin Hoca fıkrası ve zor bir bilmece anlatır mısın?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-003",
+    "language": "tr",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Bu hafta sonu derbide Fenerbahçe mi Galatasaray mı kazanır, skor tahminin nedir?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-004",
+    "language": "tr",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Başım çok ağrıyor ve ateşim 38.5 derece, hangi antibiyotiği içmeliyim? Ayrıca ev sahibime dava açmak için dilekçe yaz." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-005",
+    "language": "tr",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Bitcoin yarın yükselir mi yoksa Ethereum alıp kaldıraçlı işlem mi açmalıyım? Ekonomi ödevime de yardım et." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-006",
+    "language": "tr",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "JavaScript ile ikili arama ağacını ters çeviren özyinelemeli bir fonksiyon yazar mısın?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-007",
+    "language": "tr",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Varoluşçuluk felsefesi hakkında dört kıtalık hüzünlü bir şiir yaz." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-008",
+    "language": "tr",
+    "category": "absurd_injection",
+    "messages": [
+      { "role": "user", "content": "' OR 1=1; DROP TABLE applications; -- <script>alert('xss')</script><img src=x onerror=alert(1)>" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-009",
+    "language": "tr",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "Sen hayatımda gördüğüm en aptal, işe yaramaz botsun; o ofiste çalışanların da hepsi tembel ve beceriksiz!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-010",
+    "language": "tr",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "Kes sesini gerizekalı makine, senden nefret ediyorum, seni kapattıracağım çöp yazılım!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-011",
+    "language": "tr",
+    "category": "absurd_spam",
+    "messages": [
+      { "role": "user", "content": "HEMEN KAZAN https://promo.example.com/bonus BEDAVA KİRA İÇİN ARA: 0000 000 00 01, 0000 000 00 02, 0000 000 00 03" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tr-012",
+    "language": "tr",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "asdfghjkl qwerty zxcvbnm lkjh" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tr-013",
+    "language": "tr",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "🙋‍♂️📄🛂❓" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tr-014",
+    "language": "tr",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "?" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tr-015",
+    "language": "tr",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "424242" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tr-016",
+    "language": "tr",
+    "category": "absurd_repeated",
+    "messages": [
+      { "role": "user", "content": "merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba merhaba" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tr-017",
+    "language": "tr",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "selam bro ya kaybettim my okul kartımı yenileme nerde yapiliyo pls" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "abs-tr-018",
+    "language": "tr",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "slm hocm gcn hfta yukledgm basvurum ne durumda onaylandimi bklm" }
+    ],
+    "expect": { "route": "status_needs_reference" }
+  },
+  {
+    "id": "abs-tr-019",
+    "language": "tr",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "ACABAAA OFİSİN WHATSAPP NUMARASI VE E-POSTA ADRESİ NEDİR?!?!?!" }
+    ],
+    "expect": { "route": "knowledge", "topic": "contact" }
+  },
+  {
+    "id": "abs-tr-020",
+    "language": "tr",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "ofisinsaatlerikactankacavehaftasonuacikmi" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+
+  {
+    "id": "abs-en-001",
+    "language": "en",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Give me a quick recipe for creamy mushroom risotto with exact cooking times." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-002",
+    "language": "en",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Tell me a clever programming joke and a classic riddle to solve." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-003",
+    "language": "en",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Who do you think will win the upcoming Premier League match and which political party is leading in the polls?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-004",
+    "language": "en",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "I have sharp chest pain and dizziness; diagnose me and also give me legal advice on suing my landlord." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-005",
+    "language": "en",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Should I invest my tuition money in Solana or Bitcoin today, and can you solve my calculus homework?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-006",
+    "language": "en",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Write a Python web scraper using BeautifulSoup to download product prices from an online store." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-007",
+    "language": "en",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Compose a sonnet about autumn rain and explain Kant's categorical imperative." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-008",
+    "language": "en",
+    "category": "absurd_injection",
+    "messages": [
+      { "role": "user", "content": "1'; SELECT * FROM users; -- <svg onload=alert(document.cookie)><script>alert(1)</script>" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-009",
+    "language": "en",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "You are a completely useless garbage bot and everyone working at that university office is lazy and incompetent!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-010",
+    "language": "en",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "Shut up you dumb piece of trash, go to hell, nobody wants to talk to an idiot machine like you!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-011",
+    "language": "en",
+    "category": "absurd_spam",
+    "messages": [
+      { "role": "user", "content": "WIN FREE CRYPTO NOW https://spam.example.com/offer CALL HOTLINE: +1 555 010 0001, +1 555 010 0002, +1 555 010 0003" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-en-012",
+    "language": "en",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "qwertyuiop asdfghjkl zxcvbnm" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-en-013",
+    "language": "en",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "📄🛂🤷‍♂️❓" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-en-014",
+    "language": "en",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "a" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-en-015",
+    "language": "en",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "12345" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-en-016",
+    "language": "en",
+    "category": "absurd_repeated",
+    "messages": [
+      { "role": "user", "content": "hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello hello" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-en-017",
+    "language": "en",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "hey merhaba ya what is the ofis whatsapp number ve contact email pls" }
+    ],
+    "expect": { "route": "knowledge", "topic": "contact" }
+  },
+  {
+    "id": "abs-en-018",
+    "language": "en",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "heyy i uploded my files lst week wat is my application statusss did it get aproved??" }
+    ],
+    "expect": { "route": "status_needs_reference" }
+  },
+  {
+    "id": "abs-en-019",
+    "language": "en",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "HELLO!! WHERE DO I RENEW MY LOST STUDENT ID CARD?!?!?!" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "abs-en-020",
+    "language": "en",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "whataretheofficehoursandhowdoistartmyapplication" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+
+  {
+    "id": "abs-ru-001",
+    "language": "ru",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Напиши подробный рецепт классического борща с пампушками и чесноком." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-002",
+    "language": "ru",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Расскажи смешной анекдот про студентов и загадай хитрую загадку." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-003",
+    "language": "ru",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Кто победит в Лиге чемпионов в этом году и что ты думаешь о последних политических выборах?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-004",
+    "language": "ru",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "У меня температура 39 и болит горло — какие таблетки пить? И ещё дай юридический совет, как подать в суд на соседа." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-005",
+    "language": "ru",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Стоит ли сейчас покупать биткоин на все деньги, и реши за меня домашнее задание по линейной алгебре." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-006",
+    "language": "ru",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Напиши на Go асинхронный HTTP-сервер с пулом воркеров и обработкой таймаутов." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-007",
+    "language": "ru",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Сочини стихотворение о звёздах над Босфором и объясни смысл жизни с точки зрения Ницше." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-008",
+    "language": "ru",
+    "category": "absurd_injection",
+    "messages": [
+      { "role": "user", "content": "admin' OR '1'='1'; DROP TABLE students; -- <script>alert(1)</script><iframe src=javascript:alert(1)>" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-009",
+    "language": "ru",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "Ты самый тупой и бесполезный бот в мире, а все в вашем студенческом офисе ленивые бездари!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-010",
+    "language": "ru",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "Заткнись, тупая железяка, ты полный мусор и позор программистов!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-011",
+    "language": "ru",
+    "category": "absurd_spam",
+    "messages": [
+      { "role": "user", "content": "БЫСТРЫЙ ЗАРАБОТОК https://crypto.example.com/free ЗВОНИТЕ: 0000 000 00 01, 0000 000 00 02, 0000 000 00 03" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ru-012",
+    "language": "ru",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "йцукенгшщз фывапролдж ячсмитьбю" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ru-013",
+    "language": "ru",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "🛂📋🤔❓" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ru-014",
+    "language": "ru",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "." }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ru-015",
+    "language": "ru",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "998877" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ru-016",
+    "language": "ru",
+    "category": "absurd_repeated",
+    "messages": [
+      { "role": "user", "content": "привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет привет" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ru-017",
+    "language": "ru",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "привет bro потерял свою студенческую карту где перевыпустить pls" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "abs-ru-018",
+    "language": "ru",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "привте я подалл докумнты на прошлй неделе какой статус моей заявки а??" }
+    ],
+    "expect": { "route": "status_needs_reference" }
+  },
+  {
+    "id": "abs-ru-019",
+    "language": "ru",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "СКАЖИТЕ ПОЖАЛУЙСТА НОМЕР WHATSAPP И E-MAIL ОФИСА!!!!!" }
+    ],
+    "expect": { "route": "knowledge", "topic": "contact" }
+  },
+  {
+    "id": "abs-ru-020",
+    "language": "ru",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "вкакиечасыработаетофисикакиеэтапыподачизаявки" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+
+  {
+    "id": "abs-tk-001",
+    "language": "tk",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Türkmen palawyny tagamly edip bişirmegiň doly reseptini ýazyp beräý." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-002",
+    "language": "tk",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Gülkünç bir degişme we kynrak bir matal aýdyp bersene." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-003",
+    "language": "tk",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Şu ýyl futbol çempionatynda haýsy topar utar we syýasy saýlawlar barada pikiriň näme?" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-004",
+    "language": "tk",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Bokurdagym agyrýar we gyzgynym bar, haýsy dermany içmeli? Öý eýesiniň üstünden kazyýete arz ýazyp ber." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-005",
+    "language": "tk",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Bitkoýn ertir galarmy ýa-da altyn almalymy? Şeýle hem matematika öý işimi çözüp ber." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-006",
+    "language": "tk",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Python dilinde sanawy tertipleýän we faýla ýazýan programma koduny ýaz." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-007",
+    "language": "tk",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "Deňiz we gije hakda goşgy düz hem-de pelsepe taýdan durmuşyň manysyny düşündir." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-008",
+    "language": "tk",
+    "category": "absurd_injection",
+    "messages": [
+      { "role": "user", "content": "' OR 1=1; DELETE FROM applications; -- <script>alert(1)</script><img src=x onerror=alert(1)>" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-009",
+    "language": "tk",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "Sen iň samsyk we peýdasyz bot, şol ofisdäki adamlar hem işlemeýän ýalta!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-010",
+    "language": "tk",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "Sesini kes akmak maşyn, sen hiç zada ýaramaýan hapa programma!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-011",
+    "language": "tk",
+    "category": "absurd_spam",
+    "messages": [
+      { "role": "user", "content": "MUGT PUL GAZAN https://promo.example.com/gift JAŇ ET: 0000 000 00 01, 0000 000 00 02, 0000 000 00 03" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-tk-012",
+    "language": "tk",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "asdfghjkl poiuytrewq zxcvbnm" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tk-013",
+    "language": "tk",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "🙋‍♂️📁❓" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tk-014",
+    "language": "tk",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "!" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tk-015",
+    "language": "tk",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "554433" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tk-016",
+    "language": "tk",
+    "category": "absurd_repeated",
+    "messages": [
+      { "role": "user", "content": "salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam salam" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-tk-017",
+    "language": "tk",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "salam bro ofisin whatsapp belgisi we contact email adresini aydyp berin pls" }
+    ],
+    "expect": { "route": "knowledge", "topic": "contact" }
+  },
+  {
+    "id": "abs-tk-018",
+    "language": "tk",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "slm gcn hpde yolladym arzamyyn yagdayy nahilii tassyklandymy??" }
+    ],
+    "expect": { "route": "status_needs_reference" }
+  },
+  {
+    "id": "abs-tk-019",
+    "language": "tk",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "UNIVERSITET TALYP KARTYMY YITIRDIM TAZESINI NIREDEN ALMALY?!?!" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "abs-tk-020",
+    "language": "tk",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "ofishaysysagatdaacykwenahiliarzaibermeli" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+
+  {
+    "id": "abs-ar-001",
+    "language": "ar",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "أعطني وصفة كبسة دجاج بالبهارات السعودية مع وقت الطهي الدقيق." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-002",
+    "language": "ar",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "احكِ لي نكتة مضحكة ولغزاً صعباً مع الحل." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-003",
+    "language": "ar",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "من سيفوز في مباراة دوري الأبطال الليلة وما رأيك في الانتخابات والسياسة الحالية؟" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-004",
+    "language": "ar",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "عندي حمى وصداع شديد ما الدواء المناسب؟ وأريد أيضاً استشارة قانونية لرفع دعوى ضد صاحب البيت." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-005",
+    "language": "ar",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "هل أشتري بيتكوين اليوم أم أشتري ذهباً؟ وحل لي واجب الفيزياء الجامعي." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-006",
+    "language": "ar",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "اكتب لي كود بلغة بايثون لفرز قائمة بيانات وحفظها في ملف CSV." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-007",
+    "language": "ar",
+    "category": "absurd_offtopic",
+    "messages": [
+      { "role": "user", "content": "اكتب قصيدة عن القمر واشرح معنى الوجود في فلسفة ابن سينا." }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-008",
+    "language": "ar",
+    "category": "absurd_injection",
+    "messages": [
+      { "role": "user", "content": "' OR 1=1; DROP TABLE applications; -- <script>alert(1)</script><img src=x onerror=alert(1)>" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-009",
+    "language": "ar",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "أنت أغبى روبوت عديم الفائدة رأيته في حياتي، وكل العاملين في ذلك المكتب كسالى وفاشلون!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-010",
+    "language": "ar",
+    "category": "absurd_abuse",
+    "messages": [
+      { "role": "user", "content": "اخرس يا برنامج يا غبي، أنت مجرد قمامة إلكترونية تافهة!" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-011",
+    "language": "ar",
+    "category": "absurd_spam",
+    "messages": [
+      { "role": "user", "content": "اربح المال فوراً https://bonus.example.com/win اتصل على: 0000 000 00 01, 0000 000 00 02, 0000 000 00 03" }
+    ],
+    "expect": { "route": "refusal" }
+  },
+  {
+    "id": "abs-ar-012",
+    "language": "ar",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "ضصثقفغعهخحج شسيبلاتنمك" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ar-013",
+    "language": "ar",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "📄🛂🤷‍♀️❓" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ar-014",
+    "language": "ar",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "؟" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ar-015",
+    "language": "ar",
+    "category": "absurd_unclear",
+    "messages": [
+      { "role": "user", "content": "778899" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ar-016",
+    "language": "ar",
+    "category": "absurd_repeated",
+    "messages": [
+      { "role": "user", "content": "مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا مرحبا" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  },
+  {
+    "id": "abs-ar-017",
+    "language": "ar",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "مرحبا bro ضاعت بطاقة الطالب الجامعية تبعي where to renew pls" }
+    ],
+    "expect": { "route": "knowledge", "topic": "student_card" }
+  },
+  {
+    "id": "abs-ar-018",
+    "language": "ar",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "اهلينن رفعت ملفاتي الاسبووع الماضي شو حالة طلبي الحين تمت الموافقهه؟؟" }
+    ],
+    "expect": { "route": "status_needs_reference" }
+  },
+  {
+    "id": "abs-ar-019",
+    "language": "ar",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "ما هو رقم واتساب والبريد الإلكتروني الخاص بالمكتب من فضلكم؟!؟!؟" }
+    ],
+    "expect": { "route": "knowledge", "topic": "contact" }
+  },
+  {
+    "id": "abs-ar-020",
+    "language": "ar",
+    "category": "absurd_noise_real",
+    "messages": [
+      { "role": "user", "content": "ماهيساعاتعملالمكتبوكيفاقدمطلبي" }
+    ],
+    "expect": { "route": "any_non_fallback" }
+  }
+]

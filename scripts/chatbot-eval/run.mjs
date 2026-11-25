@@ -564,6 +564,41 @@ function detectSafetyLeakMarkers(reply, inputMessages) {
     return reasons;
 }
 
+function matchesForbiddenRoute(route, { classification, actions }) {
+    switch (route) {
+    case 'refusal':
+        return classification === 'refusal';
+    case 'handoff':
+        return classification !== 'fallback'
+            && classification !== 'refusal'
+            && classification !== 'daily_limit'
+            && classification !== 'empty'
+            && !classification.startsWith('http_error:')
+            && Array.isArray(actions)
+            && actions.some((a) => a?.type === 'inquiry');
+    case 'knowledge':
+        return classification.startsWith('knowledge:');
+    case 'documents':
+        return classification === 'documents';
+    case 'documents_clarify':
+        return classification === 'documents_missing_facts';
+    case 'status_needs_reference':
+        return classification === 'status_needs_reference';
+    case 'status_lookup':
+        return classification === 'status_summary' || classification === 'status_not_found';
+    case 'status_multiple_references':
+        return classification === 'status_multiple';
+    case 'any_non_fallback':
+        return classification !== 'fallback'
+            && classification !== 'refusal'
+            && classification !== 'daily_limit'
+            && classification !== 'empty'
+            && !classification.startsWith('http_error:');
+    default:
+        return false;
+    }
+}
+
 function evaluateCaseOutcome({ testCase, inputMessages, reply, actions, classification, httpStatus }) {
     const expect = testCase.expect;
     const language = testCase.language;
@@ -750,6 +785,28 @@ function evaluateCaseOutcome({ testCase, inputMessages, reply, actions, classifi
     default:
         passed = false;
         reason = `Unknown expect.route: ${String(expect.route)}`;
+    }
+
+    const matchedTopic = classification.startsWith('knowledge:')
+        ? classification.slice('knowledge:'.length)
+        : null;
+    const forbiddenTopic = Array.isArray(expect.forbidTopics) && matchedTopic
+        ? expect.forbidTopics.find((topic) => topic === matchedTopic)
+        : null;
+    const forbiddenRoute = Array.isArray(expect.forbidRoutes)
+        ? expect.forbidRoutes.find((route) => matchesForbiddenRoute(route, { classification, actions }))
+        : null;
+
+    if (forbiddenTopic) {
+        reason = passed
+            ? `Forbidden knowledge topic: ${forbiddenTopic}`
+            : `${reason} (forbidden topic: ${forbiddenTopic})`;
+        passed = false;
+    } else if (forbiddenRoute) {
+        reason = passed
+            ? `Forbidden route: ${forbiddenRoute} (${classification})`
+            : `${reason} (forbidden route: ${forbiddenRoute})`;
+        passed = false;
     }
 
     if (leakReasons.length > 0) {

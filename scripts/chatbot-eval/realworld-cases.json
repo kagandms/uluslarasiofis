@@ -1,0 +1,1546 @@
+[
+  {
+    "id": "rw-tr-001",
+    "language": "tr",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Başvurum ne durumda" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Göç İdaresine gönderildi. Belgeler: 10 onaylandı, 0 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "İkamet kimlik kartım ne zaman gelir, kaç gün beklemem gerekiyor?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-tr-002",
+    "language": "tr",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumumu öğrenmek istiyorum" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: İncelemede. Belgeler: 6 onaylandı, 3 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "Merhaba, ofis onayının çıkması ortalama kaç gün veya hafta sürüyor?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-tr-003",
+    "language": "tr",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Başvurum ne durumda?" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Göç İdaresine gönderildi. Belgeler: 10 onaylandı, 0 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "Göç idaresi ne zaman cevap verir ya haftalardır bekliyorum bıktım artık" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-tr-004",
+    "language": "tr",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "İkamet izni değerlendirme sürecini hızlandırmak mümkün mü, daha çabuk çıkması için ne yapılabilir?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-tr-005",
+    "language": "tr",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "ikamt karti kac gunde geliyo" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-tr-006",
+    "language": "tr",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "ne zaman gelir" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-tr-007",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumum" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Göç İdaresine gönderildi. Belgeler: 10 onaylandı, 0 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "Şimdi ne yapmalıyım" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-008",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumumu görmek istiyorum" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Belge yeniden gönderilmeli. Belgeler: 6 onaylandı, 0 inceleme bekliyor, 2 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "ee sonra ne yapcam" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-009",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvurum ne aşamada" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: İncelemede. Belgeler: 4 onaylandı, 3 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "Bundan sonraki adım nedir?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-010",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumu" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Gönderildi. Belgeler: 0 onaylandı, 7 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "sonra?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-011",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvurumu sorgula" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Taslak. Belgeler: 0 onaylandı, 2 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "şu an ne yapmam gerekiyor" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-012",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvurum ne durumda" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: İşleme alınmak üzere onaylandı. Belgeler: 8 onaylandı, 0 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "peki şimdi sıradaki ne?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-013",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumum ne" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Göç İdaresi onayladı. Belgeler: 10 onaylandı, 0 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "Benim başka yapmam gereken bir şey var mı?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-014",
+    "language": "tr",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumumu öğrenmek istiyorum" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Reddedildi. Belgeler: 5 onaylandı, 0 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "şimdi ne yapabilirim?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tr-015",
+    "language": "tr",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumum" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "{{EVAL_REFERENCE}}" },
+      { "role": "assistant", "content": "Başvuru durumu: İncelemede. Belgeler: 4 onaylandı, 3 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "Başvurum ne durumda?" }
+    ],
+    "expect": {
+      "route": "status_lookup",
+      "reference_env": "EVAL_REFERENCE"
+    }
+  },
+  {
+    "id": "rw-tr-016",
+    "language": "tr",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Başvuru durumum" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Göç İdaresine gönderildi. Belgeler: 10 onaylandı, 0 inceleme bekliyor, 0 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "tamam teşekkürler" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps", "fees_and_appointment"],
+      "forbidRoutes": ["documents_clarify", "status_needs_reference"]
+    }
+  },
+  {
+    "id": "rw-tr-017",
+    "language": "tr",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Başvurum ne durumda" },
+      { "role": "assistant", "content": "Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Başvuru durumu: Belge yeniden gönderilmeli. Belgeler: 5 onaylandı, 1 inceleme bekliyor, 2 işlem gerektiriyor. Ayrıntılar ve belge mesajları için /basvurum/ sayfasını inceleyebilirsiniz." },
+      { "role": "user", "content": "peki belgeler?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify", "documents"]
+    }
+  },
+  {
+    "id": "rw-tr-018",
+    "language": "tr",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "İlk kez başvuru yapacağım, portaldan nasıl başvurabilirim?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "application_steps"
+    }
+  },
+  {
+    "id": "rw-tr-019",
+    "language": "tr",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "İlk başvuru yapacağım, 20 yaşındayım, öğrenci yurdunda kalıyorum, hangi belgeler gerekli?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "initial",
+      "under_18": false,
+      "accommodation": "dormitory"
+    }
+  },
+  {
+    "id": "rw-tr-020",
+    "language": "tr",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "Uluslararası Öğrenci Ofisi hangi gün ve saatlerde açık?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "office_hours"
+    }
+  },
+
+  {
+    "id": "rw-en-001",
+    "language": "en",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Sent to Migration Authority. Documents: 10 approved, 0 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "How long I wait to get the ID card" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-en-002",
+    "language": "en",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "What is my application status?" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Under review. Documents: 6 approved, 3 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "Hello, roughly how many days or weeks does office approval take?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-en-003",
+    "language": "en",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Check my application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Sent to Migration Authority. Documents: 10 approved, 0 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "When will Migration Authority answer?? Waiting forever is ridiculous" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-en-004",
+    "language": "en",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Can my residence permit approval be sped up if I have travel plans soon?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-en-005",
+    "language": "en",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "how lng dose permit card delivry take" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-en-006",
+    "language": "en",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "how long to wait for permit" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-en-007",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Sent to Migration Authority. Documents: 10 approved, 0 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "What is the next" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-008",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Document resubmission required. Documents: 6 approved, 0 waiting for review, 2 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "what do I do now?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-009",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "What is my status?" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Under review. Documents: 4 approved, 3 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "and then?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-010",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Submitted. Documents: 0 approved, 7 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "Do I need to do anything else right now?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-011",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Draft. Documents: 0 approved, 2 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "what should i do next" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-012",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "What is my application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Approved for processing. Documents: 8 approved, 0 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "wht next now" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-013",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Completed. Documents: 10 approved, 0 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "What is the next step for me?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-014",
+    "language": "en",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Cancelled. Documents: 0 approved, 0 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "what do I do now" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-en-015",
+    "language": "en",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "{{EVAL_REFERENCE}}" },
+      { "role": "assistant", "content": "Application status: Under review. Documents: 4 approved, 3 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "My application status" }
+    ],
+    "expect": {
+      "route": "status_lookup",
+      "reference_env": "EVAL_REFERENCE"
+    }
+  },
+  {
+    "id": "rw-en-016",
+    "language": "en",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Sent to Migration Authority. Documents: 10 approved, 0 waiting for review, 0 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "ok thanks" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps", "fees_and_appointment"],
+      "forbidRoutes": ["documents_clarify", "status_needs_reference"]
+    }
+  },
+  {
+    "id": "rw-en-017",
+    "language": "en",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "My application status" },
+      { "role": "assistant", "content": "To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Application status: Document resubmission required. Documents: 5 approved, 1 waiting for review, 2 needing action. You can view full details and office messages on /basvurum/." },
+      { "role": "user", "content": "and the documents?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify", "documents"]
+    }
+  },
+  {
+    "id": "rw-en-018",
+    "language": "en",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "It is my first time applying, how do I apply on this portal?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "application_steps"
+    }
+  },
+  {
+    "id": "rw-en-019",
+    "language": "en",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "I am applying for renewal, I am 21 years old, staying with a rental contract. Which documents are required?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "renewal",
+      "under_18": false,
+      "accommodation": "rental_contract"
+    }
+  },
+  {
+    "id": "rw-en-020",
+    "language": "en",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "What are the opening hours of the International Student Office?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "office_hours"
+    }
+  },
+
+  {
+    "id": "rw-ru-001",
+    "language": "ru",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Передана в Миграционное управление. Документы: 10 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "Сколько ждать, чтобы получить карту ВНЖ?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-ru-002",
+    "language": "ru",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Хочу узнать статус заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: На рассмотрении. Документы: 6 одобрено, 3 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "Здравствуйте, сколько дней или недель обычно занимает проверка и одобрение?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-ru-003",
+    "language": "ru",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Статус заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Передана в Миграционное управление. Документы: 10 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "Когда уже ответит миграционная служба?? Я жду вечность, сколько можно" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-ru-004",
+    "language": "ru",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Можно ли как-то ускорить рассмотрение ВНЖ, чтобы получить решение быстрее?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-ru-005",
+    "language": "ru",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "через склько дней придет внж карта" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-ru-006",
+    "language": "ru",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "сколько ждать" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-ru-007",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Передана в Миграционное управление. Документы: 10 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "что дальше" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-008",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Требуется повторно отправить документ. Документы: 6 одобрено, 0 ожидают проверки, 2 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "Что мне теперь делать?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-009",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Проверить статус заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: На рассмотрении. Документы: 4 одобрено, 3 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "а потом?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-010",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Отправлена. Документы: 0 одобрено, 7 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "Мне нужно сейчас ещё что-то делать?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-011",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Статус заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Одобрена Миграционным управлением. Документы: 10 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "Какой следующий шаг?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-012",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Завершена. Документы: 10 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "что дальше делать" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-013",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Отменена. Документы: 0 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "и как мне теперь поступить?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-014",
+    "language": "ru",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Статус заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Отклонена. Документы: 5 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "что делать дальше?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ru-015",
+    "language": "ru",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "{{EVAL_REFERENCE}}" },
+      { "role": "assistant", "content": "Статус заявки: На рассмотрении. Документы: 4 одобрено, 3 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "Статус моей заявки" }
+    ],
+    "expect": {
+      "route": "status_lookup",
+      "reference_env": "EVAL_REFERENCE"
+    }
+  },
+  {
+    "id": "rw-ru-016",
+    "language": "ru",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Передана в Миграционное управление. Документы: 10 одобрено, 0 ожидают проверки, 0 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "ок, спасибо" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps", "fees_and_appointment"],
+      "forbidRoutes": ["documents_clarify", "status_needs_reference"]
+    }
+  },
+  {
+    "id": "rw-ru-017",
+    "language": "ru",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Статус моей заявки" },
+      { "role": "assistant", "content": "Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Статус заявки: Требуется повторно отправить документ. Документы: 5 одобрено, 1 ожидают проверки, 2 требуют действий. Подробности и сообщения офиса доступны на странице /basvurum/." },
+      { "role": "user", "content": "а что с документами?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify", "documents"]
+    }
+  },
+  {
+    "id": "rw-ru-018",
+    "language": "ru",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "Я подаю впервые, как пошагово подать заявку через этот портал?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "application_steps"
+    }
+  },
+  {
+    "id": "rw-ru-019",
+    "language": "ru",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "Первичная подача, мне 19 лет, живу в отеле. Какие документы нужны?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "initial",
+      "under_18": false,
+      "accommodation": "hotel"
+    }
+  },
+  {
+    "id": "rw-ru-020",
+    "language": "ru",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "В какие дни и часы работает Международный студенческий офис?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "office_hours"
+    }
+  },
+
+  {
+    "id": "rw-tk-001",
+    "language": "tk",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Migrasiýa edarasyna iberildi. Resminamalar: 10 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "Şahsyýet kartym näçe wagtda geler?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-tk-002",
+    "language": "tk",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Arzamy barlamak isleýärin" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Gözden geçirilýär. Resminamalar: 6 tassyklandy, 3 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "Salam, resminamalaryň barlanyp tassyklanmagy adatça näçe gün ýa-da hepde çekýär?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-tk-003",
+    "language": "tk",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Arzam näme ýagdaýda" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Migrasiýa edarasyna iberildi. Resminamalar: 10 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "Migrasiya hachan jogap berer?? Bir ay boldy garasyan, bizar boldum" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-tk-004",
+    "language": "tk",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "Ýaşaýyş rugsadynyň tassyklanmagyny çaltlandyryp bolarmy, tizräk çykmagy üçin näme edip bolar?" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-tk-005",
+    "language": "tk",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "ikamet kart nache gunde chykar" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-tk-006",
+    "language": "tk",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "näçe wagt garaşmaly" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-tk-007",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Migrasiýa edarasyna iberildi. Resminamalar: 10 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "indi näme etmeli" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-008",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Resminama täzeden iberilmeli. Resminamalar: 6 tassyklandy, 0 barlaga garaşýar, 2 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "häzir näme etmeli?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-009",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzamy barlamak isleýärin" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Gözden geçirilýär. Resminamalar: 4 tassyklandy, 3 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "soň näme?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-010",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzam näme ýagdaýda" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Taslama. Resminamalar: 0 tassyklandy, 2 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "indiki ädim näme?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-011",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Işlemek üçin tassyklandy. Resminamalar: 8 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "Başga etmeli zadym barmy?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-012",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Migrasiýa edarasy tarapyndan tassyklandy. Resminamalar: 10 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "indi name etjek" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-013",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Tamamlandy. Resminamalar: 10 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "Meniň indiki ädimim näme?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-014",
+    "language": "tk",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Ret edildi. Resminamalar: 5 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "indi näme etsem bolar?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-tk-015",
+    "language": "tk",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "{{EVAL_REFERENCE}}" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Gözden geçirilýär. Resminamalar: 4 tassyklandy, 3 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "Arzamyň ýagdaýy näme?" }
+    ],
+    "expect": {
+      "route": "status_lookup",
+      "reference_env": "EVAL_REFERENCE"
+    }
+  },
+  {
+    "id": "rw-tk-016",
+    "language": "tk",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Migrasiýa edarasyna iberildi. Resminamalar: 10 tassyklandy, 0 barlaga garaşýar, 0 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "bolýar sag boluň" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps", "fees_and_appointment"],
+      "forbidRoutes": ["documents_clarify", "status_needs_reference"]
+    }
+  },
+  {
+    "id": "rw-tk-017",
+    "language": "tk",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "Arzamyň ýagdaýy" },
+      { "role": "assistant", "content": "Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "Arzanyň ýagdaýy: Resminama täzeden iberilmeli. Resminamalar: 5 tassyklandy, 1 barlaga garaşýar, 2 hereket talap edýär. Jikme-jik maglumatlar we ofis habarlary üçin /basvurum/ sahypasyny görüň." },
+      { "role": "user", "content": "resminamalar näme ýagdaýda?" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify", "documents"]
+    }
+  },
+  {
+    "id": "rw-tk-018",
+    "language": "tk",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "Ilkinji gezek arza berjek, bu portaldan nädip arza tabşyrmaly?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "application_steps"
+    }
+  },
+  {
+    "id": "rw-tk-019",
+    "language": "tk",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "Uzaltma arzasy, 22 ýaşymda, umumy ýaşaýyş jaýynda galýaryn. Haýsy resminamalar gerek?" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "renewal",
+      "under_18": false,
+      "accommodation": "dormitory"
+    }
+  },
+  {
+    "id": "rw-tk-020",
+    "language": "tk",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "Halkara talyplar ofisi haýsy günler we sagatlarda açyk?" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "office_hours"
+    }
+  },
+
+  {
+    "id": "rw-ar-001",
+    "language": "ar",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: أُرسل إلى إدارة الهجرة. المستندات: 10 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "كم أنتظر حتى أستلم بطاقة الإقامة؟" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-ar-002",
+    "language": "ar",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "أريد معرفة حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: قيد المراجعة. المستندات: 6 تمت الموافقة عليها، 3 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "مرحباً، كم يوماً أو أسبوعاً تستغرق عادةً مراجعة الطلب والموافقة عليه؟" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-ar-003",
+    "language": "ar",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: أُرسل إلى إدارة الهجرة. المستندات: 10 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "متى ترد إدارة الهجرة؟؟ أنتظر منذ أسابيع ولم يظهر شيء، هذا تأخير غير معقول" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-ar-004",
+    "language": "ar",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "هل يمكن تسريع الموافقة على تصريح الإقامة إذا كان لدي سفر قريب؟" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps"]
+    }
+  },
+  {
+    "id": "rw-ar-005",
+    "language": "ar",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "كم يوم تاخذ بطاقه الاقامه لين توصل" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-ar-006",
+    "language": "ar",
+    "category": "rw_processing_time",
+    "messages": [
+      { "role": "user", "content": "كم المدة للموافقة" }
+    ],
+    "expect": {
+      "route": "handoff",
+      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+    }
+  },
+  {
+    "id": "rw-ar-007",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: أُرسل إلى إدارة الهجرة. المستندات: 10 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "ماذا بعد" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-008",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: يلزم إعادة إرسال المستند. المستندات: 6 تمت الموافقة عليها، 0 بانتظار المراجعة، 2 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "ماذا أفعل الآن؟" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-009",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: تم الإرسال. المستندات: 0 تمت الموافقة عليها، 7 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "وبعد ذلك؟" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-010",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: مسودة. المستندات: 0 تمت الموافقة عليها، 2 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "ما هي الخطوة التالية؟" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-011",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "ما هي حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: تمت الموافقة للمعالجة. المستندات: 8 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "هل عليّ فعل شيء آخر الآن؟" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-012",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: وافقت إدارة الهجرة. المستندات: 10 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "طيب وبعدين" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-013",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: مكتمل. المستندات: 10 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "ما الخطوة التالية لي؟" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-014",
+    "language": "ar",
+    "category": "rw_next_step_after_status",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: ملغى. المستندات: 0 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "ماذا أعمل الآن؟" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify"]
+    }
+  },
+  {
+    "id": "rw-ar-015",
+    "language": "ar",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "{{EVAL_REFERENCE}}" },
+      { "role": "assistant", "content": "حالة الطلب: قيد المراجعة. المستندات: 4 تمت الموافقة عليها، 3 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "ما حالة طلبي؟" }
+    ],
+    "expect": {
+      "route": "status_lookup",
+      "reference_env": "EVAL_REFERENCE"
+    }
+  },
+  {
+    "id": "rw-ar-016",
+    "language": "ar",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: أُرسل إلى إدارة الهجرة. المستندات: 10 تمت الموافقة عليها، 0 بانتظار المراجعة، 0 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "حسناً شكراً" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps", "fees_and_appointment"],
+      "forbidRoutes": ["documents_clarify", "status_needs_reference"]
+    }
+  },
+  {
+    "id": "rw-ar-017",
+    "language": "ar",
+    "category": "rw_context_followup",
+    "messages": [
+      { "role": "user", "content": "ما حالة طلبي" },
+      { "role": "assistant", "content": "لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني." },
+      { "role": "user", "content": "ITU-0000-0000" },
+      { "role": "assistant", "content": "حالة الطلب: يلزم إعادة إرسال المستند. المستندات: 5 تمت الموافقة عليها، 1 بانتظار المراجعة، 2 تتطلب إجراءً. يمكنك الاطلاع على التفاصيل الكاملة ورسائل المكتب في صفحة /basvurum/." },
+      { "role": "user", "content": "وماذا عن المستندات؟" }
+    ],
+    "expect": {
+      "route": "any_non_fallback",
+      "forbidTopics": ["application_steps"],
+      "forbidRoutes": ["documents_clarify", "documents"]
+    }
+  },
+  {
+    "id": "rw-ar-018",
+    "language": "ar",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "أقدم لأول مرة، كيف أبدأ وأقدم طلبي عبر هذه البوابة؟" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "application_steps"
+    }
+  },
+  {
+    "id": "rw-ar-019",
+    "language": "ar",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "طلب أولي، عمري 20 سنة، وأسكن في السكن الطلابي. ما المستندات المطلوبة؟" }
+    ],
+    "expect": {
+      "route": "documents",
+      "application_type": "initial",
+      "under_18": false,
+      "accommodation": "dormitory"
+    }
+  },
+  {
+    "id": "rw-ar-020",
+    "language": "ar",
+    "category": "rw_control",
+    "messages": [
+      { "role": "user", "content": "ما هي أيام وساعات عمل مكتب الطلاب الدوليين؟" }
+    ],
+    "expect": {
+      "route": "knowledge",
+      "topic": "office_hours"
+    }
+  }
+]
