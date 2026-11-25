@@ -1,4 +1,5 @@
 import { formatApplicationTimestamp } from '../shared/application-timestamps.js';
+import { buildInquiryDraft, buildWhatsAppHref } from './inquiryWhatsAppDraft.js';
 
 const STAFF_INQUIRIES_URL = '/api/staff/inquiries';
 const INQUIRIES_TITLE = 'Gelen Sorular';
@@ -22,17 +23,60 @@ function resolveFetcher(document, customFetcher) {
     return null;
 }
 
-function buildTelHref(phone) {
+function normalizePhoneNumber(phone) {
     const raw = String(phone || '').trim();
     const hasLeadingPlus = raw.startsWith('+');
     const digits = raw.replace(/\D/gu, '');
     if (!digits) return '';
-    return `tel:${hasLeadingPlus ? '+' : ''}${digits}`;
+    return `${hasLeadingPlus ? '+' : ''}${digits}`;
 }
 
-function buildWhatsAppHref(phone) {
-    const digits = String(phone || '').replace(/\D/gu, '');
-    return digits ? `https://wa.me/${digits}` : '';
+function buildTelHref(phone) {
+    const normalized = normalizePhoneNumber(phone);
+    return normalized ? `tel:${normalized}` : '';
+}
+
+async function copyTextToClipboard(document, text) {
+    const view = document?.defaultView;
+    const clipboard = view?.navigator?.clipboard || globalThis.navigator?.clipboard;
+    if (typeof clipboard?.writeText === 'function') {
+        try {
+            await clipboard.writeText(text);
+            return true;
+        } catch {
+            // Fall through to execCommand fallback.
+        }
+    }
+    if (typeof document?.execCommand !== 'function' || !document.body) {
+        return false;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    textarea.style.pointerEvents = 'none';
+    document.body.append(textarea);
+    textarea.select();
+    let copied = false;
+    try {
+        copied = Boolean(document.execCommand('copy'));
+    } catch {
+        copied = false;
+    } finally {
+        textarea.remove();
+    }
+    return copied;
+}
+
+function notifyToast(document, message, type) {
+    const view = document?.defaultView;
+    const showToast = typeof view?.showToast === 'function'
+        ? view.showToast
+        : (typeof globalThis.window?.showToast === 'function' ? globalThis.window.showToast : null);
+    if (showToast) {
+        showToast(message, type);
+    }
 }
 
 function normalizeCounts(counts) {
@@ -160,6 +204,7 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
         contacts.className = 'staff-inquiry-contacts';
 
         const phoneText = String(item.phone || '').trim();
+        const normalizedPhone = normalizePhoneNumber(phoneText);
         const telHref = buildTelHref(phoneText);
         if (telHref) {
             const telLink = document.createElement('a');
@@ -169,7 +214,11 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
             contacts.append(telLink);
         }
 
-        const waHref = buildWhatsAppHref(phoneText);
+        const draftText = buildInquiryDraft({
+            language: item.language,
+            message: item.message
+        });
+        const waHref = buildWhatsAppHref(phoneText, draftText);
         if (waHref) {
             const waLink = document.createElement('a');
             waLink.className = 'staff-inquiry-link staff-inquiry-whatsapp';
@@ -178,6 +227,48 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
             waLink.rel = 'noopener noreferrer';
             waLink.textContent = 'WhatsApp';
             contacts.append(waLink);
+        }
+
+        if (normalizedPhone) {
+            const copyButton = document.createElement('button');
+            copyButton.type = 'button';
+            copyButton.className = 'staff-inquiry-copy-phone';
+            copyButton.textContent = 'Numarayı kopyala';
+            copyButton.setAttribute(
+                'aria-label',
+                fullName ? `${fullName} numarasını kopyala` : 'Numarayı kopyala'
+            );
+
+            const copyStatus = document.createElement('span');
+            copyStatus.className = 'staff-inquiry-copy-status';
+            copyStatus.setAttribute('aria-live', 'polite');
+
+            let resetTimerId = null;
+            copyButton.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                if (resetTimerId !== null) {
+                    clearTimeout(resetTimerId);
+                    resetTimerId = null;
+                }
+                const copied = await copyTextToClipboard(document, normalizedPhone);
+                copyButton.classList.toggle('is-copied', copied);
+                copyButton.classList.toggle('is-copy-failed', !copied);
+                copyButton.textContent = copied ? 'Kopyalandı' : 'Kopyalanamadı';
+                copyStatus.textContent = copied ? 'Numara kopyalandı.' : 'Numara kopyalanamadı.';
+                notifyToast(
+                    document,
+                    copied ? 'Numara kopyalandı.' : 'Numara kopyalanamadı.',
+                    copied ? 'success' : 'error'
+                );
+                resetTimerId = setTimeout(() => {
+                    resetTimerId = null;
+                    copyButton.classList.remove('is-copied', 'is-copy-failed');
+                    copyButton.textContent = 'Numarayı kopyala';
+                    copyStatus.textContent = '';
+                }, 2000);
+            });
+
+            contacts.append(copyButton, copyStatus);
         }
 
         const emailText = typeof item.email === 'string' ? item.email.trim() : '';
