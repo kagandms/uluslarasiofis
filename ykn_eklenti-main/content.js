@@ -1480,6 +1480,8 @@ function checkYoksisErrorModal() {
     return null;
 }
 
+const BIRTH_DATE_LABELS = ['Doğum Tarihi', 'Date of Birth', 'Birth Date'];
+
 function buildIdentityMatchOptions(expectedStudent) {
     if (!expectedStudent) return null;
     const expPassport = (expectedStudent.passportNo || expectedStudent.pasaportNo || '').trim().toUpperCase();
@@ -1492,7 +1494,7 @@ function buildIdentityMatchOptions(expectedStudent) {
     const currentDocNo = (findBelgeNoInMainPanel()?.value || '').trim().toUpperCase();
     const currentNameInput = findTargetElementByFuzzyLabels(['Adı', 'Öğrenci Adı', 'Ad'], 'input');
     const currentSurnameInput = findTargetElementByFuzzyLabels(['Soyadı', 'Öğrenci Soyadı', 'Soyad'], 'input');
-    const currentBirthDateInput = findTargetElementByFuzzyLabels(['Doğum Tarihi', 'Date of Birth', 'Birth Date'], 'input');
+    const currentBirthDateInput = findTargetElementByFuzzyLabels(BIRTH_DATE_LABELS, 'input');
     const currentName = (currentNameInput?.value || '').trim().toUpperCase();
     const currentSurname = (currentSurnameInput?.value || '').trim().toUpperCase();
     const currentBirthDate = currentBirthDateInput?.value || '';
@@ -1509,6 +1511,36 @@ function buildIdentityMatchOptions(expectedStudent) {
     };
 }
 
+function classifyDateShape(value) {
+    const text = String(value ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return 'YYYY-MM-DD';
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(text)) return 'DD.MM.YYYY';
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) return 'DD/MM/YYYY';
+    if (/^\d{2}-\d{2}-\d{4}$/.test(text)) return 'DD-MM-YYYY';
+    return 'other';
+}
+
+function describeCurrentBirthDateSource() {
+    const finder = globalThis.YknFieldTargets;
+    if (!finder || typeof finder.describeMatch !== 'function') {
+        return { labelMatched: '', candidateCount: 0, readFrom: 'none' };
+    }
+    const uniqueCandidates = new Map();
+    for (const root of getAllDocs(document)) {
+        const match = finder.describeMatch({ root, labels: BIRTH_DATE_LABELS, kind: 'text' });
+        const controls = Array.isArray(match?.candidates) ? match.candidates : [];
+        for (const control of controls) {
+            if (!uniqueCandidates.has(control)) {
+                uniqueCandidates.set(control, match.labelMatched || '');
+            }
+        }
+    }
+    const candidateCount = uniqueCandidates.size;
+    const readFrom = candidateCount === 1 ? 'single' : (candidateCount > 1 ? 'ambiguous' : 'none');
+    const labelMatched = candidateCount >= 1 ? ([...uniqueCandidates.values()][0] || '') : '';
+    return { labelMatched, candidateCount, readFrom };
+}
+
 function buildExpectedKeysPresent(expectedStudent) {
     const src = expectedStudent || {};
     const hasValue = (val) => Boolean(String(val ?? '').trim());
@@ -1522,11 +1554,20 @@ function buildExpectedKeysPresent(expectedStudent) {
 }
 
 function buildIdentityDiagnostics(expectedStudent) {
+    const src = expectedStudent || {};
+    const hasValue = (val) => Boolean(String(val ?? '').trim());
     const matchOptions = buildIdentityMatchOptions(expectedStudent);
     const explained = matchOptions ? window.YknStudentIdentity.explain(matchOptions) : null;
+    const expectedBirthDateKeyUsed = hasValue(src.birthDate)
+        ? 'birthDate'
+        : (hasValue(src.dogumTarihi) ? 'dogumTarihi' : 'none');
     return {
         ...(explained || {}),
-        expectedKeysPresent: buildExpectedKeysPresent(expectedStudent)
+        expectedKeysPresent: buildExpectedKeysPresent(expectedStudent),
+        expectedBirthDateKeyUsed,
+        expectedBirthDateShape: classifyDateShape(matchOptions?.expectedBirthDate),
+        currentBirthDateShape: classifyDateShape(matchOptions?.currentBirthDate),
+        currentBirthDateSource: describeCurrentBirthDateSource()
     };
 }
 

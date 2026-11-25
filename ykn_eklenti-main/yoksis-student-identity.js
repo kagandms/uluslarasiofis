@@ -47,6 +47,16 @@
         const currentSurname = normalizeText(opts.currentSurname);
         const expectedBirthDate = normalizeDate(opts.expectedBirthDate);
         const currentBirthDate = normalizeDate(opts.currentBirthDate);
+        const hasBothBirthDates = Boolean(expectedBirthDate && currentBirthDate);
+        const [expYear, expMonth, expDay] = hasBothBirthDates ? expectedBirthDate.split('-') : [];
+        const [curYear, curMonth, curDay] = hasBothBirthDates ? currentBirthDate.split('-') : [];
+        const birthYearEqual = hasBothBirthDates && expYear === curYear;
+        const birthMonthEqual = hasBothBirthDates && expMonth === curMonth;
+        const birthDayEqual = hasBothBirthDates && expDay === curDay;
+        const birthDayMonthSwappedEqual = hasBothBirthDates
+            && birthYearEqual
+            && expDay === curMonth
+            && expMonth === curDay;
 
         return {
             expectedPassportPresent: Boolean(expectedPassport),
@@ -62,6 +72,10 @@
             currentBirthDatePresent: Boolean(String(opts.currentBirthDate || '').trim()),
             currentBirthDateValid: Boolean(currentBirthDate),
             birthDateEqual: Boolean(expectedBirthDate && currentBirthDate && expectedBirthDate === currentBirthDate),
+            birthYearEqual,
+            birthMonthEqual,
+            birthDayEqual,
+            birthDayMonthSwappedEqual,
             result: matches(opts)
         };
     }

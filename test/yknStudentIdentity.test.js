@@ -86,6 +86,10 @@ test('explain matches result with matches() across all identity cases and expose
                     currentBirthDatePresent: false,
                     currentBirthDateValid: false,
                     birthDateEqual: false,
+                    birthYearEqual: false,
+                    birthMonthEqual: false,
+                    birthDayEqual: false,
+                    birthDayMonthSwappedEqual: false,
                     result: true
                 }
             },
@@ -115,6 +119,10 @@ test('explain matches result with matches() across all identity cases and expose
                     currentBirthDatePresent: true,
                     currentBirthDateValid: true,
                     birthDateEqual: true,
+                    birthYearEqual: true,
+                    birthMonthEqual: true,
+                    birthDayEqual: true,
+                    birthDayMonthSwappedEqual: false,
                     result: true
                 }
             },
@@ -143,6 +151,10 @@ test('explain matches result with matches() across all identity cases and expose
                     currentBirthDatePresent: true,
                     currentBirthDateValid: true,
                     birthDateEqual: false,
+                    birthYearEqual: false,
+                    birthMonthEqual: false,
+                    birthDayEqual: false,
+                    birthDayMonthSwappedEqual: false,
                     result: false
                 }
             },
@@ -172,6 +184,76 @@ test('explain matches result with matches() across all identity cases and expose
                     currentBirthDatePresent: true,
                     currentBirthDateValid: true,
                     birthDateEqual: false,
+                    birthYearEqual: true,
+                    birthMonthEqual: true,
+                    birthDayEqual: false,
+                    birthDayMonthSwappedEqual: false,
+                    result: false
+                }
+            },
+            {
+                name: 'different year only',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin',
+                    currentName: 'Kevin',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'Mwali',
+                    expectedBirthDate: '2000-01-10',
+                    currentBirthDate: '10.01.1999'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: true,
+                    expectedBirthDatePresent: true,
+                    expectedBirthDateValid: true,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: true,
+                    birthDateEqual: false,
+                    birthYearEqual: false,
+                    birthMonthEqual: true,
+                    birthDayEqual: true,
+                    birthDayMonthSwappedEqual: false,
+                    result: false
+                }
+            },
+            {
+                name: 'day and month swapped',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin',
+                    currentName: 'Kevin',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'Mwali',
+                    expectedBirthDate: '2000-01-10',
+                    currentBirthDate: '2000-10-01'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: true,
+                    expectedBirthDatePresent: true,
+                    expectedBirthDateValid: true,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: true,
+                    birthDateEqual: false,
+                    birthYearEqual: true,
+                    birthMonthEqual: false,
+                    birthDayEqual: false,
+                    birthDayMonthSwappedEqual: true,
                     result: false
                 }
             },
@@ -201,6 +283,10 @@ test('explain matches result with matches() across all identity cases and expose
                     currentBirthDatePresent: true,
                     currentBirthDateValid: true,
                     birthDateEqual: true,
+                    birthYearEqual: true,
+                    birthMonthEqual: true,
+                    birthDayEqual: true,
+                    birthDayMonthSwappedEqual: false,
                     result: false
                 }
             },
@@ -221,7 +307,44 @@ test('explain matches result with matches() across all identity cases and expose
                     currentBirthDatePresent: false,
                     currentBirthDateValid: false,
                     birthDateEqual: false,
+                    birthYearEqual: false,
+                    birthMonthEqual: false,
+                    birthDayEqual: false,
+                    birthDayMonthSwappedEqual: false,
                     result: null
+                }
+            },
+            {
+                name: 'one date invalid',
+                input: {
+                    expectedPassport: 'AB123',
+                    currentDocument: 'CD456',
+                    expectedName: 'Kevin',
+                    currentName: 'Kevin',
+                    expectedSurname: 'Mwali',
+                    currentSurname: 'Mwali',
+                    expectedBirthDate: '2000-01-10',
+                    currentBirthDate: 'not-a-date'
+                },
+                expectedFlags: {
+                    expectedPassportPresent: true,
+                    currentDocumentPresent: true,
+                    passportEqual: false,
+                    passportMismatch: true,
+                    expectedNamePresent: true,
+                    nameEqual: true,
+                    expectedSurnamePresent: true,
+                    surnameEqual: true,
+                    expectedBirthDatePresent: true,
+                    expectedBirthDateValid: true,
+                    currentBirthDatePresent: true,
+                    currentBirthDateValid: false,
+                    birthDateEqual: false,
+                    birthYearEqual: false,
+                    birthMonthEqual: false,
+                    birthDayEqual: false,
+                    birthDayMonthSwappedEqual: false,
+                    result: false
                 }
             },
             {
@@ -250,6 +373,10 @@ test('explain matches result with matches() across all identity cases and expose
                     currentBirthDatePresent: true,
                     currentBirthDateValid: false,
                     birthDateEqual: false,
+                    birthYearEqual: false,
+                    birthMonthEqual: false,
+                    birthDayEqual: false,
+                    birthDayMonthSwappedEqual: false,
                     result: false
                 }
             }
