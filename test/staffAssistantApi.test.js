@@ -913,7 +913,7 @@ test('POST /api/staff/assistant enforces per-staff rate limits (429) and logs no
     assert.equal(dailyLimited.status, 429);
 });
 
-test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Llama 3.3) without chat_template_kwargs even when CHATBOT_MODEL is set', async (context) => {
+test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Gemma 4 26B) with enable_thinking false even when CHATBOT_MODEL is set', async (context) => {
     const infoLogs = [];
     context.mock.method(console, 'info', (...args) => {
         infoLogs.push(args);
@@ -928,7 +928,7 @@ test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Llama 3.3) w
             }
         }
     });
-    environment.CHATBOT_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+    environment.CHATBOT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
     const response = await worker.fetch(createAssistantRequest({ message: 'ekrana geçelim mi' }), environment, {});
     const payload = validateStaffAssistantResponse(await response.json());
@@ -937,9 +937,9 @@ test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Llama 3.3) w
     assert.equal(payload.state, 'understood');
     assert.deepEqual(payload.action, { type: 'navigate', view: 'applications' });
     assert.equal(fakeAi.callCount, 1);
-    assert.equal(STAFF_ASSISTANT_MODEL_DEFAULT, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+    assert.equal(STAFF_ASSISTANT_MODEL_DEFAULT, '@cf/google/gemma-4-26b-a4b-it');
     assert.equal(fakeAi.calls[0].model, STAFF_ASSISTANT_MODEL_DEFAULT);
-    assert.equal(Object.hasOwn(fakeAi.calls[0].input, 'chat_template_kwargs'), false);
+    assert.strictEqual(fakeAi.calls[0].input.chat_template_kwargs?.enable_thinking, false);
     assert.deepEqual(fakeAi.calls[0].options.extraHeaders, { 'x-session-affinity': 'topi-staff' });
     assert.ok(fakeAi.calls[0].options.signal instanceof AbortSignal);
 
