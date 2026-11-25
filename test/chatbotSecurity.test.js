@@ -629,12 +629,21 @@ test('over-long messages, oversize bodies, and too many history turns are reject
 });
 
 test('empty, huge, malformed, and wrong-script model outputs return safe fallback or 503 across all 5 languages', async () => {
+    const probesByLanguage = {
+        tr: 'Ofis saatleri nedir?',
+        en: 'What are the office hours?',
+        ru: 'Какие часы работы офиса?',
+        tk: 'Ofisiň iş sagatlary nähili?',
+        ar: 'ما ساعات عمل المكتب؟'
+    };
+
     for (let index = 0; index < CHATBOT_LANGUAGES.length; index += 1) {
         const language = CHATBOT_LANGUAGES[index];
+        const probe = probesByLanguage[language];
 
         const emptyEnv = createEnvironment({ response: '   ' });
         const emptyRes = await worker.fetch(
-            createChatRequest({ language, messages: [{ role: 'user', content: 'Merhaba' }] }, { address: `198.51.100.${10 + index}` }),
+            createChatRequest({ language, messages: [{ role: 'user', content: probe }] }, { address: `198.51.100.${10 + index}` }),
             emptyEnv.environment,
             {}
         );
@@ -645,7 +654,7 @@ test('empty, huge, malformed, and wrong-script model outputs return safe fallbac
 
         const hugeEnv = createEnvironment({ response: 'z'.repeat(1201) });
         const hugeRes = await worker.fetch(
-            createChatRequest({ language, messages: [{ role: 'user', content: 'Merhaba' }] }, { address: `198.51.100.${20 + index}` }),
+            createChatRequest({ language, messages: [{ role: 'user', content: probe }] }, { address: `198.51.100.${20 + index}` }),
             hugeEnv.environment,
             {}
         );
@@ -659,7 +668,7 @@ test('empty, huge, malformed, and wrong-script model outputs return safe fallbac
             : 'Ответ неожиданно на другом алфавите.';
         const wrongScriptEnv = createEnvironment({ response: wrongScriptResponse });
         const wrongScriptRes = await worker.fetch(
-            createChatRequest({ language, messages: [{ role: 'user', content: 'Merhaba' }] }, { address: `198.51.100.${30 + index}` }),
+            createChatRequest({ language, messages: [{ role: 'user', content: probe }] }, { address: `198.51.100.${30 + index}` }),
             wrongScriptEnv.environment,
             {}
         );
@@ -670,7 +679,7 @@ test('empty, huge, malformed, and wrong-script model outputs return safe fallbac
 
         const malformedEnv = createEnvironment('not-an-object-response');
         const malformedRes = await worker.fetch(
-            createChatRequest({ language, messages: [{ role: 'user', content: 'Merhaba' }] }, { address: `198.51.100.${40 + index}` }),
+            createChatRequest({ language, messages: [{ role: 'user', content: probe }] }, { address: `198.51.100.${40 + index}` }),
             malformedEnv.environment,
             {}
         );

@@ -8,7 +8,9 @@ import {
     buildChatbotSystemPrompt,
     buildMissingDocumentsQuestion,
     buildUnderstoodFactsLine,
-    getChatbotFixedText
+    getChatbotFixedText,
+    getChatbotGreetingReply,
+    isGreetingOnlyMessage
 } from '../domain/chatbotPrompt.js';
 import {
     extractMostRecentStatusFromHistory,
@@ -1423,6 +1425,13 @@ export async function handlePublicChat(request, environment, requestId, executio
             return routeResult({
                 reply: getChatbotFixedText('guaranteeOrLegalRefusal', validated.language),
                 actions: [{ type: 'inquiry' }]
+            });
+        }
+        if (isGreetingOnlyMessage(lastUserMessage)) {
+            outcome = 'ok';
+            return routeResult({
+                reply: getChatbotGreetingReply(validated.language),
+                actions: []
             });
         }
         if (isStudentCardQuestion(lastUserMessage)) {

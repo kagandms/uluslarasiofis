@@ -338,7 +338,7 @@ async function runSearchApplications(args, context) {
 
     if (total === 0) {
         return {
-            reply: `"${args.query}" için eşleşen başvuru bulunamadı. Başvuru araması yalnızca başvuru referansı, öğrenci no, ad, soyad ve pasaport no ile yapılır (telefon ve e-posta ile arama yoktur).`,
+            reply: `"${args.query}" için eşleşen bir başvuru bulamadım. İsterseniz başvuru referansı, öğrenci no, ad, soyad veya pasaport no ile tekrar arayabiliriz (telefon ve e-posta ile arama yapılamıyor).`,
             state: 'confused',
             results
         };
@@ -346,7 +346,7 @@ async function runSearchApplications(args, context) {
 
     if (total > MAX_RESULT_ITEMS) {
         return {
-            reply: `İlk ${MAX_RESULT_ITEMS} başvuru listelendi (toplam ${total}; tümünü görmek için Başvurular ekranını açın).`,
+            reply: `İlk ${MAX_RESULT_ITEMS} başvuruyu sizin için listeledim (toplam ${total}; tümünü görmek için Başvurular ekranını açın).`,
             state: 'understood',
             action: { type: 'navigate', view: 'applications' },
             results
@@ -354,7 +354,7 @@ async function runSearchApplications(args, context) {
     }
 
     return {
-        reply: `${total} başvuru bulundu.`,
+        reply: `Toplam ${total} eşleşen başvuru buldum.`,
         state: 'understood',
         results
     };
@@ -413,7 +413,7 @@ async function runLookupYoksisAudit(args, context) {
 
     if (total === 0) {
         return {
-            reply: 'YÖKSİS eksik evrak kayıtlarında eşleşen sonuç bulunamadı.',
+            reply: 'YÖKSİS eksik evrak kayıtlarında eşleşen bir sonuç bulamadım.',
             state: 'confused',
             results
         };
@@ -421,7 +421,7 @@ async function runLookupYoksisAudit(args, context) {
 
     if (total > MAX_RESULT_ITEMS) {
         return {
-            reply: `İlk ${MAX_RESULT_ITEMS} YÖKSİS kaydı listelendi (toplam ${total}; tümünü görmek için YÖKSİS Eksik Evrak ekranını açın).`,
+            reply: `İlk ${MAX_RESULT_ITEMS} YÖKSİS kaydını sizin için listeledim (toplam ${total}; tümünü görmek için YÖKSİS Eksik Evrak ekranını açın).`,
             state: 'understood',
             action: { type: 'navigate', view: 'yoksis-audit' },
             results
@@ -429,7 +429,7 @@ async function runLookupYoksisAudit(args, context) {
     }
 
     return {
-        reply: `${total} YÖKSİS eksik evrak kaydı bulundu.`,
+        reply: `Toplam ${total} YÖKSİS eksik evrak kaydı buldum.`,
         state: 'understood',
         results
     };
@@ -448,7 +448,7 @@ async function runProposeWorkHours(args, context) {
         const normalizedDate = normalizeTurkishText(args.dateText);
         if (!TODAY_DATE_TOKENS.has(normalizedDate)) {
             return {
-                reply: 'Çalışma saati yalnızca bugün için girilebilir; geçmiş veya gelecek tarihler desteklenmiyor.',
+                reply: 'Çalışma saati yalnızca bugün için önerilebiliyor; geçmiş veya gelecek tarihleri ne yazık ki giremiyorum.',
                 state: 'confused'
             };
         }
@@ -467,7 +467,7 @@ async function runProposeWorkHours(args, context) {
     }
     if (!personKey) {
         return {
-            reply: 'Hangi personel için çalışma saati gireyim? Seçenekler: Kağan Samet, Asaf, Eyüp, Oğuz, Eray.',
+            reply: 'Hangi ekip arkadaşımız için çalışma saati hazırlayayım? Seçenekler: Kağan Samet, Asaf, Eyüp, Oğuz, Eray.',
             state: 'confused'
         };
     }
@@ -481,14 +481,14 @@ async function runProposeWorkHours(args, context) {
 
     if (totalMinutes === null || !Number.isFinite(totalMinutes)) {
         return {
-            reply: 'Kaç saat çalışma süresi gireyim? (30 dakikalık adımlarla, 0 ile 24 saat arasında)',
+            reply: 'Memnuniyetle hazırlayayım; kaç saat çalışma süresi gireyim? (30 dakikalık adımlarla, 0 ile 24 saat arasında)',
             state: 'confused'
         };
     }
 
     if (totalMinutes < 0 || totalMinutes > 1440) {
         return {
-            reply: 'Çalışma süresi 0 ile 24 saat (0–1440 dakika) arasında olmalıdır.',
+            reply: 'Çalışma süresi 0 ile 24 saat (0–1440 dakika) arasında olmalı; uygun bir süre belirtebilir misiniz?',
             state: 'confused'
         };
     }
@@ -496,14 +496,14 @@ async function runProposeWorkHours(args, context) {
     const roundedMinutes = Math.round(totalMinutes);
     if (Math.abs(totalMinutes - roundedMinutes) > 1e-6 || roundedMinutes % 30 !== 0) {
         return {
-            reply: 'Çalışma süresi yalnızca 30 dakikalık adımlarla girilebilir (örneğin 6 saat veya 6,5 saat).',
+            reply: 'Çalışma süresini yalnızca 30 dakikalık adımlarla girebiliyorum (örneğin 6 saat veya 6,5 saat).',
             state: 'confused'
         };
     }
 
     const label = `${formatHoursLabel(roundedMinutes)} · ${PEOPLE_DISPLAY_NAMES[personKey]} · bugün`;
     return {
-        reply: `${label} için çalışma saati önerisi hazırlandı. Kaydetmek için onaylayın.`,
+        reply: `${label} için çalışma saati önerisini hazırladım. Kaydetmek için lütfen onaylayın.`,
         state: 'understood',
         action: {
             type: 'workHours.propose',
@@ -565,7 +565,7 @@ async function runProposeDocumentsPrint(args, context) {
     if (matches.length === 0) {
         const available = OFFICE_DOCUMENTS.map((doc) => doc.title).join(', ');
         return {
-            reply: `İstenen belge bulunamadı. Mevcut belgeler: ${available}.`,
+            reply: `İstediğiniz belgeyi bulamadım. Mevcut belgelerimiz: ${available}.`,
             state: 'confused'
         };
     }
@@ -573,14 +573,14 @@ async function runProposeDocumentsPrint(args, context) {
     if (matches.length > 1) {
         const options = matches.map((doc) => doc.title).join(', ');
         return {
-            reply: `Birden fazla belge eşleşti; hangisini çıkarayım? ${options}`,
+            reply: `Birden fazla belge eşleşti; hangisini hazırlayayım? ${options}`,
             state: 'confused'
         };
     }
 
     const selected = matches[0];
     return {
-        reply: `${selected.title} için ${copies} kopya yazdırma hazırlandı.`,
+        reply: `${selected.title} için ${copies} kopya yazdırma önerisini hazırladım; onayınızla yazdırabilirsiniz.`,
         state: 'understood',
         action: {
             type: 'documents.print',
@@ -595,12 +595,12 @@ async function runYknFlow(args, context) {
     const passportNo = args.passportNo.trim().toUpperCase();
     if (!PASSPORT_NO_PATTERN.test(passportNo)) {
         return {
-            reply: 'Geçerli bir pasaport numarası girin (5–20 karakter, yalnızca harf ve rakam).',
+            reply: 'Geçerli bir pasaport numarası paylaşabilir misiniz? (5–20 karakter, yalnızca harf ve rakam).',
             state: 'confused'
         };
     }
     return {
-        reply: `${passportNo} pasaport numarası için YKN zinciri başlatılıyor. Topi bilgileri aktarsa da YÖKSİS'te Kaydet tuşuna basmaz ve Apply'a talep göndermez.`,
+        reply: `${passportNo} pasaport numarası için YKN zincirini başlatıyorum. Bilgileri aktarsam da YÖKSİS'te Kaydet tuşuna basmam ve Apply'a talep göndermem.`,
         state: 'understood',
         action: { type: 'ykn.run', passportNo }
     };
@@ -611,7 +611,7 @@ async function runSearchTebligat(args, context) {
     const query = args.query.trim();
     if (query.length < 2 || query.length > 80) {
         return {
-            reply: 'Tebligat araması için 2 ile 80 karakter arasında bir ad veya numara yazın.',
+            reply: 'Tebligat araması için lütfen 2 ile 80 karakter arasında bir ad veya numara yazın.',
             state: 'confused'
         };
     }
@@ -626,7 +626,7 @@ async function runSearchTebligat(args, context) {
 async function runNavigate(args, context) {
     await resolveStaffForTool(context);
     return {
-        reply: `${VIEW_LABELS[args.view]} ekranı açılıyor.`,
+        reply: `Tabii, ${VIEW_LABELS[args.view]} ekranını açıyorum.`,
         state: 'understood',
         action: { type: 'navigate', view: args.view }
     };
