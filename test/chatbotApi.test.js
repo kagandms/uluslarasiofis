@@ -5302,7 +5302,7 @@ test('untrusted history isolation: earlier injection or other-person turns do no
         createChatRequest(validChatBody({
             messages: [
                 { role: 'user', content: 'Arkadaşımın başvurusu ne durumda?' },
-                { role: 'assistant', content: otherPersonRefusalReply },
+                { role: 'assistant', content: otherPersonRefusalReply.slice(0, 500) },
                 { role: 'user', content: 'İlk başvuru, 20 yaşındayım, yurtta kalıyorum, hangi belgeler?' }
             ],
             language: 'tr'
