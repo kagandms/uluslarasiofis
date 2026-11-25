@@ -295,19 +295,22 @@ test('YÖKSİS GöçNet save handler and record saver accept 7 to 10 digits incl
         const phoneInput = dom.window.document.querySelector('input[placeholder="5XXXXXXXXX"]');
 
         const rejectedShortMsg = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-short', phoneNational: '700000' });
-        assert.equal(rejectedShortMsg.keepOpen, false);
-
-        const rejectedLongMsg = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-long', phoneNational: '70000000001' });
-        assert.equal(rejectedLongMsg.keepOpen, false);
-
-        phoneInput.value = '700000';
-        const rejectedDomMismatch = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-dom-mismatch', phoneNational: '7000000000' });
-        assert.deepEqual(rejectedDomMismatch.response, { requestId: 'save-dom-mismatch', state: 'unknown' });
+        assert.equal(rejectedShortMsg.keepOpen, true);
+        assert.deepEqual(rejectedShortMsg.response, { requestId: 'save-short', state: 'unknown', reason: 'phone_invalid' });
+        assert.equal(phoneInput.value, '');
         assert.equal(saveClicks, 0);
 
-        phoneInput.value = '7000000000';
+        const rejectedLongMsg = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-long', phoneNational: '70000000001' });
+        assert.equal(rejectedLongMsg.keepOpen, true);
+        assert.deepEqual(rejectedLongMsg.response, { requestId: 'save-long', state: 'unknown', reason: 'phone_invalid' });
+        assert.equal(phoneInput.value, '');
+        assert.equal(saveClicks, 0);
+
+        assert.equal(dom.window.YoksisGocnetTransferController.validateGocnetPhoneNational('7000000').valid, true);
+
         const saved = await sendQueryMessage(listener, { ...baseSave, requestId: 'save-valid', phoneNational: '7000000000' });
         assert.deepEqual(saved.response, { requestId: 'save-valid', state: 'saved', recordId: '70001' });
+        assert.equal(phoneInput.value, '7000000000');
         assert.equal(saveClicks, 1);
     } finally {
         dom.window.close();

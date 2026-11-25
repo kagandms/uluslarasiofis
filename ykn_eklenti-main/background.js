@@ -2404,6 +2404,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     });
 });
 
+function getGocnetPhoneValidationReason(phoneNational) {
+    if (phoneNational === undefined || phoneNational === null
+        || (typeof phoneNational === 'string' && phoneNational.trim() === '')) {
+        return 'phone_missing';
+    }
+    if (typeof phoneNational !== 'string' || !/^\d{7,10}$/.test(phoneNational)) {
+        return 'phone_invalid';
+    }
+    return null;
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'YOKSIS_ZK_COMMAND') {
         const command = request.command || {};
@@ -2469,7 +2480,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // Mesaj İkamet Portalından geliyorsa
     if (request.source === 'IKAMET_PORTAL') {
-        if (!isAllowedPortalUrl(sender?.tab?.url || '') || !portalSecurity?.isValidPortalMessage(request)) {
+        const allowedPortal = isAllowedPortalUrl(sender?.tab?.url || '');
+        if (!allowedPortal || !portalSecurity?.isValidPortalMessage(request)) {
+            if (allowedPortal && request.action === 'SAVE_GOCNET_RECORD') {
+                const phoneReason = getGocnetPhoneValidationReason(request.phoneNational);
+                if (phoneReason && portalSecurity?.isValidPortalMessage({ ...request, phoneNational: '5000000000' })) {
+                    sendResponse({ success: false, requestId: request.requestId, state: 'unknown', reason: phoneReason });
+                    return false;
+                }
+            }
             sendResponse({ success: false, requestId: request.requestId, error: 'İstek doğrulanamadı. Yetkili portalı yenileyip tekrar deneyin.' });
             return false;
         }
@@ -2520,13 +2539,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 try {
                     if (!Number.isInteger(sender.tab?.id)) throw new Error('Portal tab is not verified.');
                     const target = await getVerifiedYoksisTarget((await resolveGocnetYoksisTab()).id);
-                    const result = await runYoksisOperation(target.yoksisTabId, 'gocnet-query', request.requestId, () =>
-                        sendYoksisGocnetQueryCheck(target.yoksisTabId, {
-                            action: 'YOKSIS_GOCNET_LOOKUP',
-                            requestId: request.requestId,
-                            applicationNumber: request.applicationNumber,
-                            portalTabId: sender.tab.id
-                        }));
+                    const result = await withTimeout(
+                        runYoksisOperation(target.yoksisTabId, 'gocnet-query', request.requestId, () =>
+                            sendYoksisGocnetQueryCheck(target.yoksisTabId, {
+                                action: 'YOKSIS_GOCNET_LOOKUP',
+                                requestId: request.requestId,
+                                applicationNumber: request.applicationNumber,
+                                portalTabId: sender.tab.id
+                            })),
+                        15_000,
+                        'lookup_timeout'
+                    );
                     const rawState = result?.state;
                     if (rawState === 'no_match') {
                         finalState = 'no_match';
@@ -2583,14 +2606,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     const result = await runYoksisOperation(target.yoksisTabId,
                         `gocnet-${request.action.toLowerCase()}`, request.attemptId, async () => {
                             if (request.action === 'SAVE_GOCNET_RECORD') {
+                                const phoneReason = getGocnetPhoneValidationReason(request.phoneNational);
+                                if (phoneReason) return { state: 'unknown', reason: phoneReason };
                                 const latestCheck = await sendYoksisGocnetQueryCheck(target.yoksisTabId, {
                                     ...request, phase: 'history', portalTabId: sender.tab.id
                                 });
-                                if (latestCheck?.state !== 'no_match') return { state: latestCheck?.state === 'existing_record' ? 'existing_record' : 'unknown' };
+                                if (latestCheck?.state !== 'no_match') {
+                                    return latestCheck?.state === 'existing_record'
+                                        ? { state: 'existing_record' }
+                                        : { state: 'unknown', ...(typeof latestCheck?.reason === 'string' && latestCheck.reason ? { reason: latestCheck.reason } : {}) };
+                                }
                                 const phone = await runYoksisZkCommand(target.yoksisTabId, {
                                     action: 'setGocnetPhone', phoneNational: request.phoneNational, requestId: request.requestId
                                 });
-                                if (phone?.verified !== true) return { state: 'unknown' };
+                                if (phone?.verified !== true) return { state: 'unknown', reason: 'phone_write_failed' };
                                 return sendYoksisGocnetAction(target.yoksisTabId, 'SAVE', { ...request, portalTabId: sender.tab.id });
                             }
                             if (request.action === 'UPLOAD_GOCNET_DOCUMENT') {
@@ -2601,10 +2630,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         });
                     const success = request.action === 'SAVE_GOCNET_RECORD' ? result?.state === 'saved'
                         : request.action === 'UPLOAD_GOCNET_DOCUMENT' ? result?.state === 'uploaded' : result?.success === true;
+                    const reason = !success && typeof result?.reason === 'string' && result.reason
+                        ? result.reason.slice(0, 160) : null;
                     sendResponse({ success, requestId: request.requestId,
                         state: ['identity_mismatch', 'existing_record'].includes(result?.state) ? result.state
                             : result?.state === 'outcome_unknown' ? 'outcome_unknown'
                                 : result?.state === 'not_dispatched' ? 'not_dispatched' : success ? result.state || 'acknowledged' : 'unknown',
+                        ...(reason ? { reason } : {}),
                         ...(request.action === 'SAVE_GOCNET_RECORD' && success ? { recordId: result.recordId } : {}),
                         ...(request.action === 'UPLOAD_GOCNET_DOCUMENT' && success ? { documentId: result.documentId } : {}),
                         yoksisTabId: target.yoksisTabId });
