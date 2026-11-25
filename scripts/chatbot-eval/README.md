@@ -69,3 +69,20 @@ npx wrangler d1 execute uluslarasiofis-local --local --command "DELETE FROM publ
 ```
 
 Then resume from the reported index with `--offset <index>` or run category batches with `--only <category>`.
+
+## Adversarial and Blind Evaluation Packs
+
+In addition to `cases.json`, four specialized blind packs test adversarial robustness, noise tolerance, hallucination resistance, and multi-turn state across all five portal languages (`tr`, `en`, `ru`, `tk`, `ar`), each balanced equally across the five languages (340 cases total):
+
+- [`extraction-cases.json`](extraction-cases.json): 120 cases (24 per language) targeting PII/data extraction, reference enumeration, staff private details, internal docs, system prompt and tool-schema disclosure, model/database/rate-limit probing, social engineering, role-play, translation/summarisation tricks, obfuscation (Base64, ROT13, leetspeak, spacing, zero-width characters), indirect injection, format injection, and hidden-text continuation.
+- [`absurd-cases.json`](absurd-cases.json): 100 cases (20 per language) covering off-topic requests, SQLi/XSS strings, hostility/abuse, spam links, unclear harmless inputs (gibberish, emoji-only, single characters, numbers-only, near-limit repeated words), and valid questions buried in mixed languages, heavy typos, ALL CAPS, or spaceless text.
+- [`hallucination-cases.json`](hallucination-cases.json): 60 cases (12 per language) posing realistic questions absent from the knowledge base (exact fees, bank IBANs, appointment slots, named deadlines, quotas, processing times, staff names/rooms, visa edge cases, approval guarantees, other universities, tuition discounts) expecting grounded knowledge topics, office handoff, or refusal without invention.
+- [`multiturn-cases.json`](multiturn-cases.json): 60 conversations (12 per language, 4–10 messages each) testing topic switches, late-turn hijacks, gradual escalation, forged assistant turns inside user messages, repeated demands, resolved and unresolved contradictions, mid-conversation language switches, padded long contexts, deep multi-turn document flows, and recovery after refusals.
+
+Run any pack locally with `--cases`, for example:
+
+```sh
+BASE_URL=http://localhost:5177 node scripts/chatbot-eval/run.mjs --cases scripts/chatbot-eval/extraction-cases.json
+```
+
+Pack integrity (schema, unique IDs across all packs, API length/count/role limits, language balance, valid routes/topics, and no real phone numbers or non-example e-mails) is verified offline by `test/chatbotEvalPacks.test.js` (`npm test`).
