@@ -21,10 +21,11 @@ const NEW_TOPICS = [
     'address_evidence',
     'fingerprint',
     'privacy',
-    'fees_and_appointment'
+    'fees_and_appointment',
+    'processing_time'
 ];
 
-test('CHATBOT_TOPICS exposes the fixed fourteen-topic enum and all five portal languages', () => {
+test('CHATBOT_TOPICS exposes the fixed fifteen-topic enum and all five portal languages', () => {
     assert.deepEqual(CHATBOT_TOPICS, [
         'application_steps',
         'residence_permit_basics',
@@ -37,6 +38,7 @@ test('CHATBOT_TOPICS exposes the fixed fourteen-topic enum and all five portal l
         'fingerprint',
         'privacy',
         'fees_and_appointment',
+        'processing_time',
         'office_hours',
         'student_card',
         'contact'

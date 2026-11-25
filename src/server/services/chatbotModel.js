@@ -1,14 +1,30 @@
 import { CHATBOT_TOOLS } from '../domain/chatbotTools.js';
 import { ApiError } from '../domain/errors.js';
 
-// @cf/meta/llama-3.3-70b-instruct-fp8-fast: checked 2026-11-19, unverified against the live Cloudflare catalog.
-export const CHATBOT_MODEL_DEFAULT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// @cf/google/gemma-4-26b-a4b-it: checked 2026-11-25 against the live Cloudflare catalog (wrangler ai models list).
+// Local eval (2026-11-25, real Workers AI binding, thinking OFF): 609-case packs 98.2/97.6/97.2/100% (0 safety/doc errors)
+// and 340-case adversarial 84.7% vs Llama 73.2%; 0 fallbacks, p95 ~3 s (Llama 18, p95 ~12 s), $0.10/$0.30 vs $0.293/$2.253 per 1M.
+// Thinking is switched off for this model family through MODEL_PAYLOAD_EXTRAS below.
+export const CHATBOT_MODEL_DEFAULT = '@cf/google/gemma-4-26b-a4b-it';
+// Staff assistant stays on Llama until it has its own evaluation pack (tool calling on Gemma is untested there).
+export const STAFF_ASSISTANT_MODEL_DEFAULT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 export const CHATBOT_MODEL_TIMEOUT_MS = 12_000;
 export const CHATBOT_MODEL_MAX_OUTPUT_TOKENS = 512;
 
 const GENERIC_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.';
 const REGISTERED_TOOL_NAMES = Object.freeze(new Set(Object.keys(CHATBOT_TOOLS)));
 const PYTHON_TAG_PREFIX = '<|python_tag|>';
+const SESSION_AFFINITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+// Thinking/reasoning models burn the output token budget and 12 s timeout on
+// internal reasoning by default; this table disables thinking per model-id prefix.
+// To add a model family, verify the parameter is supported via
+// `wrangler ai models schema <id>` before adding its prefix entry here.
+const MODEL_PAYLOAD_EXTRAS = Object.freeze({
+    '@cf/google/gemma-4': Object.freeze({
+        chat_template_kwargs: Object.freeze({ enable_thinking: false })
+    })
+});
 
 function isPlainObject(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -167,46 +183,84 @@ function tryParseTextToolCalls(text, registeredToolNames) {
     };
 }
 
+function toNonNegativeInt(...candidates) {
+    for (const value of candidates) {
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+            return Math.trunc(value);
+        }
+    }
+    return 0;
+}
+
+function extractUsage(rawUsage) {
+    if (!isPlainObject(rawUsage)) return null;
+    try {
+        return {
+            inputTokens: toNonNegativeInt(rawUsage.prompt_tokens, rawUsage.input_tokens),
+            outputTokens: toNonNegativeInt(rawUsage.completion_tokens, rawUsage.output_tokens),
+            cachedInputTokens: toNonNegativeInt(
+                rawUsage.prompt_tokens_details?.cached_tokens,
+                rawUsage.input_tokens_details?.cached_tokens,
+                rawUsage.cached_tokens,
+                rawUsage.cached_input_tokens
+            )
+        };
+    } catch {
+        return null;
+    }
+}
+
 function normalizeModelResponse(raw, registeredToolNames = REGISTERED_TOOL_NAMES) {
     if (!isPlainObject(raw)) throw new Error('Model response must be an object.');
+    const usage = extractUsage(raw.usage);
     const choiceMessage = raw.choices?.[0]?.message;
     const rawText = raw.response ?? choiceMessage?.content ?? null;
     const text = typeof rawText === 'string' && rawText.trim().length > 0 ? rawText : null;
     const rawToolCalls = Array.isArray(raw.tool_calls)
         ? raw.tool_calls
         : (Array.isArray(choiceMessage?.tool_calls) ? choiceMessage.tool_calls : []);
+    let normalized;
     if (rawToolCalls.length > 0) {
-        return {
+        normalized = {
             text,
             toolCalls: rawToolCalls.map(normalizeToolCall)
         };
+    } else if (text !== null) {
+        normalized = tryParseTextToolCalls(text, registeredToolNames) ?? {
+            text,
+            toolCalls: []
+        };
+    } else {
+        normalized = {
+            text,
+            toolCalls: []
+        };
     }
-    if (text !== null) {
-        const parsedFromText = tryParseTextToolCalls(text, registeredToolNames);
-        if (parsedFromText) {
-            return parsedFromText;
-        }
-    }
-    return {
-        text,
-        toolCalls: []
-    };
+    return usage ? { ...normalized, usage } : normalized;
 }
 
 /**
  * Creates a swappable model adapter backed by the Cloudflare Workers AI binding.
  * @param {object} environment Worker bindings containing `AI` and optional `CHATBOT_MODEL`.
- * @param {{timeoutMs?: number, maxOutputTokens?: number}} [options] Adapter bounds.
- * @returns {{provider: string, model: string, complete: (input: {messages: Array<object>, tools?: Array<object>, signal?: AbortSignal}) => Promise<{text: string|null, toolCalls: Array<{name: string, arguments: object}>}>}} Model adapter.
+ * @param {{timeoutMs?: number, maxOutputTokens?: number, model?: string, sessionAffinity?: string}} [options] Adapter bounds, optional model override, and optional prefix-cache affinity ID.
+ * @returns {{provider: string, model: string, complete: (input: {messages: Array<object>, tools?: Array<object>, signal?: AbortSignal}) => Promise<{text: string|null, toolCalls: Array<{name: string, arguments: object}>, usage?: {inputTokens: number, outputTokens: number, cachedInputTokens: number}}>}} Model adapter.
  */
 export function createChatModel(environment, options = {}) {
+    const optionModel = typeof options?.model === 'string'
+        ? options.model.trim() : '';
     const configuredModel = typeof environment?.CHATBOT_MODEL === 'string'
         ? environment.CHATBOT_MODEL.trim() : '';
-    const model = configuredModel || CHATBOT_MODEL_DEFAULT;
+    const model = optionModel || configuredModel || CHATBOT_MODEL_DEFAULT;
+    const modelPayloadExtras = Object.entries(MODEL_PAYLOAD_EXTRAS)
+        .find(([prefix]) => model.startsWith(prefix))?.[1] ?? null;
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
         ? options.timeoutMs : CHATBOT_MODEL_TIMEOUT_MS;
     const maxOutputTokens = Number.isSafeInteger(options.maxOutputTokens) && options.maxOutputTokens > 0
         ? options.maxOutputTokens : CHATBOT_MODEL_MAX_OUTPUT_TOKENS;
+    const sessionAffinity = typeof options?.sessionAffinity === 'string'
+        && SESSION_AFFINITY_PATTERN.test(options.sessionAffinity)
+        ? options.sessionAffinity
+        : null;
 
     return Object.freeze({
         provider: 'workers-ai',
@@ -223,6 +277,7 @@ export function createChatModel(environment, options = {}) {
             const registeredToolNames = buildRegisteredToolNameSet(tools);
             const formattedTools = formatTools(tools);
             const payload = {
+                ...(modelPayloadExtras ?? {}),
                 messages: normalizedMessages,
                 max_tokens: maxOutputTokens,
                 stream: false,
@@ -246,9 +301,13 @@ export function createChatModel(environment, options = {}) {
                 controller.signal.addEventListener('abort', abortListener, { once: true });
             });
 
+            const runOptions = sessionAffinity
+                ? { signal: controller.signal, extraHeaders: { 'x-session-affinity': sessionAffinity } }
+                : { signal: controller.signal };
+
             try {
                 const rawResponse = await Promise.race([
-                    environment.AI.run(model, payload, { signal: controller.signal }),
+                    environment.AI.run(model, payload, runOptions),
                     abortPromise
                 ]);
                 return normalizeModelResponse(rawResponse, registeredToolNames);

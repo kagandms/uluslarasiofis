@@ -52,6 +52,25 @@ test('CHATBOT_TOOLS registers the three deterministic tools with strict schemas 
     assert.match(CHATBOT_TOOLS.get_required_documents.description, /verbatim quote/i);
     assert.match(CHATBOT_TOOLS.get_required_documents.description, /never infer or default/i);
     assert.match(CHATBOT_TOOLS.get_required_documents.description, /omit unknown facts/i);
+
+    const reqDocsDef = CHATBOT_TOOL_DEFINITIONS.find((tool) => tool.name === 'get_required_documents');
+    const serializedReqDocs = JSON.stringify(reqDocsDef);
+    assert.equal(serializedReqDocs.match(/never infer or default/gi)?.length, 1);
+    assert.equal(serializedReqDocs.match(/omit unknown facts/gi)?.length, 1);
+    for (const [paramName, paramSchema] of Object.entries(reqDocsDef.parameters.properties)) {
+        assert.doesNotMatch(
+            paramSchema.description,
+            /never infer or default|omit unknown facts|Only pass a fact the student explicitly stated/i,
+            `${paramName} description must not repeat the tool-level instruction`
+        );
+    }
+    assert.deepEqual(reqDocsDef.parameters.properties.application_type.enum, ['initial', 'renewal', 'transition']);
+    assert.deepEqual(reqDocsDef.parameters.properties.accommodation_type.enum, [...ACCOMMODATION_TYPES]);
+    assert.deepEqual(reqDocsDef.parameters.properties.host_is_married.enum, [...DOCUMENT_ANSWER_OPTIONS.host_is_married]);
+    assert.deepEqual(reqDocsDef.parameters.properties.host_is_turkish.enum, [...DOCUMENT_ANSWER_OPTIONS.host_is_turkish]);
+    assert.deepEqual(reqDocsDef.parameters.properties.fingerprint_status.enum, ['registered', 'not_registered']);
+    assert.deepEqual(reqDocsDef.parameters.required, []);
+    assert.deepEqual(reqDocsDef.parameters.properties.quotes.required, []);
 });
 
 test('lookup_knowledge drops unknown argument fields, uses request language, and rejects invalid topics', () => {

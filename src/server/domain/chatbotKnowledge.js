@@ -12,6 +12,7 @@ export const CHATBOT_TOPICS = Object.freeze([
     'fingerprint',
     'privacy',
     'fees_and_appointment',
+    'processing_time',
     'office_hours',
     'student_card',
     'contact'
@@ -249,6 +250,26 @@ const KNOWLEDGE_ENTRIES = Object.freeze({
             tk: 'Bu portal töleg almaýar we Migrasiýa edarasy (Göç İdaresi) üçin duşuşyk (randewu) bellemeýär. Portal diňe resminamalaryňyzy (ýaşaýyş rugsady töleg resminamasyny hem goşmak bilen) Halkara talyplar ofisine ibermek we barlagy yzarlamak üçindir. Resmi ýaşaýyş rugsady arzasy e-İkamet ulgamynda aýratyn tamamlanýar; e-İkamet formasyndaky möhletleri berjaý ediň. Häzirki töleg mukdary, töleg usuly ýa-da randewu barada maglumatlar portalda ýok; bu soraglary baş sahypadaky sorag formasyndan iberiň, ofis size jogap berer.',
             // DRAFT: needs office approval
             ar: 'لا تستقبل هذه البوابة أي مدفوعات ولا تحجز مواعيد إدارة الهجرة (Göç İdaresi). البوابة مخصصة فقط لرفع مستنداتك (بما في ذلك إيصال رسوم تصريح الإقامة) إلى مكتب الطلاب الدوليين ومتابعة المراجعة. يُستكمل طلب الإقامة الرسمي بشكل منفصل في نظام e-İkamet، مع الالتزام بالمواعيد الواردة في استمارة e-İkamet. لا تُنشر مبالغ الرسوم الحالية أو طرق الدفع أو تفاصيل المواعيد في البوابة؛ أرسل استفسارك عبر نموذج الأسئلة أدناه وسيرد عليك المكتب.'
+        })
+    }),
+    processing_time: Object.freeze({
+        sources: Object.freeze([
+            'index.html',
+            'src/public/i18n/messages.js',
+            'src/public/applicationTracking.js'
+        ]),
+        // DRAFT: needs office approval
+        text: Object.freeze({
+            // DRAFT: needs office approval
+            tr: 'Başvuru ve ikamet izni işlem süreleri bu portalda yayınlanmaz. Değerlendirme süresini Göç İdaresi belirler ve başvurudan başvuruya değişir. Kendi başvurunuzun durumunu “Başvurumu Takip Et” sayfasından (/basvurum/) izleyebilirsiniz. Özel bir sorunuz varsa ana sayfadaki soru formunu kullanabilirsiniz; Uluslararası Öğrenci Ofisi size dönüş yapar.',
+            // DRAFT: needs office approval
+            en: "Processing and decision times for residence permit applications are not published on this portal. The Migration Authority decides how long its review takes, and it varies by application. You can follow your own application on the 'Track my application' page (/basvurum/). For anything specific you can send your question through the question form on the home page and the International Student Office will reply.",
+            // DRAFT: needs office approval
+            ru: 'Сроки рассмотрения и принятия решений по заявлениям на вид на жительство не публикуются на этом портале. Продолжительность проверки определяет Миграционное управление (Göç İdaresi), и она зависит от конкретного заявления. Отслеживать своё заявление вы можете на странице «Проверить статус заявки» (/basvurum/). По индивидуальным вопросам вы можете обратиться через форму вопросов на главной странице, и Международный студенческий офис ответит вам.',
+            // DRAFT: needs office approval
+            tk: 'Ýaşaýyş rugsady arzalarynyň işleniş we karar möhletleri bu portalda çap edilmeýär. Barlagyň näçe wagt çekýändigini Migrasiýa edarasy (Göç İdaresi) kesgitleýär we ol arza görä üýtgeýär. Öz arzaňyzyň ýagdaýyny «Arzamyň ýagdaýyny barla» (/basvurum/) sahypasyndan yzarlap bilersiňiz. Aýratyn soragyňyz bar bolsa, baş sahypadaky sorag formasy arkaly iberip bilersiňiz; Halkara talyplar ofisi size jogap berer.',
+            // DRAFT: needs office approval
+            ar: 'لا تُنشر مدد معالجة طلبات تصريح الإقامة واتخاذ القرار بشأنها على هذه البوابة. تحدد إدارة الهجرة (Göç İdaresi) مدة المراجعة، وتختلف المدة من طلب لآخر. يمكنك متابعة طلبك عبر صفحة «تتبّع طلبي» (/basvurum/). ولأي استفسار خاص يمكنك إرسال سؤالك عبر نموذج الأسئلة في الصفحة الرئيسية، وسيرد عليك مكتب الطلاب الدوليين.'
         })
     }),
     office_hours: Object.freeze({

@@ -2311,7 +2311,7 @@ test('round 3 fix 1: model timeout returns list (200) for complete document evid
     const generalTimeoutEnv = createTimeoutEnvironment();
     const generalResponse = await worker.fetch(
         createChatRequest(validChatBody({
-            messages: [{ role: 'user', content: 'How long does application review take?' }],
+            messages: [{ role: 'user', content: 'Tell me about the student residence permit portal.' }],
             language: 'en'
         }), { address: '198.51.103.32' }),
         generalTimeoutEnv.environment,
@@ -5691,9 +5691,82 @@ test('student_card deterministic route answers owner phrases and all five langua
     );
     const otherPersonPayload = await otherPersonRes.json();
     assert.equal(otherPersonRes.status, 200);
-    assert.equal(
-        otherPersonPayload.reply,
-        `${getChatbotFixedText('refusal', 'tr')} ${getChatbotFixedText('otherPersonStatusNote', 'tr')}`
-    );
+    assert.equal(otherPersonPayload.reply, `${getChatbotFixedText('refusal', 'tr')} ${getChatbotFixedText('otherPersonStatusNote', 'tr')}`);
     assert.deepEqual(otherPersonPayload.actions, [{ type: 'inquiry' }]);
+});
+
+test('public chat sends language-scoped x-session-affinity and logs summed model token usage numbers', async (t) => {
+    const infoLogs = [];
+    t.mock.method(console, 'info', (...args) => {
+        infoLogs.push(args);
+    });
+
+    for (const [index, language] of CHATBOT_LANGUAGES.entries()) {
+        const { fakeAi, environment } = createEnvironment([
+            {
+                response: '',
+                tool_calls: [{ name: 'unknown_tool', arguments: {} }],
+                usage: {
+                    prompt_tokens: 500,
+                    completion_tokens: 20,
+                    prompt_tokens_details: { cached_tokens: 300 }
+                }
+            },
+            {
+                response: language === 'ru' ? 'Пожалуйста, уточните ваш вопрос.' : language === 'ar' ? 'يرجى توضيح سؤالك.' : 'Sorunuzu biraz daha detaylandırabilir misiniz?',
+                usage: {
+                    input_tokens: 540,
+                    output_tokens: 15,
+                    cached_input_tokens: 400
+                }
+            }
+        ]);
+
+        const response = await worker.fetch(
+            createChatRequest(validChatBody({
+                messages: [{ role: 'user', content: 'Genel bilgi' }],
+                language
+            }), { address: `198.51.116.${10 + index}` }),
+            environment,
+            {}
+        );
+        assert.equal(response.status, 200);
+        assert.equal(fakeAi.callCount, 2);
+        assert.deepEqual(fakeAi.calls[0].options.extraHeaders, { 'x-session-affinity': `topi-public-${language}` });
+        assert.deepEqual(fakeAi.calls[1].options.extraHeaders, { 'x-session-affinity': `topi-public-${language}` });
+        assert.ok(fakeAi.calls[0].options.signal instanceof AbortSignal);
+
+        const logPayload = infoLogs[infoLogs.length - 1][1];
+        assert.deepEqual(Object.keys(logPayload).sort(), [
+            'chatLogWrite',
+            'latencyMs',
+            'modelCachedInputTokens',
+            'modelInputTokens',
+            'modelOutputTokens',
+            'outcome',
+            'requestId',
+            'tools'
+        ]);
+        assert.equal(logPayload.modelInputTokens, 1040);
+        assert.equal(logPayload.modelCachedInputTokens, 700);
+        assert.equal(logPayload.modelOutputTokens, 35);
+    }
+
+    // Deterministic route (0 model calls) logs 0 for all three token fields.
+    const detEnv = createEnvironment(() => {
+        throw new Error('Model must not be called.');
+    });
+    const detRes = await worker.fetch(
+        createChatRequest(validChatBody({
+            messages: [{ role: 'user', content: 'Öğrenci kartımı kaybettim' }],
+            language: 'tr'
+        }), { address: '198.51.116.50' }),
+        detEnv.environment,
+        {}
+    );
+    assert.equal(detRes.status, 200);
+    const detLog = infoLogs[infoLogs.length - 1][1];
+    assert.equal(detLog.modelInputTokens, 0);
+    assert.equal(detLog.modelCachedInputTokens, 0);
+    assert.equal(detLog.modelOutputTokens, 0);
 });

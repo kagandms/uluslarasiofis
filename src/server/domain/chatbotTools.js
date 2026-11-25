@@ -145,7 +145,7 @@ function buildPolicyApplication(validated) {
 export const CHATBOT_TOOLS = Object.freeze({
     lookup_knowledge: Object.freeze({
         name: 'lookup_knowledge',
-        description: 'Look up curated, office-approved portal information on application steps, residence permit basics, office hours, student card referrals, or office contact.',
+        description: 'Look up curated portal information on application steps, residence permit basics, processing times, office hours, student cards, or office contact.',
         parameters: Object.freeze({
             type: 'object',
             properties: Object.freeze({
@@ -172,35 +172,35 @@ export const CHATBOT_TOOLS = Object.freeze({
                 application_type: Object.freeze({
                     type: 'string',
                     enum: [...TOOL_APPLICATION_TYPES],
-                    description: 'Student residence permit application type. Only pass a fact the student explicitly stated, always with its verbatim quote in quotes; never infer or default; omit unknown facts.'
+                    description: 'Student residence permit application type.'
                 }),
                 is_under_18: Object.freeze({
                     type: 'boolean',
-                    description: 'Whether the applicant is under 18 years old on the e-İkamet application date. Only pass a fact the student explicitly stated, always with its verbatim quote in quotes; never infer or default; omit unknown facts.'
+                    description: 'Whether the applicant is under 18 years old on the e-İkamet application date.'
                 }),
                 accommodation_type: Object.freeze({
                     type: 'string',
                     enum: [...ACCOMMODATION_TYPES],
-                    description: 'How the student documents their address in Türkiye. Only pass a fact the student explicitly stated, always with its verbatim quote in quotes; never infer or default; omit unknown facts.'
+                    description: 'How the student documents their address in Türkiye.'
                 }),
                 host_is_married: Object.freeze({
                     type: 'string',
                     enum: [...DOCUMENT_ANSWER_OPTIONS.host_is_married],
-                    description: 'Only when accommodation_type is undertaking and explicitly stated by the student: whether the host is married. Always include its verbatim quote in quotes; never infer or default; omit unknown facts.'
+                    description: 'Only when accommodation_type is undertaking and explicitly stated by the student: whether the host is married.'
                 }),
                 host_is_turkish: Object.freeze({
                     type: 'string',
                     enum: [...DOCUMENT_ANSWER_OPTIONS.host_is_turkish],
-                    description: 'Only when accommodation_type is undertaking and explicitly stated by the student: whether the host is a Turkish citizen. Always include its verbatim quote in quotes; never infer or default; omit unknown facts.'
+                    description: 'Only when accommodation_type is undertaking and explicitly stated by the student: whether the host is a Turkish citizen.'
                 }),
                 fingerprint_status: Object.freeze({
                     type: 'string',
                     enum: [...FINGERPRINT_STATUSES],
-                    description: 'Only when application_type is transition and explicitly stated by the student: whether the student has a Migration Authority fingerprint registration and code. Always include its verbatim quote in quotes; never infer or default; omit unknown facts.'
+                    description: 'Only when application_type is transition and explicitly stated by the student: whether the student has a Migration Authority fingerprint registration and code.'
                 }),
                 quotes: Object.freeze({
                     type: 'object',
-                    description: 'Required whenever any fact is passed: object mapping each passed fact name to the EXACT verbatim substring copied from the student’s own messages that states that fact (max 160 chars each). Only pass a fact the student explicitly stated, always with its verbatim quote; never infer or default; omit unknown facts.',
+                    description: 'Required whenever any fact is passed: object mapping each passed fact name to the EXACT verbatim substring copied from the student’s own messages that states that fact (max 160 chars each).',
                     properties: Object.freeze({
                         application_type: Object.freeze({
                             type: 'string',

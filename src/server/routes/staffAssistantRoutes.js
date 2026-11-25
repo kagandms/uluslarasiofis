@@ -22,7 +22,7 @@ import {
     STAFF_ASSISTANT_RATE_LIMIT
 } from '../security/application-rate-limits.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
-import { createChatModel } from '../services/chatbotModel.js';
+import { STAFF_ASSISTANT_MODEL_DEFAULT, createChatModel } from '../services/chatbotModel.js';
 import { createRepositories, requireMethod, requireSameOrigin } from './shared.js';
 
 const STAFF_ASSISTANT_BODY_MAX_BYTES = 4096;
@@ -100,6 +100,9 @@ export async function handleStaffAssistant(request, environment, requestId) {
     const startedAt = Date.now();
     let toolName = 'none';
     let outcome = 'error';
+    let modelInputTokens = 0;
+    let modelCachedInputTokens = 0;
+    let modelOutputTokens = 0;
 
     try {
         requireMethod(request, 'POST');
@@ -131,9 +134,12 @@ export async function handleStaffAssistant(request, environment, requestId) {
         let selected = parseStaffIntent(validatedRequest.message);
 
         if (!selected) {
+            // Staff assistant stays on Llama until it has its own evaluation; also ignores CHATBOT_MODEL for now.
             const model = createChatModel(environment, {
+                model: STAFF_ASSISTANT_MODEL_DEFAULT,
                 timeoutMs: STAFF_ASSISTANT_MODEL_TIMEOUT_MS,
-                maxOutputTokens: STAFF_ASSISTANT_MODEL_MAX_OUTPUT_TOKENS
+                maxOutputTokens: STAFF_ASSISTANT_MODEL_MAX_OUTPUT_TOKENS,
+                sessionAffinity: 'topi-staff'
             });
 
             const messages = [
@@ -150,6 +156,11 @@ export async function handleStaffAssistant(request, environment, requestId) {
                 });
             } catch {
                 throw new ApiError(503, 'STAFF_ASSISTANT_UNAVAILABLE', STAFF_ASSISTANT_UNAVAILABLE_MESSAGE, true);
+            }
+            if (modelResult?.usage) {
+                modelInputTokens += modelResult.usage.inputTokens ?? 0;
+                modelCachedInputTokens += modelResult.usage.cachedInputTokens ?? 0;
+                modelOutputTokens += modelResult.usage.outputTokens ?? 0;
             }
 
             const firstCall = Array.isArray(modelResult?.toolCalls) ? modelResult.toolCalls[0] : null;
@@ -191,7 +202,10 @@ export async function handleStaffAssistant(request, environment, requestId) {
             requestId,
             tool: toolName,
             outcome,
-            latencyMs: Date.now() - startedAt
+            latencyMs: Date.now() - startedAt,
+            modelInputTokens,
+            modelCachedInputTokens,
+            modelOutputTokens
         });
     }
 }
