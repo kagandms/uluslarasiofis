@@ -85,6 +85,43 @@ test('parseStaffIntent matches deterministic Turkish commands for supported tool
     const tebligatShowIntent = parseStaffIntent('Mehmet Kaya tebligatını göster');
     assert.deepEqual(tebligatShowIntent, { tool: 'search_tebligat', args: { query: 'Mehmet Kaya' } });
 
+    assert.deepEqual(
+        parseStaffIntent('ILBEK MUHAMMADOV tebliğine bakar mısın'),
+        { tool: 'search_tebligat', args: { query: 'ILBEK MUHAMMADOV' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('ilbek muhammadov tebliğine bakar mısın?'),
+        { tool: 'search_tebligat', args: { query: 'ilbek muhammadov' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent("Ali Veli'nin tebliğine bakar mısınız"),
+        { tool: 'search_tebligat', args: { query: 'Ali Veli' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('tebliğine bakabilir misiniz Ayşe Yılmaz'),
+        { tool: 'search_tebligat', args: { query: 'Ayşe Yılmaz' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('Mustafa Musa tebliğ var mı'),
+        { tool: 'search_tebligat', args: { query: 'Mustafa Musa' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('Naing Min Khant tebliğine bak lütfen'),
+        { tool: 'search_tebligat', args: { query: 'Naing Min Khant' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('Mi Chen tebliğine bak'),
+        { tool: 'search_tebligat', args: { query: 'Mi Chen' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('Eder Silva tebliğine bakar mısın'),
+        { tool: 'search_tebligat', args: { query: 'Eder Silva' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('tebliğine bakar mısın'),
+        { tool: 'search_tebligat', args: { query: '' } }
+    );
+
     assert.deepEqual(parseStaffIntent('Tebliğ Bul ekranını aç'), { tool: 'navigate', args: { view: 'teblig' } });
     assert.deepEqual(parseStaffIntent('Tebliğ ekranını aç'), { tool: 'navigate', args: { view: 'teblig' } });
 
@@ -95,6 +132,15 @@ test('parseStaffIntent matches deterministic Turkish commands for supported tool
     const appIntent = parseStaffIntent('20260000001 başvurusunu sorgula');
     assert.equal(appIntent?.tool, 'search_applications');
     assert.ok(appIntent?.args.query.includes('20260000001'));
+
+    assert.deepEqual(
+        parseStaffIntent('Ahmet Demir başvurusuna bakar mısınız'),
+        { tool: 'search_applications', args: { query: 'Ahmet Demir' } }
+    );
+    assert.deepEqual(
+        parseStaffIntent('20260000001 eksik evrak durumuna bakar mısınız'),
+        { tool: 'lookup_yoksis_audit', args: { query: '20260000001' } }
+    );
 
     const navIntent = parseStaffIntent('Başvurular ekranını aç');
     assert.deepEqual(navIntent, { tool: 'navigate', args: { view: 'applications' } });

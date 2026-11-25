@@ -347,6 +347,24 @@ function resolveNavigateView(normalized) {
     return null;
 }
 
+const POLITE_QUERY_FILLER_SOURCE =
+    'm[ıiİuü]s[ıiİuü]n(?:[ıiİuü]z)?|rica(?:\\s+ed(?:er[\\p{L}\\p{N}]*|ebilir[\\p{L}\\p{N}]*))?|ederim|edebilir[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü](?:y[ıiİuü]m)?)?|edersen(?:iz)?|eder\\s+m[ıiİuü](?:s[ıiİuü]n(?:[ıiİuü]z)?)?|bakal[ıiİ]m|l[uü]tfen|acaba';
+
+const TEBLIGAT_QUERY_REMOVE_PATTERN = new RegExp(
+    `(?:^|[^\\p{L}])(?:tebli[gğ][\\p{L}\\p{N}]*|bul(?:un|ur[\\p{L}\\p{N}]*|abilir[\\p{L}\\p{N}]*)?(?:\\s+m[ıiİuü])?|ara(?:y[iı]n|r[\\p{L}\\p{N}]*|b[iı]l[\\p{L}\\p{N}]*)?(?:\\s+m[ıiİuü])?|sorgula[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|getir[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|bak[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|g[oö]ster[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|listele[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|kontrol\\s+(?:et[\\p{L}\\p{N}]*|ed(?:er[\\p{L}\\p{N}]*|ebilir[\\p{L}\\p{N}]*))(?:\\s+m[ıiİuü])?|i[cç]in|var\\s+m[iı]|nedir|${POLITE_QUERY_FILLER_SOURCE})(?=$|[^\\p{L}])`,
+    'giu'
+);
+
+const YOKSIS_QUERY_REMOVE_PATTERN = new RegExp(
+    `(?:^|[^\\p{L}])(?:y[oö]ksis[\\p{L}\\p{N}]*|eksik\\s+evrak[\\p{L}\\p{N}]*|durum[\\p{L}\\p{N}]*|sorgula[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|ara[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|bul[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|bak[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|listele[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|kontrol[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|nedir|var\\s+m[iı]|i[cç]in|${POLITE_QUERY_FILLER_SOURCE})(?=$|[^\\p{L}])`,
+    'giu'
+);
+
+const APPLICATION_QUERY_REMOVE_PATTERN = new RegExp(
+    `(?:^|[^\\p{L}])(?:ba[sş]vuru[\\p{L}\\p{N}]*|[oö][gğ]renci\\s+no[\\p{L}\\p{N}]*|[oö][gğ]renci[\\p{L}\\p{N}]*|sorgula[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|ara(?:y[iı]n)?(?:\\s+m[ıiİuü])?|bul(?:un)?(?:\\s+m[ıiİuü])?|bak[\\p{L}\\p{N}]*(?:\\s+m[ıiİuü])?|durum[\\p{L}\\p{N}]*|nedir|var\\s+m[iı]|i[cç]in|${POLITE_QUERY_FILLER_SOURCE})(?=$|[^\\p{L}])`,
+    'giu'
+);
+
 function cleanQueryTokens(rawMessage, removePattern) {
     return String(rawMessage || '')
         .replace(removePattern, ' ')
@@ -403,7 +421,7 @@ export function parseStaffIntent(message) {
         );
         const query = cleanQueryTokens(
             withoutApostropheSuffixes,
-            /(?:^|[^\p{L}])(?:tebli[gğ][\p{L}\p{N}]*|bul(?:un|ur[\p{L}\p{N}]*|abilir[\p{L}\p{N}]*)?|ara(?:y[iı]n|r[\p{L}\p{N}]*|b[iı]l[\p{L}\p{N}]*)?|sorgula[\p{L}\p{N}]*|getir[\p{L}\p{N}]*|bak[\p{L}\p{N}]*|g[oö]ster[\p{L}\p{N}]*|listele[\p{L}\p{N}]*|kontrol\s+et|i[cç]in|var\s+m[iı]|nedir|l[uü]tfen)(?=$|[^\p{L}])/giu
+            TEBLIGAT_QUERY_REMOVE_PATTERN
         );
         return { tool: 'search_tebligat', args: { query } };
     }
@@ -437,7 +455,7 @@ export function parseStaffIntent(message) {
     if (YOKSIS_TRIGGER_PATTERN.test(normalized)) {
         const query = cleanQueryTokens(
             trimmed,
-            /(?:^|[^\p{L}])(?:y[oö]ksis[\p{L}\p{N}]*|eksik\s+evrak[\p{L}\p{N}]*|durum[\p{L}\p{N}]*|sorgula[\p{L}\p{N}]*|ara[\p{L}\p{N}]*|bul[\p{L}\p{N}]*|bak[\p{L}\p{N}]*|listele[\p{L}\p{N}]*|kontrol[\p{L}\p{N}]*|nedir|var\s+m[iı]|i[cç]in|l[uü]tfen)(?=$|[^\p{L}])/giu
+            YOKSIS_QUERY_REMOVE_PATTERN
         );
         const args = {};
         if (query) args.query = query;
@@ -448,7 +466,7 @@ export function parseStaffIntent(message) {
     if (APPLICATION_TRIGGER_PATTERN.test(normalized)) {
         const query = cleanQueryTokens(
             trimmed,
-            /(?:^|[^\p{L}])(?:ba[sş]vuru[\p{L}\p{N}]*|[oö][gğ]renci\s+no[\p{L}\p{N}]*|[oö][gğ]renci[\p{L}\p{N}]*|sorgula[\p{L}\p{N}]*|ara(?:y[iı]n)?|bul(?:un)?|bak[\p{L}\p{N}]*|durum[\p{L}\p{N}]*|nedir|i[cç]in|l[uü]tfen)(?=$|[^\p{L}])/giu
+            APPLICATION_QUERY_REMOVE_PATTERN
         );
         if (query.length >= 1) {
             return { tool: 'search_applications', args: { query } };
