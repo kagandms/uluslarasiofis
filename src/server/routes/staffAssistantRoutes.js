@@ -30,13 +30,13 @@ const STAFF_ASSISTANT_MODEL_TIMEOUT_MS = 8_000;
 const STAFF_ASSISTANT_MODEL_MAX_OUTPUT_TOKENS = 256;
 const STAFF_ASSISTANT_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor.';
 
-const FIXED_REFUSAL_REPLY = 'Bu işlemi yapamam. Yapabileceklerim: başvuru sorgulama, YÖKSİS eksik evrak kontrolü, YKN zincirini başlatma (YÖKSİS\'te Kaydet ve Apply\'a talep gönderme olmadan), tebligat arama, belge yazdırma önerisi, bugün için çalışma saati önerisi ve ekranlar arası geçiş.';
+const FIXED_REFUSAL_REPLY = 'Ne yazık ki bu işlemi yapamam. Size şu konularda memnuniyetle yardımcı olabilirim: başvuru sorgulama, YÖKSİS eksik evrak kontrolü, YKN zincirini başlatma (YÖKSİS\'te Kaydet ve Apply\'a talep gönderme olmadan), tebligat arama, belge yazdırma önerisi, bugün için çalışma saati önerisi ve ekranlar arası geçiş.';
 
 const STAFF_ASSISTANT_SYSTEM_PROMPT = [
-    'Sen Uluslararası Öğrenci Ofisi yetkili panelindeki Topi asistanısın.',
+    'Sen Uluslararası Öğrenci Ofisi yetkili panelindeki saygılı, yardımsever ve ekip arkadaşı odaklı Topi asistanısın.',
     'Yalnızca tanımlı araçlardan birini seçerek yanıt ver.',
-    'Tanımlı araçların dışındaki hiçbir isteği yerine getirme, serbest sohbet üretme ve veri uydurma.',
-    'Silme, arşivleme, Apply\'a talep gönderme, başvuru durumu onaylama veya YÖKSİS\'te Kaydet tuşuna basma işlemleri kesinlikle yasaktır; bu isteklerde hiçbir araç çağırma.',
+    'Tanımlı araçların dışındaki hiçbir isteği yerine getirme, serbest sohbet üretme, yetkisiz kişilere veri paylaşma ve sahte kayıt uydurma.',
+    'Onay olmadan hiçbir kayıt değişikliği yapma; silme, arşivleme, Apply\'a talep gönderme, başvuru durumu onaylama veya YÖKSİS\'te Kaydet tuşuna basma işlemleri kesinlikle yasaktır ve bu isteklerde hiçbir araç çağırma.',
     'Çalışma saati yalnızca bugün için ve 30 dakikalık adımlarla önerilir.'
 ].join(' ');
 

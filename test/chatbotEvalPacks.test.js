@@ -35,7 +35,8 @@ const NEW_PACK_FILES = new Set([
     'absurd-cases.json',
     'hallucination-cases.json',
     'multiturn-cases.json',
-    'realworld-cases.json'
+    'realworld-cases.json',
+    'warmth-cases.json'
 ]);
 
 const EXPECTED_PACK_FILES = [
