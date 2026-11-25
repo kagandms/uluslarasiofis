@@ -26,7 +26,8 @@ const KNOWN_ROUTES = new Set([
     'documents_clarify',
     'status_needs_reference',
     'status_lookup',
-    'status_multiple_references'
+    'status_multiple_references',
+    'status_next_step'
 ]);
 
 const NEW_PACK_FILES = new Set([
@@ -293,17 +294,10 @@ test('realworld-cases.json follows rw-<lang>-NNN id naming and category expectat
         assert.match(testCase.id, idPattern, `${testCase.id} must match rw-${testCase.language}-NNN`);
 
         if (testCase.category === 'rw_processing_time') {
-            assert.equal(testCase.expect.route, 'handoff', `${testCase.id} must expect handoff`);
-            assert.ok(
-                Array.isArray(testCase.expect.forbidTopics) && testCase.expect.forbidTopics.includes('fees_and_appointment'),
-                `${testCase.id} must forbid fees_and_appointment`
-            );
-            assert.ok(
-                testCase.expect.forbidTopics.includes('application_steps'),
-                `${testCase.id} must forbid application_steps`
-            );
+            assert.equal(testCase.expect.route, 'knowledge', `${testCase.id} must expect knowledge`);
+            assert.equal(testCase.expect.topic, 'processing_time', `${testCase.id} must expect topic processing_time`);
         } else if (testCase.category === 'rw_next_step_after_status') {
-            assert.equal(testCase.expect.route, 'any_non_fallback', `${testCase.id} must expect any_non_fallback`);
+            assert.equal(testCase.expect.route, 'status_next_step', `${testCase.id} must expect status_next_step`);
             assert.ok(
                 Array.isArray(testCase.expect.forbidTopics) && testCase.expect.forbidTopics.includes('application_steps'),
                 `${testCase.id} must forbid application_steps`

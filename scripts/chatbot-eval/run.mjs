@@ -24,7 +24,8 @@ import {
 } from '../../src/server/domain/chatbotPrompt.js';
 import {
     APPLICATION_STATUS_LABELS,
-    getChatbotStatusFixedText
+    getChatbotStatusFixedText,
+    isStatusNextStepReply
 } from '../../src/server/domain/chatbotStatusText.js';
 import {
     listApplicationDocumentPolicies,
@@ -506,6 +507,9 @@ function classifyReply(reply, language, httpStatus) {
     if (isStatusSummaryReply(trimmed, language)) {
         return 'status_summary';
     }
+    if (isStatusNextStepReply(trimmed, language)) {
+        return 'status_next_step';
+    }
     if (trimmed.startsWith(getChatbotFixedText('documentListIntro', language))) {
         return 'documents';
     }
@@ -588,6 +592,8 @@ function matchesForbiddenRoute(route, { classification, actions }) {
         return classification === 'status_summary' || classification === 'status_not_found';
     case 'status_multiple_references':
         return classification === 'status_multiple';
+    case 'status_next_step':
+        return classification === 'status_next_step';
     case 'any_non_fallback':
         return classification !== 'fallback'
             && classification !== 'refusal'
@@ -664,6 +670,11 @@ function evaluateCaseOutcome({ testCase, inputMessages, reply, actions, classifi
     case 'status_multiple_references': {
         passed = classification === 'status_multiple';
         reason = passed ? 'Matched status_multiple' : `Expected status_multiple, got ${classification}`;
+        break;
+    }
+    case 'status_next_step': {
+        passed = classification === 'status_next_step';
+        reason = passed ? 'Matched status_next_step' : `Expected status_next_step, got ${classification}`;
         break;
     }
     case 'documents': {

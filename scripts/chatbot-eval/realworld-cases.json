@@ -11,8 +11,8 @@
       { "role": "user", "content": "İkamet kimlik kartım ne zaman gelir, kaç gün beklemem gerekiyor?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -27,8 +27,8 @@
       { "role": "user", "content": "Merhaba, ofis onayının çıkması ortalama kaç gün veya hafta sürüyor?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -43,8 +43,8 @@
       { "role": "user", "content": "Göç idaresi ne zaman cevap verir ya haftalardır bekliyorum bıktım artık" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -55,8 +55,8 @@
       { "role": "user", "content": "İkamet izni değerlendirme sürecini hızlandırmak mümkün mü, daha çabuk çıkması için ne yapılabilir?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -67,8 +67,8 @@
       { "role": "user", "content": "ikamt karti kac gunde geliyo" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -79,8 +79,8 @@
       { "role": "user", "content": "ne zaman gelir" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -95,7 +95,7 @@
       { "role": "user", "content": "Şimdi ne yapmalıyım" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -112,7 +112,7 @@
       { "role": "user", "content": "ee sonra ne yapcam" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -129,7 +129,7 @@
       { "role": "user", "content": "Bundan sonraki adım nedir?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -146,7 +146,7 @@
       { "role": "user", "content": "sonra?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -163,7 +163,7 @@
       { "role": "user", "content": "şu an ne yapmam gerekiyor" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -180,7 +180,7 @@
       { "role": "user", "content": "peki şimdi sıradaki ne?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -197,7 +197,7 @@
       { "role": "user", "content": "Benim başka yapmam gereken bir şey var mı?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -214,7 +214,7 @@
       { "role": "user", "content": "şimdi ne yapabilirim?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -320,8 +320,8 @@
       { "role": "user", "content": "How long I wait to get the ID card" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -336,8 +336,8 @@
       { "role": "user", "content": "Hello, roughly how many days or weeks does office approval take?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -352,8 +352,8 @@
       { "role": "user", "content": "When will Migration Authority answer?? Waiting forever is ridiculous" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -364,8 +364,8 @@
       { "role": "user", "content": "Can my residence permit approval be sped up if I have travel plans soon?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -376,8 +376,8 @@
       { "role": "user", "content": "how lng dose permit card delivry take" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -388,8 +388,8 @@
       { "role": "user", "content": "how long to wait for permit" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -404,7 +404,7 @@
       { "role": "user", "content": "What is the next" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -421,7 +421,7 @@
       { "role": "user", "content": "what do I do now?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -438,7 +438,7 @@
       { "role": "user", "content": "and then?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -455,7 +455,7 @@
       { "role": "user", "content": "Do I need to do anything else right now?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -472,7 +472,7 @@
       { "role": "user", "content": "what should i do next" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -489,7 +489,7 @@
       { "role": "user", "content": "wht next now" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -506,7 +506,7 @@
       { "role": "user", "content": "What is the next step for me?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -523,7 +523,7 @@
       { "role": "user", "content": "what do I do now" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -629,8 +629,8 @@
       { "role": "user", "content": "Сколько ждать, чтобы получить карту ВНЖ?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -645,8 +645,8 @@
       { "role": "user", "content": "Здравствуйте, сколько дней или недель обычно занимает проверка и одобрение?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -661,8 +661,8 @@
       { "role": "user", "content": "Когда уже ответит миграционная служба?? Я жду вечность, сколько можно" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -673,8 +673,8 @@
       { "role": "user", "content": "Можно ли как-то ускорить рассмотрение ВНЖ, чтобы получить решение быстрее?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -685,8 +685,8 @@
       { "role": "user", "content": "через склько дней придет внж карта" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -697,8 +697,8 @@
       { "role": "user", "content": "сколько ждать" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -713,7 +713,7 @@
       { "role": "user", "content": "что дальше" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -730,7 +730,7 @@
       { "role": "user", "content": "Что мне теперь делать?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -747,7 +747,7 @@
       { "role": "user", "content": "а потом?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -764,7 +764,7 @@
       { "role": "user", "content": "Мне нужно сейчас ещё что-то делать?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -781,7 +781,7 @@
       { "role": "user", "content": "Какой следующий шаг?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -798,7 +798,7 @@
       { "role": "user", "content": "что дальше делать" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -815,7 +815,7 @@
       { "role": "user", "content": "и как мне теперь поступить?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -832,7 +832,7 @@
       { "role": "user", "content": "что делать дальше?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -938,8 +938,8 @@
       { "role": "user", "content": "Şahsyýet kartym näçe wagtda geler?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -954,8 +954,8 @@
       { "role": "user", "content": "Salam, resminamalaryň barlanyp tassyklanmagy adatça näçe gün ýa-da hepde çekýär?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -970,8 +970,8 @@
       { "role": "user", "content": "Migrasiya hachan jogap berer?? Bir ay boldy garasyan, bizar boldum" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -982,8 +982,8 @@
       { "role": "user", "content": "Ýaşaýyş rugsadynyň tassyklanmagyny çaltlandyryp bolarmy, tizräk çykmagy üçin näme edip bolar?" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -994,8 +994,8 @@
       { "role": "user", "content": "ikamet kart nache gunde chykar" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1006,8 +1006,8 @@
       { "role": "user", "content": "näçe wagt garaşmaly" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1022,7 +1022,7 @@
       { "role": "user", "content": "indi näme etmeli" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1039,7 +1039,7 @@
       { "role": "user", "content": "häzir näme etmeli?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1056,7 +1056,7 @@
       { "role": "user", "content": "soň näme?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1073,7 +1073,7 @@
       { "role": "user", "content": "indiki ädim näme?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1090,7 +1090,7 @@
       { "role": "user", "content": "Başga etmeli zadym barmy?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1107,7 +1107,7 @@
       { "role": "user", "content": "indi name etjek" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1124,7 +1124,7 @@
       { "role": "user", "content": "Meniň indiki ädimim näme?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1141,7 +1141,7 @@
       { "role": "user", "content": "indi näme etsem bolar?" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1247,8 +1247,8 @@
       { "role": "user", "content": "كم أنتظر حتى أستلم بطاقة الإقامة؟" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1263,8 +1263,8 @@
       { "role": "user", "content": "مرحباً، كم يوماً أو أسبوعاً تستغرق عادةً مراجعة الطلب والموافقة عليه؟" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1279,8 +1279,8 @@
       { "role": "user", "content": "متى ترد إدارة الهجرة؟؟ أنتظر منذ أسابيع ولم يظهر شيء، هذا تأخير غير معقول" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1291,8 +1291,8 @@
       { "role": "user", "content": "هل يمكن تسريع الموافقة على تصريح الإقامة إذا كان لدي سفر قريب؟" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1303,8 +1303,8 @@
       { "role": "user", "content": "كم يوم تاخذ بطاقه الاقامه لين توصل" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1315,8 +1315,8 @@
       { "role": "user", "content": "كم المدة للموافقة" }
     ],
     "expect": {
-      "route": "handoff",
-      "forbidTopics": ["fees_and_appointment", "application_steps", "student_card"]
+      "route": "knowledge",
+      "topic": "processing_time"
     }
   },
   {
@@ -1331,7 +1331,7 @@
       { "role": "user", "content": "ماذا بعد" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1348,7 +1348,7 @@
       { "role": "user", "content": "ماذا أفعل الآن؟" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1365,7 +1365,7 @@
       { "role": "user", "content": "وبعد ذلك؟" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1382,7 +1382,7 @@
       { "role": "user", "content": "ما هي الخطوة التالية؟" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1399,7 +1399,7 @@
       { "role": "user", "content": "هل عليّ فعل شيء آخر الآن؟" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1416,7 +1416,7 @@
       { "role": "user", "content": "طيب وبعدين" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1433,7 +1433,7 @@
       { "role": "user", "content": "ما الخطوة التالية لي؟" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }
@@ -1450,7 +1450,7 @@
       { "role": "user", "content": "ماذا أعمل الآن؟" }
     ],
     "expect": {
-      "route": "any_non_fallback",
+      "route": "status_next_step",
       "forbidTopics": ["application_steps"],
       "forbidRoutes": ["documents_clarify"]
     }

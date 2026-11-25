@@ -145,7 +145,7 @@ function buildPolicyApplication(validated) {
 export const CHATBOT_TOOLS = Object.freeze({
     lookup_knowledge: Object.freeze({
         name: 'lookup_knowledge',
-        description: 'Look up curated, office-approved portal information on application steps, residence permit basics, office hours, student card referrals, or office contact.',
+        description: 'Look up curated portal information on application steps, residence permit basics, processing times, office hours, student cards, or office contact.',
         parameters: Object.freeze({
             type: 'object',
             properties: Object.freeze({

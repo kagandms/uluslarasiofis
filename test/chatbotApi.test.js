@@ -2311,7 +2311,7 @@ test('round 3 fix 1: model timeout returns list (200) for complete document evid
     const generalTimeoutEnv = createTimeoutEnvironment();
     const generalResponse = await worker.fetch(
         createChatRequest(validChatBody({
-            messages: [{ role: 'user', content: 'How long does application review take?' }],
+            messages: [{ role: 'user', content: 'Tell me about the student residence permit portal.' }],
             language: 'en'
         }), { address: '198.51.103.32' }),
         generalTimeoutEnv.environment,

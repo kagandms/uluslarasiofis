@@ -10,7 +10,12 @@ import {
     buildUnderstoodFactsLine,
     getChatbotFixedText
 } from '../domain/chatbotPrompt.js';
-import { getChatbotStatusFixedText, renderStatusSummary } from '../domain/chatbotStatusText.js';
+import {
+    extractMostRecentStatusFromHistory,
+    getChatbotStatusFixedText,
+    getStatusNextStepText,
+    renderStatusSummary
+} from '../domain/chatbotStatusText.js';
 import {
     CHATBOT_TOOL_DEFINITIONS,
     CHATBOT_TOOLS,
@@ -396,6 +401,54 @@ const STUDENT_CARD_PATTERNS = Object.freeze([
 
 const STUDENT_CARD_RESIDENCE_EXCLUSION_PATTERN = /(?<![\p{L}\p{N}])(?:e-?ikamet[\p{L}\p{N}]*|ikamet[\p{L}\p{N}]*|oturma\s+izn[\p{L}\p{N}]*|residence\s+permit[\p{L}\p{N}]*|вид[\p{L}\p{N}]*\s+на\s+жительств[\p{L}\p{N}]*|внж|vnzh|ruhsat[\p{L}\p{N}]*|rugsa[td][\p{L}\p{N}]*|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?اقام(?:ه|ت[\p{L}\p{N}]*))(?![\p{L}\p{N}])/u;
 
+const PROCESSING_TIME_EXCLUSION_PATTERNS = Object.freeze([
+    // office hours
+    /(?:^|[^\p{L}])(?:saat\s+kac|kac(?:ta)?\s+(?:acik|acilir|kapan|basl|bit)|mesai|calisma\s+saat[\p{L}\p{N}]*|ofis\s+saat[\p{L}\p{N}]*|(?:opening|office|working|business)\s+hours|(?:open|close)s?\s+(?:at|until)|часы\s+работы|во\s+сколько\s+(?:откры|закры)|работает\s+офис|is\s+sagat[\p{L}\p{N}]*|acyk\s+sagat|haysy\s+sagat|ساعات\s+(?:ال)?عمل|اوقات\s+(?:ال)?عمل|متي\s+(?:يفتح|يغلق|مفتوح)|كم\s+ساعه\s+يعمل|(?:ofis|office|офис|مكتب)(?:\s+[\p{L}\p{N}-]+){0,3}\s+(?:acik|open|работает|acyk|مفتوح|يفتح|يغلق)|(?:acik|open|работает|acyk|مفتوح)(?:\s+[\p{L}\p{N}-]+){0,3}\s+(?:saat|hours|часов|sagat|ساعه|ساعات))(?:[^\p{L}]|$)/u,
+    // validity, expiry, upload size, and file format
+    /(?:^|[^\p{L}])(?:gecerli(?:lik)?|son\s+kullanma|valid(?:ity)?|expir[\p{L}\p{N}]*|деиствител[\p{L}\p{N}]*|срок\s+деиствия|mohletli|صلاحي[\p{L}\p{N}]*|ساري[\p{L}\p{N}]*|format[\p{L}\p{N}]*|boyut[\p{L}\p{N}]*|pdf|jpe?g|png|webp|mb|sayfa|size|pages?|upload\s+(?:size|limit|time)|to\s+upload|yukleme\s+(?:boyut|sinir)|формат[\p{L}\p{N}]*|размер[\p{L}\p{N}]*|страниц[\p{L}\p{N}]*|мб|загрузки\s+фаил|gornus[\p{L}\p{N}]*|sahypa|صيغه|حجم|صفح[\p{L}\p{N}]*|ميغابايت)(?:[^\p{L}]|$)/u,
+    // fees and appointments
+    /(?:^|[^\p{L}])(?:harc[\p{L}\p{N}]*|ucret[\p{L}\p{N}]*|odeme[\p{L}\p{N}]*|fiyat[\p{L}\p{N}]*|randevu[\p{L}\p{N}]*|fees?|cost[\p{L}\p{N}]*|pay(?:ment|ing)?|price|how\s+much|appointments?|booking|пошлин[\p{L}\p{N}]*|оплат[\p{L}\p{N}]*|стоимост[\p{L}\p{N}]*|цен[\p{L}\p{N}]*|рандеву|запис[\p{L}\p{N}]*|прием[\p{L}\p{N}]*|toleg[\p{L}\p{N}]*|pac[\p{L}\p{N}]*|baha[\p{L}\p{N}]*|randewu[\p{L}\p{N}]*|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:رسوم|دفع|تكلفه|مبلغ|سعر|موعد|مواعيد|حجز))(?:[^\p{L}]|$)/u,
+    // past status checks of uploaded/sent files
+    /(?:^|[^\p{L}])(?:kontrol\s+ettiler\s+mi|kontrol\s+edildi\s+mi|gonderildi\s+mi|iletildi\s+mi|did\s+(?:the\s+office\s+|they\s+)?check|was\s+checked|have\s+they\s+checked|проверили|отправили|barlandymy|iberildimi|تمت\s+مراجعته|تم\s+ارسال)(?:[^\p{L}]|$)/u
+]);
+
+const PROCESSING_TIME_PASSPORT_OR_INSURANCE_PATTERN = /(?:^|[^\p{L}])(?:pasaport[\p{L}\p{N}]*|sigorta[\p{L}\p{N}]*|vize[\p{L}\p{N}]*|passports?|insurance|visa|паспорт[\p{L}\p{N}]*|страхов[\p{L}\p{N}]*|виз[\p{L}\p{N}]*|pasport[\p{L}\p{N}]*|atiyaclandyr[\p{L}\p{N}]*|wiza[\p{L}\p{N}]*|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:جواز[\p{L}\p{N}]*|تامين[\p{L}\p{N}]*|تاشير[\p{L}\p{N}]*))(?:[^\p{L}]|$)/u;
+const PROCESSING_TIME_PERMIT_TARGET_PATTERN = /(?:^|[^\p{L}])(?:ikamet[\p{L}\p{N}]*|oturma\s+izn[\p{L}\p{N}]*|basvuru[\p{L}\p{N}]*|kart[\p{L}\p{N}]*|ofis[\p{L}\p{N}]*|goc(?:\s+idares[\p{L}\p{N}]*)?|residence\s+permit|permit|application|card|office|migration|внж|икамет[\p{L}\p{N}]*|заявк[\p{L}\p{N}]*|заявлен[\p{L}\p{N}]*|карт[\p{L}\p{N}]*|офис[\p{L}\p{N}]*|миграц[\p{L}\p{N}]*|rugsa[td][\p{L}\p{N}]*|arza[\p{L}\p{N}]*|migrasiya[\p{L}\p{N}]*|(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:اقامه|اقامت[\p{L}\p{N}]*|طلب[\p{L}\p{N}]*|بطاقه|مكتب|هجره))(?:[^\p{L}]|$)/u;
+
+const PROCESSING_TIME_PATTERNS = Object.freeze([
+    // tr
+    /(?:^|[^\p{L}])(?:ne\s+kadar\s+(?:surer|suruyor|surecek|surede|bekle[\p{L}\p{N}]*|zaman\s+alir)|kac\s+(?:gun|hafta|ay)(?:de|da)?(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:surer|suruyor|ceker|gel[\p{L}\p{N}]*|cik[\p{L}\p{N}]*|onay[\p{L}\p{N}]*|sonuclan[\p{L}\p{N}]*|teslim|hazir|biter|cevap|donus)|kac\s+(?:gun|hafta|ay)\s+(?:bekle[\p{L}\p{N}]*|surer|suruyor|ceker)|ne\s+zaman(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:gel(?:ir|iyor|iyo|ecek|mesi|mesini)|cik(?:ar|iyor|iyo|acak|masi)|teslim(?:\s+edil[\p{L}\p{N}]*)?|cevap\s+ver[\p{L}\p{N}]*|donus\s+(?:yap|ol)[\p{L}\p{N}]*|basilir|gonderilir)|(?:islem|degerlendirme|inceleme|bekleme)\s+sure(?:si|leri)|hizlandir[\p{L}\p{N}]*|cabuk\s+(?:cik[\p{L}\p{N}]*|gel[\p{L}\p{N}]*|onay[\p{L}\p{N}]*)|erken\s+(?:cik[\p{L}\p{N}]*|gel[\p{L}\p{N}]*|onay[\p{L}\p{N}]*)|(?:haftalardir|aylardir|gunlerdir)\s+bekl[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    // en
+    /(?:^|[^\p{L}])(?:how\s+lo?ng(?:\s+[\p{L}\p{N}-]+){0,6}\s+(?:take|wait[\p{L}\p{N}]*|get|receive|arrive|deliver[\p{L}\p{N}]*|delivry|process[\p{L}\p{N}]*|review[\p{L}\p{N}]*|approv[\p{L}\p{N}]*|decid[\p{L}\p{N}]*|decision|permit|card|application|office|migration|ready|answer|reply)|how\s+many\s+(?:days|weeks|months)(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:take|wait[\p{L}\p{N}]*|until|for|to|get|receive|approv[\p{L}\p{N}]*|process[\p{L}\p{N}]*|review[\p{L}\p{N}]*|deliver[\p{L}\p{N}]*|arrive|ready)|when\s+(?:will|would|can|do)(?:\s+[\p{L}\p{N}-]+){0,5}\s+(?:get|receive|arrive|come|deliver[\p{L}\p{N}]*|issue[\p{L}\p{N}]*|ready|answer|reply|respond|card|permit|decision)|how\s+soon(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:get|receive|arrive|approv[\p{L}\p{N}]*|decision|card|permit|ready|answer|reply)|(?:wait(?:ing)?|processing|review|decision|approval|delivery)\s+times?|sped\s+up|speed(?:ing)?\s+up|expedite|waiting\s+(?:for\s+)?(?:weeks|months|forever|so\s+long))(?:[^\p{L}]|$)/u,
+    // ru
+    /(?:^|[^\p{L}])(?:ск[оа]?лько\s+(?:жд[\p{L}\p{N}]*|ожидать|длит[\p{L}\p{N}]*|занима[\p{L}\p{N}]*|заим[\p{L}\p{N}]*|времени\s+(?:ждать|заимет|занима[\p{L}\p{N}]*|длит[\p{L}\p{N}]*|уходит|нужно\s+(?:на|чтобы)))|(?:через\s+)?ск[оа]?лько\s+(?:днеи|недель|месяц[\p{L}\p{N}]*)(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:жд[\p{L}\p{N}]*|занима[\p{L}\p{N}]*|заим[\p{L}\p{N}]*|придет|будет\s+готов[\p{L}\p{N}]*|выдадут|получу|достав[\p{L}\p{N}]*|одобр[\p{L}\p{N}]*|рассм[\p{L}\p{N}]*|провер[\p{L}\p{N}]*|ответ[\p{L}\p{N}]*)|как\s+долго(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:ждать|длит[\p{L}\p{N}]*|рассматр[\p{L}\p{N}]*|провер[\p{L}\p{N}]*|дела[\p{L}\p{N}]*|одобр[\p{L}\p{N}]*|готов[\p{L}\p{N}]*|придет|идет|занима[\p{L}\p{N}]*|решени[\p{L}\p{N}]*)|когда(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:придет|будет\s+готов[\p{L}\p{N}]*|выдадут|получу|достав[\p{L}\p{N}]*|ответит|ответят|одобр[\p{L}\p{N}]*|прим(?:ет|ут)\s+решени[\p{L}\p{N}]*)|(?:срок(?:и)?|время)\s+(?:рассмотрения|проверки|одобрения|принятия\s+решения|изготовления|доставки|ожидания)|ускор[\p{L}\p{N}]*|жду\s+(?:уже\s+)?(?:недел[\p{L}\p{N}]*|месяц[\p{L}\p{N}]*|вечность|долго))(?:[^\p{L}]|$)/u,
+    // tk
+    /(?:^|[^\p{L}])(?:na[c]?h?e\s+(?:wagt(?:da)?|gun(?:de|e)?|hepde(?:de)?|ay(?:da)?)(?:\s+[\p{L}\p{N}-]+){0,5}\s+(?:garas[\p{L}\p{N}]*|cekyar|ceker|alyar|alar|geler|c[h]?ykar|tassyk[\p{L}\p{N}]*|barla[\p{L}\p{N}]*|jogap|tayy?(?:ar|n)|berler|gow(?:us|sur)[\p{L}\p{N}]*|bolar)|ha[c]?h?an(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:geler|c[h]?ykar|jogap\s+ber[\p{L}\p{N}]*|tassyk[\p{L}\p{N}]*|tayy?(?:ar|n)\s+bol[\p{L}\p{N}]*|berler|gow(?:us|sur)[\p{L}\p{N}]*)|c[h]?altla(?:s|n)dyr[\p{L}\p{N}]*|tizrak\s+(?:c[h]?yk[\p{L}\p{N}]*|gel[\p{L}\p{N}]*|tassyk[\p{L}\p{N}]*)|(?:islenis|barlag|karar)\s+mohlet[\p{L}\p{N}]*|(?:bir\s+(?:ay|hepde)\s+boldy\s+garasyan|(?:hepdelap|aylap)\s+garasyan))(?:[^\p{L}]|$)/u,
+    // ar
+    /(?:^|[^\p{L}])(?:(?:كم|بكم)\s+(?:يستغرق|تستغرق|ياخذ|تاخذ|انتظر|ننتظر|(?:ال)?مده|(?:ال)?وقت|(?:يوم[\p{L}\p{N}]*|اسبوع[\p{L}\p{N}]*|شهر[\p{L}\p{N}]*)(?:\s+[\p{L}\p{N}-]+){0,5}\s+(?:تستغرق|يستغرق|ياخذ|تاخذ|تصل|يصل|توصل|يوصل|تطلع|يطلع|تجهز|يجهز|انتظر|ننتظر|للموافقه|للمراجعه|للاصدار|للتسليم))|متي(?:\s+[\p{L}\p{N}-]+){0,4}\s+(?:تصل|يصل|توصل|يوصل|استلم|تجهز|يجهز|تطلع|يطلع|تصدر|يصدر|ترد|يرد|توافق|يوافق|الرد|الموافقه|البطاقه)|تسريع|استعجال|(?:مده|فتره)\s+(?:المراجعه|المعالجه|الموافقه|الانتظار|التسليم)|انتظر\s+منذ\s+(?:اسابيع|اشهر|ايام|مده))(?:[^\p{L}]|$)/u
+]);
+
+const STATUS_NEXT_STEP_PATTERNS = Object.freeze([
+    // tr
+    /(?:^|[^\p{L}])(?:siradaki(?:\s+adim|\s+ne)?|bundan\s+sonra(?:ki)?(?:\s+adim|\s+ne)?|simdi\s+ne\s+yap[\p{L}\p{N}]*|su\s+an\s+ne\s+yap[\p{L}\p{N}]*|ne\s+yapmali[\p{L}\p{N}]*|ne\s+yapmam\s+gerek[\p{L}\p{N}]*|yapmam\s+gereken\s+ne|ne\s+yapabilirim|ne\s+yapca[\p{L}\p{N}]*|ne\s+yapacagim|(?:simdi|bundan\s+sonra|sonra)\s+ne\s+olacak|ya\s+sonra|sonra\s+ne(?:\s+yap[\p{L}\p{N}]*)?|^\s*(?:ee\s+|peki\s+)?sonra[\s?!.]*$|sonrasi(?:\s+ne)?|(?:baska\s+)?yapmam\s+gereken\s+(?:bir\s+sey\s+)?var\s+mi)(?:[^\p{L}]|$)/u,
+    // en
+    /(?:^|[^\p{L}])(?:what(?:'?s|\s+is)?\s+(?:the\s+)?next(?:\s+step)?|wh?t\s+next(?:\s+now)?|what\s+now|what\s+(?:should|do|can|must)\s+i\s+do(?:\s+(?:now|next))?|what\s+to\s+do(?:\s+(?:now|next))?|what\s+happens\s+(?:now|next)|and\s+then|next\s+step|(?:do\s+i\s+need|need\s+i)\s+to\s+do\s+anything(?:\s+else)?|anything\s+else\s+(?:to\s+do|i\s+(?:need|should)\s+do))(?:[^\p{L}]|$)/u,
+    // ru
+    /(?:^|[^\p{L}])(?:что\s+дальше(?:\s+делать)?|что\s+(?:мне\s+)?(?:делать|сделать)\s+(?:дальше|теперь|сеичас)|что\s+(?:мне\s+)?(?:теперь|сеичас|дальше)\s+(?:делать|сделать|предпринять)|(?:а\s+дальше\s+что|и\s+что\s+дальше)|как\s+(?:мне\s+)?(?:теперь|дальше)\s+поступить|а\s+потом|какои\s+(?:следующии|дальнеишии)\s+шаг|следующии\s+шаг|(?:мне\s+)?нужно\s+(?:ли\s+)?(?:сеичас\s+)?(?:еще\s+)?что-?то\s+делать|что-?то\s+(?:еще\s+)?нужно\s+делать)(?:[^\p{L}]|$)/u,
+    // tk
+    /(?:^|[^\p{L}])(?:indiki\s+adim[\p{L}\p{N}]*|indi\s+na?me\s+(?:etmeli|etsem\s+bolar|etjek|edeyin|gerek)|hazir\s+name\s+(?:etmeli|etsem|gerek)|na?me\s+(?:etmeli|edeyin|etsem\s+bolar)(?:\s+(?:indi|hazir|son))?|mundan\s+(?:son|beylak)\s+name|son\s+name|ondan\s+son|basga\s+etmeli\s+(?:zadym|zat)\s+bar\s*my|etmeli\s+zadym\s+bar\s*my)(?:[^\p{L}]|$)/u,
+    // ar
+    /(?:^|[^\p{L}])(?:ما\s+(?:هو\s+|هي\s+)?(?:ال)?(?:تالي|خطوه\s+(?:ال)?تاليه)|(?:و)?ما\s+الذي\s+يجب\s+(?:علي\s+)?فعله(?:\s+(?:ال)?ان)?|(?:و)?ماذا\s+(?:بعد|(?:(?:علي|يجب)\s+(?:ان\s+)?)?(?:افعل|اعمل)\s+(?:بعد(?:\s+ذلك)?|(?:ال)?ان|تاليا))|(?:و)?بعد\s+(?:ذلك|كده|هيك)|(?:طيب\s+)?(?:و)?بعدين|(?:شو|ايش)\s+(?:اسوي|اعمل)(?:\s+(?:بعدين|الحين|(?:ال)?ان))?|شو\s+(?:الخطوه\s+(?:ال)?جايه|بعد)|هل\s+(?:علي(?:\s+ان\s+(?:افعل|اعمل)|\s+(?:فعل|عمل))|يجب\s+(?:علي\s+)?(?:ان\s+(?:افعل|اعمل)|(?:فعل|عمل)))\s+شي(?:ء|ي)?ا?(?:\s+اخر)?(?:\s+(?:ال)?ان)?|هل\s+(?:يوجد|هناك)\s+(?:شيي|اجراء)(?:\s+اخر)?\s*(?:مطلوب|افعله))(?:[^\p{L}]|$)/u
+]);
+
+const STATUS_NEXT_STEP_NEW_TOPIC_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}])(?:harc[\p{L}\p{N}]*|ucret[\p{L}\p{N}]*|odeme[\p{L}\p{N}]*|randevu[\p{L}\p{N}]*|parmak\s+iz[\p{L}\p{N}]*|saat[\p{L}\p{N}]*|kvkk|gizlilik|unuttum|adres[\p{L}\p{N}]*|kira[\p{L}\p{N}]*|yurt[\p{L}\p{N}]*|otel[\p{L}\p{N}]*|taahhut[\p{L}\p{N}]*|e-?ikamet|(?:ilk|yeni)\s+basvuru)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:fees?|cost[\p{L}\p{N}]*|pay(?:ment|ing)?|appointments?|fingerprints?|hours?|privacy|forgot|address|rental|dorm(?:itory)?|hotel|undertaking|e-?ikamet|(?:initial|new|first)\s+application)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:пошлин[\p{L}\p{N}]*|оплат[\p{L}\p{N}]*|рандеву|прием[\p{L}\p{N}]*|отпечат[\p{L}\p{N}]*|час[\p{L}\p{N}]*|конфиденциальност[\p{L}\p{N}]*|забыл[\p{L}\p{N}]*|адрес[\p{L}\p{N}]*|аренд[\p{L}\p{N}]*|общежит[\p{L}\p{N}]*|гостиниц[\p{L}\p{N}]*|отел[\p{L}\p{N}]*|обязательств[\p{L}\p{N}]*|первичн[\p{L}\p{N}]*|нов(?:ая|ую)\s+заявк[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:toleg[\p{L}\p{N}]*|randewu[\p{L}\p{N}]*|barmak\s+yz[\p{L}\p{N}]*|sagat[\p{L}\p{N}]*|unutd[\p{L}\p{N}]*|salgy[\p{L}\p{N}]*|karend[\p{L}\p{N}]*|umumy\s+yasayys|myhmanhana[\p{L}\p{N}]*|borcnama[\p{L}\p{N}]*|(?:ilkinji|taze)\s+arza)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:رسوم|دفع|موعد|مواعيد|بصم[\p{L}\p{N}]*|ساعات|خصوصيه|نسيت|عنوان|ايجار|سكن|فندق|تعهد)|طلب\s+(?:اولي|جديد)|تقديم\s+جديد)(?:[^\p{L}]|$)/u
+]);
+
 export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     STATUS_RULES_BY_LANGUAGE,
     STAGE_STATUS_PATTERNS,
@@ -421,7 +474,13 @@ export const CHATBOT_ROUTE_NORMALIZED_PATTERNS = Object.freeze({
     PROMPT_OVERRIDE_MARKER_PATTERNS,
     UNHELPFUL_MODEL_REPLY_PATTERNS,
     STUDENT_CARD_PATTERNS,
-    STUDENT_CARD_RESIDENCE_EXCLUSION_PATTERN
+    STUDENT_CARD_RESIDENCE_EXCLUSION_PATTERN,
+    PROCESSING_TIME_EXCLUSION_PATTERNS,
+    PROCESSING_TIME_PASSPORT_OR_INSURANCE_PATTERN,
+    PROCESSING_TIME_PERMIT_TARGET_PATTERN,
+    PROCESSING_TIME_PATTERNS,
+    STATUS_NEXT_STEP_PATTERNS,
+    STATUS_NEXT_STEP_NEW_TOPIC_PATTERNS
 });
 
 const DOCUMENT_FACT_KEYS = Object.freeze([
@@ -796,6 +855,109 @@ export function isStudentCardQuestion(messageContent) {
     const normalized = evidence.normalizeForEvidence(messageContent);
     if (STUDENT_CARD_RESIDENCE_EXCLUSION_PATTERN.test(normalized)) return false;
     return STUDENT_CARD_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+const STATUS_NEXT_STEP_MAX_WORDS = 14;
+
+/**
+ * Returns true when the user asks a waiting, duration, delivery, or speed-up question
+ * about residence permit processing, card issuance, or office/Migration Authority decisions,
+ * while conservatively excluding office hours, document validity/format/size, fees, appointments,
+ * student ID cards, references/identifiers, past status checks, document lists, and refusals.
+ * @param {string} messageContent Raw user message text.
+ * @returns {boolean} True if deterministic `processing_time` knowledge lookup applies.
+ */
+export function isProcessingTimeQuestion(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    if (extractApplicationReferences(messageContent).length > 0) return false;
+    if (
+        isOtherStudentsDataRequest(messageContent)
+        || hasPromptOverrideMarker(messageContent)
+        || isOtherPersonApplicationStatusRequest(messageContent)
+        || isGuaranteeOrLegalAdviceRequest(messageContent)
+        || isStudentCardQuestion(messageContent)
+        || isContactChannelQuestion(messageContent)
+        || hasExplicitPersonComplaintUrgentHandoff(messageContent)
+    ) {
+        return false;
+    }
+    if (isVeryShortDocumentQuestion(messageContent) || isAskingWhichDocumentsAreNeeded(messageContent)) {
+        return false;
+    }
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    if (STATUS_IDENTIFIER_OR_PARTIAL_REF_PATTERNS.some((pattern) => pattern.test(normalized))) {
+        return false;
+    }
+    if (PROCESSING_TIME_EXCLUSION_PATTERNS.some((pattern) => pattern.test(normalized))) {
+        return false;
+    }
+    if (
+        PROCESSING_TIME_PASSPORT_OR_INSURANCE_PATTERN.test(normalized)
+        && !PROCESSING_TIME_PERMIT_TARGET_PATTERN.test(normalized)
+    ) {
+        return false;
+    }
+    return PROCESSING_TIME_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/**
+ * Returns true when the user message is a short next-step question (without new references,
+ * document keywords, processing-time questions, refusals, or clear new topics).
+ * @param {string} messageContent Raw user message text.
+ * @returns {boolean} True if the message asks what to do next.
+ */
+export function isStatusNextStepQuestion(messageContent) {
+    if (typeof messageContent !== 'string') return false;
+    if (extractApplicationReferences(messageContent).length > 0) return false;
+    if (
+        isOtherStudentsDataRequest(messageContent)
+        || hasPromptOverrideMarker(messageContent)
+        || isOtherPersonApplicationStatusRequest(messageContent)
+        || isGuaranteeOrLegalAdviceRequest(messageContent)
+        || isStudentCardQuestion(messageContent)
+        || isContactChannelQuestion(messageContent)
+        || hasExplicitPersonComplaintUrgentHandoff(messageContent)
+        || isStatusQuestionWithoutReference(messageContent)
+        || isDeterministicHandoffRequest(messageContent)
+        || isProcessingTimeQuestion(messageContent)
+    ) {
+        return false;
+    }
+    if (
+        hasDocumentKeyword(messageContent)
+        || isVeryShortDocumentQuestion(messageContent)
+        || isAskingWhichDocumentsAreNeeded(messageContent)
+    ) {
+        return false;
+    }
+    const normalized = evidence.normalizeForEvidence(messageContent).trim();
+    if (!normalized) return false;
+    const words = normalized.match(/[\p{L}\p{N}]+/gu) || [];
+    if (words.length === 0 || words.length > STATUS_NEXT_STEP_MAX_WORDS) return false;
+    if (STATUS_IDENTIFIER_OR_PARTIAL_REF_PATTERNS.some((pattern) => pattern.test(normalized))) {
+        return false;
+    }
+    if (STATUS_NEXT_STEP_NEW_TOPIC_PATTERNS.some((pattern) => pattern.test(normalized))) {
+        return false;
+    }
+    return STATUS_NEXT_STEP_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/**
+ * Resolves a deterministic `status_next_step` reply when conversation history contains a fixed
+ * assistant status summary with a known localized label and the new user message is a short next-step question.
+ * @param {string} lastUserMessage Latest sanitized user turn.
+ * @param {Array<{role?: string, content?: string}>} messages Full sanitized conversation messages.
+ * @param {string} language Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
+ * @returns {string|null} Localized next-step reply or `null` when this route does not apply.
+ */
+export function resolveStatusNextStepReply(lastUserMessage, messages, language) {
+    if (!Array.isArray(messages) || messages.length < 2) return null;
+    if (!isStatusNextStepQuestion(lastUserMessage)) return null;
+    const priorMessages = messages.slice(0, -1);
+    const status = extractMostRecentStatusFromHistory(priorMessages, language);
+    if (!status) return null;
+    return getStatusNextStepText(status, language);
 }
 
 /**
@@ -1284,6 +1446,13 @@ export async function handlePublicChat(request, environment, requestId, executio
                 actions: [{ type: 'inquiry' }]
             });
         }
+        if (isProcessingTimeQuestion(lastUserMessage)) {
+            outcome = 'knowledge';
+            return routeResult({
+                reply: readKnowledge('processing_time', validated.language).text,
+                actions: []
+            });
+        }
         if (isStatusQuestionWithoutReference(lastUserMessage)) {
             outcome = 'status_needs_reference';
             return routeResult({
@@ -1296,6 +1465,18 @@ export async function handlePublicChat(request, environment, requestId, executio
             return routeResult({
                 reply: CHATBOT_HANDOFF_TEXT[validated.language] || CHATBOT_HANDOFF_TEXT.tr,
                 actions: [{ type: 'inquiry' }]
+            });
+        }
+        const statusNextStepReply = resolveStatusNextStepReply(
+            lastUserMessage,
+            sanitizedMessages,
+            validated.language
+        );
+        if (statusNextStepReply) {
+            outcome = 'status_next_step';
+            return routeResult({
+                reply: statusNextStepReply,
+                actions: []
             });
         }
 
