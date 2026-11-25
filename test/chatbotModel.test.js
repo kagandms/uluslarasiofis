@@ -45,7 +45,7 @@ test('CHATBOT_MODEL environment variable overrides CHATBOT_MODEL_DEFAULT', async
 });
 
 test('options.model overrides CHATBOT_MODEL and CHATBOT_MODEL_DEFAULT, and blank options.model falls back', async () => {
-    const fakeAi = createFakeAiBinding([{ response: 'Llama reply' }, { response: 'Qwen reply' }]);
+    const fakeAi = createFakeAiBinding([{ response: 'Gemma reply' }, { response: 'Qwen reply' }]);
     const envModel = '@cf/qwen/qwen2.5-72b-instruct';
 
     const overrideModel = createChatModel(
@@ -56,7 +56,7 @@ test('options.model overrides CHATBOT_MODEL and CHATBOT_MODEL_DEFAULT, and blank
 
     assert.equal(overrideModel.model, STAFF_ASSISTANT_MODEL_DEFAULT);
     assert.equal(fakeAi.calls[0].model, STAFF_ASSISTANT_MODEL_DEFAULT);
-    assert.equal(Object.hasOwn(fakeAi.calls[0].input, 'chat_template_kwargs'), false);
+    assert.strictEqual(fakeAi.calls[0].input.chat_template_kwargs?.enable_thinking, false);
 
     const blankOverrideModel = createChatModel(
         { AI: fakeAi, CHATBOT_MODEL: envModel },
@@ -413,7 +413,7 @@ test('non-gemma models and non-prefix gemma-4 substrings do not receive chat_tem
     const messages = [{ role: 'user', content: 'Merhaba' }];
 
     for (const env of [
-        { AI: { run: recorder }, CHATBOT_MODEL: STAFF_ASSISTANT_MODEL_DEFAULT },
+        { AI: { run: recorder }, CHATBOT_MODEL: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
         { AI: { run: recorder }, CHATBOT_MODEL: '@cf/qwen/qwen2.5-72b-instruct' },
         { AI: { run: recorder }, CHATBOT_MODEL: 'x/@cf/google/gemma-4' }
     ]) {

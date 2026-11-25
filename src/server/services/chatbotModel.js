@@ -6,8 +6,8 @@ import { ApiError } from '../domain/errors.js';
 // and 340-case adversarial 84.7% vs Llama 73.2%; 0 fallbacks, p95 ~3 s (Llama 18, p95 ~12 s), $0.10/$0.30 vs $0.293/$2.253 per 1M.
 // Thinking is switched off for this model family through MODEL_PAYLOAD_EXTRAS below.
 export const CHATBOT_MODEL_DEFAULT = '@cf/google/gemma-4-26b-a4b-it';
-// Staff assistant stays on Llama until it has its own evaluation pack (tool calling on Gemma is untested there).
-export const STAFF_ASSISTANT_MODEL_DEFAULT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// @cf/google/gemma-4-26b-a4b-it: checked 2026-11-25 against the live Cloudflare catalog; public eval packs equal or better, and staff tool calling verified by a local smoke test.
+export const STAFF_ASSISTANT_MODEL_DEFAULT = '@cf/google/gemma-4-26b-a4b-it';
 export const CHATBOT_MODEL_TIMEOUT_MS = 12_000;
 export const CHATBOT_MODEL_MAX_OUTPUT_TOKENS = 512;
 
