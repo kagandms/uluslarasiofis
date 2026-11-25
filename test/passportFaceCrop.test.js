@@ -849,37 +849,58 @@ test('detectFaceCrop with tryRotations returns no-face when no rotation finds a 
     assert.equal(detectCalls, 56);
 });
 
-test('detectFaceCrop with tryRotations skips createRotatedSource and omits rotation on upright hit', async () => {
-    let rotateCalls = 0;
+test('detectFaceCrop with tryRotations evaluates all 4 orientations without extra createRotatedSource calls and omits rotation on strong upright hit', async () => {
+    let fullRotateCalls = 0;
+    let detectCalls = 0;
+    let tileCalls = 0;
+    const seenRotations = [];
 
     const fullUpright = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
         tryRotations: true,
         loadImage: createFakeLoader(1000, 1400),
-        createRotatedSource() {
-            rotateCalls += 1;
-            return { isRotated: true };
+        createRotatedSource(_source, degrees) {
+            fullRotateCalls += 1;
+            seenRotations.push(degrees);
+            return { isRotated: true, degrees };
         },
-        detector: createFakeDetector([
-            { boundingBox: { x: 200, y: 300, width: 150, height: 180 } }
-        ])
-    });
-    assert.equal('error' in fullUpright, false);
-    assert.equal('rotation' in fullUpright, false);
-    assert.equal(rotateCalls, 0);
-
-    const tileUpright = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
-        tryRotations: true,
-        loadImage: createFakeLoader(1000, 1400),
-        createRotatedSource() {
-            rotateCalls += 1;
-            return { isRotated: true };
-        },
-        createTileSource(_source, region) {
-            return { isTile: true, region };
+        createTileSource() {
+            tileCalls += 1;
+            return { isTile: true };
         },
         detector: {
             async detect(source) {
-                if (source?.isTile && source.region.sx === 0 && source.region.sy === 0) {
+                detectCalls += 1;
+                if (!source?.isRotated) {
+                    return [{ boundingBox: { x: 200, y: 300, width: 150, height: 180 }, score: 0.96 }];
+                }
+                if (source.degrees === 90) {
+                    return [{ boundingBox: { x: 180, y: 240, width: 140, height: 170 }, score: 0.55 }];
+                }
+                return [];
+            }
+        }
+    });
+    assert.equal('error' in fullUpright, false);
+    assert.equal('rotation' in fullUpright, false);
+    assert.deepEqual(seenRotations, [90, 270, 180]);
+    assert.equal(fullRotateCalls, 3);
+    assert.equal(detectCalls, 4);
+    assert.equal(tileCalls, 0);
+
+    let tileRotateCalls = 0;
+    const tileUpright = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
+        tryRotations: true,
+        loadImage: createFakeLoader(1000, 1400),
+        createRotatedSource(_source, degrees) {
+            tileRotateCalls += 1;
+            return { isRotated: true, degrees };
+        },
+        createTileSource(source, region) {
+            return { isTile: true, isRotated: Boolean(source?.isRotated), region };
+        },
+        detector: {
+            async detect(source) {
+                if (source?.isTile && !source.isRotated && source.region.sx === 0 && source.region.sy === 0) {
                     return [{ boundingBox: { x: 100, y: 120, width: 80, height: 100 } }];
                 }
                 return [];
@@ -888,14 +909,135 @@ test('detectFaceCrop with tryRotations skips createRotatedSource and omits rotat
     });
     assert.equal('error' in tileUpright, false);
     assert.equal('rotation' in tileUpright, false);
-    assert.equal(rotateCalls, 0);
+    assert.equal(tileRotateCalls, 3);
+});
+
+test('detectFaceCrop with tryRotations chooses 90 when 0 has a low-score sideways face and 90 has a high-score upright face', async () => {
+    let rotateCalls = 0;
+    let detectCalls = 0;
+    const rotatedFace = { x: 200, y: 300, width: 140, height: 180 };
+
+    const result = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
+        tryRotations: true,
+        loadImage: createFakeLoader(1400, 1000),
+        createRotatedSource(_source, degrees) {
+            rotateCalls += 1;
+            return { isRotated: true, degrees };
+        },
+        detector: {
+            async detect(source) {
+                detectCalls += 1;
+                if (!source?.isRotated) {
+                    return [{ boundingBox: { x: 400, y: 200, width: 140, height: 140 }, score: 0.52 }];
+                }
+                if (source.degrees === 90) {
+                    return [{ boundingBox: rotatedFace, score: 0.94 }];
+                }
+                return [];
+            }
+        }
+    });
+
+    assert.equal('error' in result, false);
+    assert.equal(result.rotation, 90);
+    assert.equal(rotateCalls, 3);
+    assert.equal(detectCalls, 4);
+    assert.ok(result.x <= rotatedFace.x);
+    assert.ok(result.x + result.width >= rotatedFace.x + rotatedFace.width);
+    assert.ok(result.y <= rotatedFace.y);
+    assert.ok(result.y + result.height >= rotatedFace.y + rotatedFace.height);
+    assert.ok(result.x + result.width <= 1000);
+    assert.ok(result.y + result.height <= 1400);
+});
+
+test('detectFaceCrop with tryRotations prefers 0 degrees on tie or when 0-degree score is within 10% of best', async () => {
+    const tieResult = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
+        tryRotations: true,
+        loadImage: createFakeLoader(1000, 1400),
+        createRotatedSource(_source, degrees) {
+            return { isRotated: true, degrees };
+        },
+        detector: {
+            async detect(source) {
+                if (!source?.isRotated) {
+                    return [{ boundingBox: { x: 200, y: 300, width: 120, height: 150 }, score: 0.9 }];
+                }
+                if (source.degrees === 90) {
+                    return [{ boundingBox: { x: 100, y: 100, width: 180, height: 220 }, score: 0.9 }];
+                }
+                return [];
+            }
+        }
+    });
+    assert.equal('error' in tieResult, false);
+    assert.equal('rotation' in tieResult, false);
+
+    const nearTieResult = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
+        tryRotations: true,
+        loadImage: createFakeLoader(1000, 1400),
+        createRotatedSource(_source, degrees) {
+            return { isRotated: true, degrees };
+        },
+        detector: {
+            async detect(source) {
+                if (!source?.isRotated) {
+                    return [{ boundingBox: { x: 200, y: 300, width: 140, height: 180 }, score: 0.85 }];
+                }
+                if (source.degrees === 90) {
+                    return [{ boundingBox: { x: 200, y: 300, width: 140, height: 180 }, score: 0.9 }];
+                }
+                return [];
+            }
+        }
+    });
+    assert.equal('error' in nearTieResult, false);
+    assert.equal('rotation' in nearTieResult, false);
+
+    const areaTieResult = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
+        tryRotations: true,
+        loadImage: createFakeLoader(1000, 1400),
+        createRotatedSource(_source, degrees) {
+            return { isRotated: true, degrees };
+        },
+        detector: {
+            async detect(source) {
+                if (!source?.isRotated || source.degrees === 90) {
+                    return [{ boundingBox: { x: 200, y: 300, width: 140, height: 180 } }];
+                }
+                return [];
+            }
+        }
+    });
+    assert.equal('error' in areaTieResult, false);
+    assert.equal('rotation' in areaTieResult, false);
+
+    const areaWinnerResult = await detectFaceCrop(FAKE_DATA_URL, 3 / 4, {
+        tryRotations: true,
+        loadImage: createFakeLoader(1400, 1000),
+        createRotatedSource(_source, degrees) {
+            return { isRotated: true, degrees };
+        },
+        detector: {
+            async detect(source) {
+                if (!source?.isRotated) {
+                    return [{ boundingBox: { x: 400, y: 200, width: 60, height: 80 } }];
+                }
+                if (source.degrees === 90) {
+                    return [{ boundingBox: { x: 200, y: 300, width: 140, height: 180 } }];
+                }
+                return [];
+            }
+        }
+    });
+    assert.equal('error' in areaWinnerResult, false);
+    assert.equal(areaWinnerResult.rotation, 90);
 });
 
 test('detectFaceCrop with tryRotations false performs no rotation search at all', async () => {
     let rotateCalls = 0;
     let detectCalls = 0;
 
-    const result = await detectFaceCrop(FAKE_DATA_URL, 35 / 45, {
+    const missResult = await detectFaceCrop(FAKE_DATA_URL, 35 / 45, {
         tryRotations: false,
         loadImage: createFakeLoader(1400, 1000),
         createRotatedSource() {
@@ -913,9 +1055,31 @@ test('detectFaceCrop with tryRotations false performs no rotation search at all'
         }
     });
 
-    assert.deepEqual(result, { error: 'no-face' });
+    assert.deepEqual(missResult, { error: 'no-face' });
     assert.equal(rotateCalls, 0);
     assert.equal(detectCalls, 14);
+
+    let hitRotateCalls = 0;
+    let hitDetectCalls = 0;
+    const hitResult = await detectFaceCrop(FAKE_DATA_URL, 35 / 45, {
+        tryRotations: false,
+        loadImage: createFakeLoader(1400, 1000),
+        createRotatedSource() {
+            hitRotateCalls += 1;
+            return { isRotated: true };
+        },
+        detector: {
+            async detect() {
+                hitDetectCalls += 1;
+                return [{ boundingBox: { x: 200, y: 300, width: 140, height: 180 }, score: 0.52 }];
+            }
+        }
+    });
+
+    assert.equal('error' in hitResult, false);
+    assert.equal('rotation' in hitResult, false);
+    assert.equal(hitRotateCalls, 0);
+    assert.equal(hitDetectCalls, 1);
 });
 
 test('detectFaceCrop returns unavailable when createRotatedSource throws', async () => {
