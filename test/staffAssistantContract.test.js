@@ -155,6 +155,18 @@ test('validateStaffAssistantAction accepts every valid action type', () => {
         validateStaffAssistantAction({ type: 'tebligat.search', query: '  Ahmet  ' }),
         { type: 'tebligat.search', query: 'Ahmet' }
     );
+    assert.deepEqual(
+        validateStaffAssistantAction({ type: 'tebligat.lookup', query: '  Mehmet Kaya  ' }),
+        { type: 'tebligat.lookup', query: 'Mehmet Kaya' }
+    );
+    assert.deepEqual(
+        validateStaffAssistantAction({ type: 'tebligat.lookup', query: 'ab' }),
+        { type: 'tebligat.lookup', query: 'ab' }
+    );
+    assert.deepEqual(
+        validateStaffAssistantAction({ type: 'tebligat.lookup', query: 'a'.repeat(80) }),
+        { type: 'tebligat.lookup', query: 'a'.repeat(80) }
+    );
 });
 
 test('validateStaffAssistantAction rejects out-of-range, invalid, and unknown-key actions', () => {
@@ -183,7 +195,14 @@ test('validateStaffAssistantAction rejects out-of-range, invalid, and unknown-ke
         { type: 'workHours.propose', person: 'asaf', minutes: 60, label: '1 saat', extra: 'x' },
         { type: 'tebligat.search', query: 'a' },
         { type: 'tebligat.search', query: 'a'.repeat(81) },
-        { type: 'tebligat.search', query: 'Ahmet', extra: 1 }
+        { type: 'tebligat.search', query: 'Ahmet', extra: 1 },
+        { type: 'tebligat.lookup', query: 'a' },
+        { type: 'tebligat.lookup', query: '   a   ' },
+        { type: 'tebligat.lookup', query: 'a'.repeat(81) },
+        { type: 'tebligat.lookup', query: 123 },
+        { type: 'tebligat.lookup', query: null },
+        { type: 'tebligat.lookup' },
+        { type: 'tebligat.lookup', query: 'Ahmet', extra: 1 }
     ];
 
     for (const action of invalidActions) {

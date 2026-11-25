@@ -46,7 +46,8 @@
 .staff-assistant-close:focus-visible,
 .staff-assistant-send:focus-visible,
 .staff-assistant-confirm-save:focus-visible,
-.staff-assistant-confirm-cancel:focus-visible {
+.staff-assistant-confirm-cancel:focus-visible,
+.staff-assistant-tebligat-toggle:focus-visible {
     outline: 2px solid var(--accent, #7e1830);
     outline-offset: 2px;
 }
@@ -488,9 +489,16 @@
     color: var(--danger, #dc3545);
 }
 
+.staff-assistant-tebligat-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    margin-block-start: 0.3rem;
+}
+
 .staff-assistant-tebligat-status {
     display: inline-block;
-    margin-block-start: 0.25rem;
     padding: 0.1rem 0.45rem;
     border-radius: 999px;
     font-size: 0.72rem;
@@ -502,6 +510,52 @@
 .staff-assistant-tebligat-status.is-marked {
     background: rgba(40, 167, 69, 0.14);
     color: var(--success, #28a745);
+}
+
+.staff-assistant-tebligat-toggle {
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--card-border, #e0e4e8);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-primary, #1a1a24);
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.staff-assistant-tebligat-toggle:hover:not(:disabled) {
+    border-color: var(--accent, #7e1830);
+    color: var(--accent, #7e1830);
+}
+
+.staff-assistant-tebligat-toggle:disabled,
+.staff-assistant-confirm-save:disabled,
+.staff-assistant-confirm-cancel:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.staff-assistant-tebligat-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-block-start: 0.45rem;
+    padding-block-start: 0.45rem;
+    border-top: 1px dashed var(--card-border, #e0e4e8);
+}
+
+.staff-assistant-tebligat-confirm-text {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary, #1a1a24);
+}
+
+.staff-assistant-tebligat-confirm-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
 }
 
 .staff-assistant-confirm-row {
