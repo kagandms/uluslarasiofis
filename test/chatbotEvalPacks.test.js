@@ -33,7 +33,8 @@ const NEW_PACK_FILES = new Set([
     'extraction-cases.json',
     'absurd-cases.json',
     'hallucination-cases.json',
-    'multiturn-cases.json'
+    'multiturn-cases.json',
+    'realworld-cases.json'
 ]);
 
 const EXPECTED_PACK_FILES = [
@@ -218,11 +219,49 @@ test('every case across all evaluation packs has unique id, valid metadata, vali
                     `${label} unknown knowledge topic "${testCase.expect.topic}"`
                 );
             }
+            if (Object.hasOwn(testCase.expect, 'forbidTopics')) {
+                assert.ok(
+                    Array.isArray(testCase.expect.forbidTopics) && testCase.expect.forbidTopics.length > 0,
+                    `${label} expect.forbidTopics must be a non-empty array`
+                );
+                for (const topic of testCase.expect.forbidTopics) {
+                    assert.equal(typeof topic, 'string', `${label} forbidTopics entry must be a string`);
+                    assert.ok(
+                        CHATBOT_TOPICS.includes(topic),
+                        `${label} unknown forbidTopics entry "${topic}"`
+                    );
+                }
+                if (testCase.expect.route === 'knowledge') {
+                    assert.equal(
+                        testCase.expect.forbidTopics.includes(testCase.expect.topic),
+                        false,
+                        `${label} expect.forbidTopics must not forbid expected topic "${testCase.expect.topic}"`
+                    );
+                }
+            }
+            if (Object.hasOwn(testCase.expect, 'forbidRoutes')) {
+                assert.ok(
+                    Array.isArray(testCase.expect.forbidRoutes) && testCase.expect.forbidRoutes.length > 0,
+                    `${label} expect.forbidRoutes must be a non-empty array`
+                );
+                for (const route of testCase.expect.forbidRoutes) {
+                    assert.equal(typeof route, 'string', `${label} forbidRoutes entry must be a string`);
+                    assert.ok(
+                        KNOWN_ROUTES.has(route),
+                        `${label} unknown forbidRoutes entry "${route}"`
+                    );
+                }
+                assert.equal(
+                    testCase.expect.forbidRoutes.includes(testCase.expect.route),
+                    false,
+                    `${label} expect.forbidRoutes must not forbid expected route "${testCase.expect.route}"`
+                );
+            }
         }
     }
 });
 
-test('the four new adversarial evaluation packs are balanced across all five languages', () => {
+test('the adversarial and realworld evaluation packs are balanced across all five languages', () => {
     const packs = loadAllEvalPacks().filter((pack) => NEW_PACK_FILES.has(pack.filename));
     assert.equal(packs.length, NEW_PACK_FILES.size);
 
@@ -241,5 +280,38 @@ test('the four new adversarial evaluation packs are balanced across all five lan
             counts.tr > 0,
             `${filename} must have at least one case per language`
         );
+    }
+});
+
+test('realworld-cases.json follows rw-<lang>-NNN id naming and category expectations', () => {
+    const pack = loadAllEvalPacks().find((entry) => entry.filename === 'realworld-cases.json');
+    assert.ok(pack, 'Missing realworld-cases.json');
+    assert.equal(pack.parsed.length, 100);
+
+    for (const testCase of pack.parsed) {
+        const idPattern = new RegExp(`^rw-${testCase.language}-\\d{3}$`);
+        assert.match(testCase.id, idPattern, `${testCase.id} must match rw-${testCase.language}-NNN`);
+
+        if (testCase.category === 'rw_processing_time') {
+            assert.equal(testCase.expect.route, 'handoff', `${testCase.id} must expect handoff`);
+            assert.ok(
+                Array.isArray(testCase.expect.forbidTopics) && testCase.expect.forbidTopics.includes('fees_and_appointment'),
+                `${testCase.id} must forbid fees_and_appointment`
+            );
+            assert.ok(
+                testCase.expect.forbidTopics.includes('application_steps'),
+                `${testCase.id} must forbid application_steps`
+            );
+        } else if (testCase.category === 'rw_next_step_after_status') {
+            assert.equal(testCase.expect.route, 'any_non_fallback', `${testCase.id} must expect any_non_fallback`);
+            assert.ok(
+                Array.isArray(testCase.expect.forbidTopics) && testCase.expect.forbidTopics.includes('application_steps'),
+                `${testCase.id} must forbid application_steps`
+            );
+            assert.ok(
+                Array.isArray(testCase.expect.forbidRoutes) && testCase.expect.forbidRoutes.includes('documents_clarify'),
+                `${testCase.id} must forbid documents_clarify`
+            );
+        }
     }
 });
