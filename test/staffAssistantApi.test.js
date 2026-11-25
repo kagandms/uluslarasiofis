@@ -9,6 +9,7 @@ import {
     STAFF_ASSISTANT_RATE_LIMIT
 } from '../src/server/security/application-rate-limits.js';
 import { hashRateLimitIdentity } from '../src/server/security/requestRateLimit.js';
+import { STAFF_ASSISTANT_MODEL_DEFAULT } from '../src/server/services/chatbotModel.js';
 import worker from '../src/server/worker.js';
 import { validateStaffAssistantResponse } from '../src/shared/staff-assistant-contract.js';
 import { applyAllMigrations } from './helpers/apply-migrations.js';
@@ -907,4 +908,24 @@ test('POST /api/staff/assistant enforces per-staff rate limits (429) and logs no
 
     const dailyLimited = await worker.fetch(createAssistantRequest({ message: 'Belgeler ekranını aç' }), environment, {});
     assert.equal(dailyLimited.status, 429);
+});
+
+test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Llama 3.3) without chat_template_kwargs even when CHATBOT_MODEL is set', async () => {
+    const { fakeAi, environment } = await createFixture({
+        aiScript: {
+            tool_calls: [{ name: 'navigate', arguments: { view: 'applications' } }]
+        }
+    });
+    environment.CHATBOT_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+    const response = await worker.fetch(createAssistantRequest({ message: 'ekrana geçelim mi' }), environment, {});
+    const payload = validateStaffAssistantResponse(await response.json());
+
+    assert.equal(response.status, 200);
+    assert.equal(payload.state, 'understood');
+    assert.deepEqual(payload.action, { type: 'navigate', view: 'applications' });
+    assert.equal(fakeAi.callCount, 1);
+    assert.equal(STAFF_ASSISTANT_MODEL_DEFAULT, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+    assert.equal(fakeAi.calls[0].model, STAFF_ASSISTANT_MODEL_DEFAULT);
+    assert.equal(Object.hasOwn(fakeAi.calls[0].input, 'chat_template_kwargs'), false);
 });

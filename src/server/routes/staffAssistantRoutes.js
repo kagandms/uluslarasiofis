@@ -22,7 +22,7 @@ import {
     STAFF_ASSISTANT_RATE_LIMIT
 } from '../security/application-rate-limits.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
-import { createChatModel } from '../services/chatbotModel.js';
+import { STAFF_ASSISTANT_MODEL_DEFAULT, createChatModel } from '../services/chatbotModel.js';
 import { createRepositories, requireMethod, requireSameOrigin } from './shared.js';
 
 const STAFF_ASSISTANT_BODY_MAX_BYTES = 4096;
@@ -131,7 +131,9 @@ export async function handleStaffAssistant(request, environment, requestId) {
         let selected = parseStaffIntent(validatedRequest.message);
 
         if (!selected) {
+            // Staff assistant stays on Llama until it has its own evaluation; also ignores CHATBOT_MODEL for now.
             const model = createChatModel(environment, {
+                model: STAFF_ASSISTANT_MODEL_DEFAULT,
                 timeoutMs: STAFF_ASSISTANT_MODEL_TIMEOUT_MS,
                 maxOutputTokens: STAFF_ASSISTANT_MODEL_MAX_OUTPUT_TOKENS
             });

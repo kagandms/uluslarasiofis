@@ -1,8 +1,13 @@
 import { CHATBOT_TOOLS } from '../domain/chatbotTools.js';
 import { ApiError } from '../domain/errors.js';
 
-// @cf/meta/llama-3.3-70b-instruct-fp8-fast: checked 2026-11-19, unverified against the live Cloudflare catalog.
-export const CHATBOT_MODEL_DEFAULT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// @cf/google/gemma-4-26b-a4b-it: checked 2026-11-25 against the live Cloudflare catalog (wrangler ai models list).
+// Local eval (2026-11-25, real Workers AI binding, thinking OFF): 609-case packs 98.2/97.6/97.2/100% (0 safety/doc errors)
+// and 340-case adversarial 84.7% vs Llama 73.2%; 0 fallbacks, p95 ~3 s (Llama 18, p95 ~12 s), $0.10/$0.30 vs $0.293/$2.253 per 1M.
+// Thinking is switched off for this model family through MODEL_PAYLOAD_EXTRAS below.
+export const CHATBOT_MODEL_DEFAULT = '@cf/google/gemma-4-26b-a4b-it';
+// Staff assistant stays on Llama until it has its own evaluation pack (tool calling on Gemma is untested there).
+export const STAFF_ASSISTANT_MODEL_DEFAULT = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 export const CHATBOT_MODEL_TIMEOUT_MS = 12_000;
 export const CHATBOT_MODEL_MAX_OUTPUT_TOKENS = 512;
 
@@ -206,13 +211,15 @@ function normalizeModelResponse(raw, registeredToolNames = REGISTERED_TOOL_NAMES
 /**
  * Creates a swappable model adapter backed by the Cloudflare Workers AI binding.
  * @param {object} environment Worker bindings containing `AI` and optional `CHATBOT_MODEL`.
- * @param {{timeoutMs?: number, maxOutputTokens?: number}} [options] Adapter bounds.
+ * @param {{timeoutMs?: number, maxOutputTokens?: number, model?: string}} [options] Adapter bounds and optional model override.
  * @returns {{provider: string, model: string, complete: (input: {messages: Array<object>, tools?: Array<object>, signal?: AbortSignal}) => Promise<{text: string|null, toolCalls: Array<{name: string, arguments: object}>}>}} Model adapter.
  */
 export function createChatModel(environment, options = {}) {
+    const optionModel = typeof options?.model === 'string'
+        ? options.model.trim() : '';
     const configuredModel = typeof environment?.CHATBOT_MODEL === 'string'
         ? environment.CHATBOT_MODEL.trim() : '';
-    const model = configuredModel || CHATBOT_MODEL_DEFAULT;
+    const model = optionModel || configuredModel || CHATBOT_MODEL_DEFAULT;
     const modelPayloadExtras = Object.entries(MODEL_PAYLOAD_EXTRAS)
         .find(([prefix]) => model.startsWith(prefix))?.[1] ?? null;
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0

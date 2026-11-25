@@ -5,6 +5,7 @@ import {
     CHATBOT_MODEL_DEFAULT,
     CHATBOT_MODEL_MAX_OUTPUT_TOKENS,
     CHATBOT_MODEL_TIMEOUT_MS,
+    STAFF_ASSISTANT_MODEL_DEFAULT,
     createChatModel
 } from '../src/server/services/chatbotModel.js';
 import { createFakeAiBinding } from './helpers/fakeAiBinding.js';
@@ -17,6 +18,7 @@ test('createChatModel returns text reply and passes bounded payload without stre
     const result = await model.complete({ messages });
 
     assert.equal(model.provider, 'workers-ai');
+    assert.equal(CHATBOT_MODEL_DEFAULT, '@cf/google/gemma-4-26b-a4b-it');
     assert.equal(model.model, CHATBOT_MODEL_DEFAULT);
     assert.deepEqual(result, {
         text: 'Başvurunuzu ana sayfadan başlatabilirsiniz.',
@@ -24,6 +26,7 @@ test('createChatModel returns text reply and passes bounded payload without stre
     });
     assert.equal(fakeAi.callCount, 1);
     assert.equal(fakeAi.calls[0].model, CHATBOT_MODEL_DEFAULT);
+    assert.strictEqual(fakeAi.calls[0].input.chat_template_kwargs?.enable_thinking, false);
     assert.equal(fakeAi.calls[0].input.stream, false);
     assert.equal(fakeAi.calls[0].input.max_tokens, CHATBOT_MODEL_MAX_OUTPUT_TOKENS);
     assert.deepEqual(fakeAi.calls[0].input.messages, messages);
@@ -39,6 +42,30 @@ test('CHATBOT_MODEL environment variable overrides CHATBOT_MODEL_DEFAULT', async
 
     assert.equal(model.model, customModel);
     assert.equal(fakeAi.calls[0].model, customModel);
+});
+
+test('options.model overrides CHATBOT_MODEL and CHATBOT_MODEL_DEFAULT, and blank options.model falls back', async () => {
+    const fakeAi = createFakeAiBinding([{ response: 'Llama reply' }, { response: 'Qwen reply' }]);
+    const envModel = '@cf/qwen/qwen2.5-72b-instruct';
+
+    const overrideModel = createChatModel(
+        { AI: fakeAi, CHATBOT_MODEL: envModel },
+        { model: `  ${STAFF_ASSISTANT_MODEL_DEFAULT}  ` }
+    );
+    await overrideModel.complete({ messages: [{ role: 'user', content: 'Hi' }] });
+
+    assert.equal(overrideModel.model, STAFF_ASSISTANT_MODEL_DEFAULT);
+    assert.equal(fakeAi.calls[0].model, STAFF_ASSISTANT_MODEL_DEFAULT);
+    assert.equal(Object.hasOwn(fakeAi.calls[0].input, 'chat_template_kwargs'), false);
+
+    const blankOverrideModel = createChatModel(
+        { AI: fakeAi, CHATBOT_MODEL: envModel },
+        { model: '   ' }
+    );
+    await blankOverrideModel.complete({ messages: [{ role: 'user', content: 'Hi' }] });
+
+    assert.equal(blankOverrideModel.model, envModel);
+    assert.equal(fakeAi.calls[1].model, envModel);
 });
 
 test('createChatModel parses tool_calls with object and JSON-string arguments and strips tool executors', async () => {
@@ -386,8 +413,8 @@ test('non-gemma models and non-prefix gemma-4 substrings do not receive chat_tem
     const messages = [{ role: 'user', content: 'Merhaba' }];
 
     for (const env of [
-        { AI: { run: recorder }, CHATBOT_MODEL: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
-        { AI: { run: recorder } },
+        { AI: { run: recorder }, CHATBOT_MODEL: STAFF_ASSISTANT_MODEL_DEFAULT },
+        { AI: { run: recorder }, CHATBOT_MODEL: '@cf/qwen/qwen2.5-72b-instruct' },
         { AI: { run: recorder }, CHATBOT_MODEL: 'x/@cf/google/gemma-4' }
     ]) {
         const model = createChatModel(env);
