@@ -151,17 +151,66 @@ test('mount fetches initial new count once for home badge and renders fixture li
     assert.equal(cards.length, 2);
     assert.equal(root.querySelector('script, b'), null);
 
-    // First card has email -> tel:, wa.me/<digits>, and mailto:
+    // First card has email -> tel:, wa.me/<digits>?text=..., and mailto:
     assert.match(cards[0].textContent, /Ayşe Demir/);
     assert.match(cards[0].textContent, /Öğrenci belgesi e-Devlet üzerinden kabul ediliyor mu\?/);
     assert.equal(cards[0].querySelector('a.staff-inquiry-tel')?.getAttribute('href'), 'tel:+905051234567');
-    assert.equal(cards[0].querySelector('a.staff-inquiry-whatsapp')?.getAttribute('href'), 'https://wa.me/905051234567');
+    const waHref0 = cards[0].querySelector('a.staff-inquiry-whatsapp')?.getAttribute('href') || '';
+    assert.ok(waHref0.startsWith('https://wa.me/905051234567?text='));
+    assert.equal(
+        new URL(waHref0).searchParams.get('text'),
+        "Merhaba, İstanbul Topkapı Üniversitesi Uluslararası Ofisi'nden yazıyorum. Gördüğümüz üzere portalımız üzerinden bize şu mesajı göndermişsiniz:\n«Öğrenci belgesi e-Devlet üzerinden kabul ediliyor mu?»\n\n\n\nAnlayışınız için teşekkür ederiz."
+    );
     assert.equal(cards[0].querySelector('a.staff-inquiry-email')?.getAttribute('href'), 'mailto:ayse@example.edu');
 
     // Second card has email: null -> no mailto link, XSS text rendered safely as plain text.
     assert.match(cards[1].querySelector('.staff-inquiry-name').textContent, /<b>John<\/b> Doe/);
-    assert.equal(cards[1].querySelector('a.staff-inquiry-whatsapp')?.getAttribute('href'), 'https://wa.me/905329876543');
+    const waHref1 = cards[1].querySelector('a.staff-inquiry-whatsapp')?.getAttribute('href') || '';
+    assert.ok(waHref1.startsWith('https://wa.me/905329876543?text='));
+    assert.equal(
+        new URL(waHref1).searchParams.get('text'),
+        'Hello, I am writing from the International Office of Istanbul Topkapı University. As we can see, you sent us the following message through our portal:\n“<script>alert(1)</script>Health insurance question.”\n\n\n\nThank you for your understanding.'
+    );
     assert.equal(cards[1].querySelector('a[href^="mailto:"]'), null);
+});
+
+test('card WhatsApp href decodes to TR draft for TR inquiry and EN draft for inquiry without language', async (context) => {
+    const { root } = createStaffDom(context);
+    const items = [
+        {
+            ...NEW_ITEMS[0],
+            id: 'inq-tr',
+            language: 'tr',
+            message: 'Kayıt tarihleri nedir?'
+        },
+        {
+            ...NEW_ITEMS[1],
+            id: 'inq-no-lang',
+            language: null,
+            message: 'When does registration open?'
+        }
+    ];
+
+    const controller = mountInquiryManager(root, {
+        fetcher: async () => createJsonResponse({
+            items,
+            counts: { new: items.length, answered: 0 }
+        })
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    const trHref = root.querySelector('.staff-inquiry-card[data-inquiry-id="inq-tr"] a.staff-inquiry-whatsapp')?.getAttribute('href') || '';
+    assert.equal(
+        new URL(trHref).searchParams.get('text'),
+        "Merhaba, İstanbul Topkapı Üniversitesi Uluslararası Ofisi'nden yazıyorum. Gördüğümüz üzere portalımız üzerinden bize şu mesajı göndermişsiniz:\n«Kayıt tarihleri nedir?»\n\n\n\nAnlayışınız için teşekkür ederiz."
+    );
+
+    const noLangHref = root.querySelector('.staff-inquiry-card[data-inquiry-id="inq-no-lang"] a.staff-inquiry-whatsapp')?.getAttribute('href') || '';
+    assert.equal(
+        new URL(noLangHref).searchParams.get('text'),
+        'Hello, I am writing from the International Office of Istanbul Topkapı University. As we can see, you sent us the following message through our portal:\n“When does registration open?”\n\n\n\nThank you for your understanding.'
+    );
 });
 
 test('Cevaplandı and Yeniye al buttons send contract PATCH and update counts and home badge', async (context) => {
@@ -329,4 +378,136 @@ test('mailto link encodes valid local-part and renders unsafe emails as plain te
         assert.ok(plainEmail, `Plain text email span must render for ${entry.email}`);
         assert.equal(plainEmail.textContent, entry.email);
     }
+});
+
+test('copy phone button renders only when phone has digits, copies normalized number via Clipboard API, and resets after 2 seconds', async (context) => {
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    const { dom, root } = createStaffDom(context);
+    const copiedValues = [];
+    const toasts = [];
+
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+            writeText: async (text) => {
+                copiedValues.push(text);
+            }
+        }
+    });
+    dom.window.showToast = (message, type) => {
+        toasts.push({ message, type });
+    };
+
+    const items = [
+        {
+            ...NEW_ITEMS[0],
+            id: 'inq-plus',
+            phone: '+90 505 123 45 67'
+        },
+        {
+            ...NEW_ITEMS[1],
+            id: 'inq-no-plus',
+            first_name: '',
+            last_name: '',
+            phone: '90 532 987 65 43'
+        },
+        {
+            ...NEW_ITEMS[0],
+            id: 'inq-no-phone',
+            phone: ''
+        }
+    ];
+
+    const controller = mountInquiryManager(root, {
+        fetcher: async () => createJsonResponse({
+            items,
+            counts: { new: items.length, answered: 0 }
+        })
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    const plusCard = root.querySelector('.staff-inquiry-card[data-inquiry-id="inq-plus"]');
+    const noPlusCard = root.querySelector('.staff-inquiry-card[data-inquiry-id="inq-no-plus"]');
+    const noPhoneCard = root.querySelector('.staff-inquiry-card[data-inquiry-id="inq-no-phone"]');
+
+    assert.equal(noPhoneCard.querySelector('button.staff-inquiry-copy-phone'), null);
+
+    const plusButton = plusCard.querySelector('button.staff-inquiry-copy-phone');
+    assert.ok(plusButton);
+    assert.equal(plusButton.type, 'button');
+    assert.equal(plusButton.textContent, 'Numarayı kopyala');
+    assert.equal(plusButton.getAttribute('aria-label'), 'Ayşe Demir numarasını kopyala');
+
+    const noPlusButton = noPlusCard.querySelector('button.staff-inquiry-copy-phone');
+    assert.ok(noPlusButton);
+    assert.equal(noPlusButton.getAttribute('aria-label'), 'Numarayı kopyala');
+
+    plusButton.click();
+    await flushPromises();
+    assert.deepEqual(copiedValues, ['+905051234567']);
+    assert.equal(plusButton.textContent, 'Kopyalandı');
+    assert.equal(plusCard.querySelector('.staff-inquiry-copy-status[aria-live="polite"]')?.textContent, 'Numara kopyalandı.');
+    assert.deepEqual(toasts, [{ message: 'Numara kopyalandı.', type: 'success' }]);
+
+    context.mock.timers.tick(2000);
+    assert.equal(plusButton.textContent, 'Numarayı kopyala');
+    assert.equal(plusCard.querySelector('.staff-inquiry-copy-status')?.textContent, '');
+
+    noPlusButton.click();
+    await flushPromises();
+    assert.deepEqual(copiedValues, ['+905051234567', '905329876543']);
+});
+
+test('copy phone button falls back to document.execCommand when Clipboard rejects and shows failure feedback when both fail', async (context) => {
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    const { dom, document, root } = createStaffDom(context);
+    const toasts = [];
+    let execCommandResult = true;
+    const execCalls = [];
+
+    Object.defineProperty(dom.window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+            writeText: async () => {
+                throw new Error('Permission denied');
+            }
+        }
+    });
+    document.execCommand = (command) => {
+        execCalls.push(command);
+        return execCommandResult;
+    };
+    dom.window.showToast = (message, type) => {
+        toasts.push({ message, type });
+    };
+
+    const controller = mountInquiryManager(root, {
+        fetcher: async () => createJsonResponse({
+            items: [NEW_ITEMS[0]],
+            counts: { new: 1, answered: 0 }
+        })
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    const copyButton = root.querySelector('button.staff-inquiry-copy-phone');
+    const copyStatus = root.querySelector('.staff-inquiry-copy-status');
+
+    copyButton.click();
+    await flushPromises();
+    assert.deepEqual(execCalls, ['copy']);
+    assert.equal(copyButton.textContent, 'Kopyalandı');
+    assert.equal(copyStatus.textContent, 'Numara kopyalandı.');
+
+    context.mock.timers.tick(2000);
+    assert.equal(copyButton.textContent, 'Numarayı kopyala');
+
+    execCommandResult = false;
+    copyButton.click();
+    await flushPromises();
+    assert.equal(copyButton.textContent, 'Kopyalanamadı');
+    assert.equal(copyStatus.textContent, 'Numara kopyalanamadı.');
+    assert.equal(toasts.at(-1)?.type, 'error');
+    assert.equal(toasts.at(-1)?.message, 'Numara kopyalanamadı.');
 });

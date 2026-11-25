@@ -246,6 +246,68 @@ body.dark-mode .staff-inquiry-whatsapp {
     color: #b7e4c7;
 }
 
+.staff-inquiry-copy-phone {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.35rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--bg-color);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.86rem;
+    font-weight: 650;
+    line-height: 1.2;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.staff-inquiry-copy-phone:hover {
+    border-color: var(--accent);
+}
+
+.staff-inquiry-copy-phone:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.staff-inquiry-copy-phone.is-copied {
+    border-color: #1c7c45;
+    background: #eff9f3;
+    color: #145a32;
+}
+
+.staff-inquiry-copy-phone.is-copy-failed {
+    border-color: #e8b4b4;
+    background: #fdf2f2;
+    color: #9b1c1c;
+}
+
+body.dark-mode .staff-inquiry-copy-phone.is-copied {
+    border-color: #2d6544;
+    background: #173326;
+    color: #b7e4c7;
+}
+
+body.dark-mode .staff-inquiry-copy-phone.is-copy-failed {
+    border-color: #70404c;
+    background: #3d222a;
+    color: #f2bac5;
+}
+
+.staff-inquiry-copy-status {
+    align-self: center;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.staff-inquiry-copy-status:empty {
+    display: none;
+}
+
 .staff-inquiry-handled {
     margin: 0;
     color: var(--text-secondary);
