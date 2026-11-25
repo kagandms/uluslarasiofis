@@ -14,9 +14,12 @@ const TILE_MAX_UPSCALE = 3;
 const TILE_BORDER_MARGIN_RATIO = 0.02;
 const TILE_DUPLICATE_IOU_THRESHOLD = 0.3;
 const ROTATION_SEARCH_ANGLES = [90, 270, 180];
+const UPRIGHT_SCORE_TOLERANCE = 0.1;
 // Toplam dedektör çağrısı üst sınırı:
-// Tam görüntüde en fazla 4 çağrı (1 dikey + 3 döndürülmüş [90°, 270°, 180°]);
-// karo yedek aramasında dikeyde en fazla 13 karo (2x2 + 3x3) ve döndürülmüşlerde en fazla 3 x 13 karo.
+// - tryRotations=false: en fazla 14 çağrı (1 tam dikey + en fazla 13 dikey karo [2x2 + 3x3]).
+// - tryRotations=true: tam görüntüde her zaman en fazla 4 çağrı (0°, 90°, 270°, 180°);
+//   hiçbir açıda tam görüntüde yüz bulunamazsa karo yedek aramasında en fazla 13 dikey + 3 x 13 döndürülmüş karo
+//   olmak üzere toplam en fazla 56 çağrı (4 + 13 + 39).
 
 function isValidBoundingBox(box) {
     return Boolean(
@@ -461,9 +464,11 @@ function extractValidFaces(faces) {
         if (!isValidBoundingBox(box)) {
             continue;
         }
+        const area = box.width * box.height;
         valid.push({
             box,
-            score: Number.isFinite(face?.score) ? face.score : 0
+            area,
+            score: Number.isFinite(face?.score) ? face.score : area
         });
     }
     return valid;
@@ -504,104 +509,164 @@ function resolveRotatedDescriptor(created, degrees, imgWidth, imgHeight) {
     };
 }
 
-/**
- * Dikey arama yüz bulamadığında görüntüyü 90°, 270°, 180° döndürerek yüz arar.
- * Tam görüntü araması üç açının tamamında çalıştırılıp en yüksek skora (eşitlikte büyük alana)
- * sahip açıyı seçer; hiçbiri bulamazsa karo yedek araması ilk geçerli açıda durur.
- */
-async function detectRotatedFaceCrop(detector, source, imgWidth, imgHeight, aspectRatio, options) {
-    const customRotator = typeof options?.createRotatedSource === 'function' ? options.createRotatedSource : null;
-    if (!customRotator && !canCreateDefaultTileSource()) {
-        return { error: 'no-face' };
+function summarizeOrientationCandidate(degrees, width, height, validFaces) {
+    if (validFaces.length === 0) {
+        return null;
     }
+
+    let bestScore = validFaces[0].score;
+    let largestArea = validFaces[0].area;
+    const boxes = [];
+
+    for (const face of validFaces) {
+        boxes.push(face.box);
+        if (face.score > bestScore) {
+            bestScore = face.score;
+        }
+        if (face.area > largestArea) {
+            largestArea = face.area;
+        }
+    }
+
+    return { degrees, width, height, boxes, bestScore, largestArea };
+}
+
+function pickBestRotatedCandidate(rotatedCandidates) {
+    let best = null;
+    for (const candidate of rotatedCandidates) {
+        if (
+            !best ||
+            candidate.bestScore > best.bestScore ||
+            (candidate.bestScore === best.bestScore && candidate.largestArea > best.largestArea)
+        ) {
+            best = candidate;
+        }
+    }
+    return best;
+}
+
+function selectWinningOrientationCandidate(uprightCandidate, rotatedCandidates) {
+    const bestRotated = pickBestRotatedCandidate(rotatedCandidates);
+    if (!uprightCandidate) {
+        return bestRotated;
+    }
+    if (!bestRotated) {
+        return uprightCandidate;
+    }
+
+    // Eşitlikte veya 0° skoru en iyi skora %10 yakınındayken dikey (0°) yönü koru.
+    const uprightThreshold = bestRotated.bestScore * (1 - UPRIGHT_SCORE_TOLERANCE) - 1e-12;
+    if (uprightCandidate.bestScore >= bestRotated.bestScore || uprightCandidate.bestScore >= uprightThreshold) {
+        return uprightCandidate;
+    }
+    return bestRotated;
+}
+
+function formatOrientationCropResult(boxes, width, height, aspectRatio, degrees) {
+    const cropOrError = resolveCropFromBoxes(boxes, width, height, aspectRatio);
+    if (cropOrError.error) {
+        return cropOrError;
+    }
+    return degrees === 0 ? cropOrError : { ...cropOrError, rotation: degrees };
+}
+
+/**
+ * `tryRotations` etkinken dört yönün (0°, 90°, 270°, 180°) tamamında tam görüntü algılaması
+ * çalıştırır; en iyi skora sahip yönü seçer (eşitlikte veya %10 yakında 0° tercih edilir).
+ * Dört yönün hiçbiri tam görüntüde yüz bulamazsa 0° ardından döndürülmüş yönlerde karo yedek
+ * aramasına geçer ve ilk geçerli bulguda durur.
+ */
+async function detectFaceCropWithRotations(
+    detector,
+    source,
+    imgWidth,
+    imgHeight,
+    aspectRatio,
+    options,
+    uprightValidFaces
+) {
+    const customRotator = typeof options?.createRotatedSource === 'function' ? options.createRotatedSource : null;
+    const canRotate = Boolean(customRotator || canCreateDefaultTileSource());
 
     const ownedCanvases = [];
     const rotatedEntries = [];
 
     try {
-        let bestFullCandidate = null;
+        const uprightCandidate = summarizeOrientationCandidate(0, imgWidth, imgHeight, uprightValidFaces);
+        const rotatedCandidates = [];
 
-        for (const degrees of ROTATION_SEARCH_ANGLES) {
-            let descriptor = null;
-            if (customRotator) {
-                const created = await customRotator(source, degrees);
-                descriptor = resolveRotatedDescriptor(created, degrees, imgWidth, imgHeight);
-            } else {
-                const canvas = createDefaultRotatedCanvas(source, degrees);
-                if (canvas) {
-                    ownedCanvases.push(canvas);
-                    descriptor = resolveRotatedDescriptor(canvas, degrees, imgWidth, imgHeight);
+        if (canRotate) {
+            for (const degrees of ROTATION_SEARCH_ANGLES) {
+                let descriptor = null;
+                if (customRotator) {
+                    const created = await customRotator(source, degrees);
+                    descriptor = resolveRotatedDescriptor(created, degrees, imgWidth, imgHeight);
+                } else {
+                    const canvas = createDefaultRotatedCanvas(source, degrees);
+                    if (canvas) {
+                        ownedCanvases.push(canvas);
+                        descriptor = resolveRotatedDescriptor(canvas, degrees, imgWidth, imgHeight);
+                    }
                 }
-            }
 
-            if (!descriptor) {
-                continue;
-            }
-            rotatedEntries.push(descriptor);
+                if (!descriptor) {
+                    continue;
+                }
+                rotatedEntries.push(descriptor);
 
-            const faces = await detector.detect(descriptor.source);
-            if (!Array.isArray(faces)) {
-                return { error: 'unavailable' };
-            }
+                const faces = await detector.detect(descriptor.source);
+                if (!Array.isArray(faces)) {
+                    return { error: 'unavailable' };
+                }
 
-            const validFaces = extractValidFaces(faces);
-            if (validFaces.length === 0) {
-                continue;
-            }
-
-            const bestScore = Math.max(...validFaces.map((f) => f.score));
-            const largestArea = Math.max(...validFaces.map((f) => f.box.width * f.box.height));
-
-            if (
-                !bestFullCandidate ||
-                bestScore > bestFullCandidate.bestScore ||
-                (bestScore === bestFullCandidate.bestScore && largestArea > bestFullCandidate.largestArea)
-            ) {
-                bestFullCandidate = {
-                    descriptor,
-                    boxes: validFaces.map((f) => f.box),
-                    bestScore,
-                    largestArea
-                };
+                const candidate = summarizeOrientationCandidate(
+                    descriptor.degrees,
+                    descriptor.width,
+                    descriptor.height,
+                    extractValidFaces(faces)
+                );
+                if (candidate) {
+                    rotatedCandidates.push(candidate);
+                }
             }
         }
 
-        if (bestFullCandidate) {
-            const cropOrError = resolveCropFromBoxes(
-                bestFullCandidate.boxes,
-                bestFullCandidate.descriptor.width,
-                bestFullCandidate.descriptor.height,
-                aspectRatio
+        const winner = selectWinningOrientationCandidate(uprightCandidate, rotatedCandidates);
+        if (winner) {
+            return formatOrientationCropResult(
+                winner.boxes,
+                winner.width,
+                winner.height,
+                aspectRatio,
+                winner.degrees
             );
-            if (cropOrError.error) {
-                return cropOrError;
-            }
-            return { ...cropOrError, rotation: bestFullCandidate.descriptor.degrees };
         }
 
         // Tam görüntüde hiçbir açı yüz vermediyse karo yedek aramasına geç ve ilk bulguda dur.
-        for (const descriptor of rotatedEntries) {
+        const tileEntries = [
+            { degrees: 0, source, width: imgWidth, height: imgHeight },
+            ...rotatedEntries
+        ];
+
+        for (const entry of tileEntries) {
             const tileResult = await detectFacesInTiles(
                 detector,
-                descriptor.source,
-                descriptor.width,
-                descriptor.height,
+                entry.source,
+                entry.width,
+                entry.height,
                 options
             );
             if (tileResult.error) {
                 return { error: tileResult.error };
             }
             if (tileResult.boxes.length > 0) {
-                const cropOrError = resolveCropFromBoxes(
+                return formatOrientationCropResult(
                     tileResult.boxes,
-                    descriptor.width,
-                    descriptor.height,
-                    aspectRatio
+                    entry.width,
+                    entry.height,
+                    aspectRatio,
+                    entry.degrees
                 );
-                if (cropOrError.error) {
-                    return cropOrError;
-                }
-                return { ...cropOrError, rotation: descriptor.degrees };
             }
         }
 
@@ -654,7 +719,21 @@ export async function detectFaceCrop(imageDataUrl, aspectRatio, options = {}) {
             return { error: 'unavailable' };
         }
 
-        let validBoxes = extractValidFaces(faces).map((f) => f.box);
+        const uprightValidFaces = extractValidFaces(faces);
+
+        if (options?.tryRotations === true) {
+            return await detectFaceCropWithRotations(
+                detector,
+                loaded.source,
+                imgWidth,
+                imgHeight,
+                aspectRatio,
+                options,
+                uprightValidFaces
+            );
+        }
+
+        let validBoxes = uprightValidFaces.map((f) => f.box);
 
         if (validBoxes.length === 0) {
             const tileResult = await detectFacesInTiles(detector, loaded.source, imgWidth, imgHeight, options);
@@ -666,10 +745,6 @@ export async function detectFaceCrop(imageDataUrl, aspectRatio, options = {}) {
 
         if (validBoxes.length > 0) {
             return resolveCropFromBoxes(validBoxes, imgWidth, imgHeight, aspectRatio);
-        }
-
-        if (options?.tryRotations === true) {
-            return await detectRotatedFaceCrop(detector, loaded.source, imgWidth, imgHeight, aspectRatio, options);
         }
 
         return { error: 'no-face' };
