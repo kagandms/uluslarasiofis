@@ -10,6 +10,16 @@ const GENERIC_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen 
 const REGISTERED_TOOL_NAMES = Object.freeze(new Set(Object.keys(CHATBOT_TOOLS)));
 const PYTHON_TAG_PREFIX = '<|python_tag|>';
 
+// Thinking/reasoning models burn the output token budget and 12 s timeout on
+// internal reasoning by default; this table disables thinking per model-id prefix.
+// To add a model family, verify the parameter is supported via
+// `wrangler ai models schema <id>` before adding its prefix entry here.
+const MODEL_PAYLOAD_EXTRAS = Object.freeze({
+    '@cf/google/gemma-4': Object.freeze({
+        chat_template_kwargs: Object.freeze({ enable_thinking: false })
+    })
+});
+
 function isPlainObject(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);
@@ -203,6 +213,8 @@ export function createChatModel(environment, options = {}) {
     const configuredModel = typeof environment?.CHATBOT_MODEL === 'string'
         ? environment.CHATBOT_MODEL.trim() : '';
     const model = configuredModel || CHATBOT_MODEL_DEFAULT;
+    const modelPayloadExtras = Object.entries(MODEL_PAYLOAD_EXTRAS)
+        .find(([prefix]) => model.startsWith(prefix))?.[1] ?? null;
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
         ? options.timeoutMs : CHATBOT_MODEL_TIMEOUT_MS;
     const maxOutputTokens = Number.isSafeInteger(options.maxOutputTokens) && options.maxOutputTokens > 0
@@ -223,6 +235,7 @@ export function createChatModel(environment, options = {}) {
             const registeredToolNames = buildRegisteredToolNameSet(tools);
             const formattedTools = formatTools(tools);
             const payload = {
+                ...(modelPayloadExtras ?? {}),
                 messages: normalizedMessages,
                 max_tokens: maxOutputTokens,
                 stream: false,

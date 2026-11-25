@@ -331,3 +331,76 @@ test('createChatModel drops unknown tool names from text JSON and preserves non-
     const plainJson = await model.complete({ messages: [{ role: 'user', content: 'Merhaba' }] });
     assert.deepEqual(plainJson, { text: nonToolJson, toolCalls: [] });
 });
+
+test('gemma-4 models disable thinking via chat_template_kwargs and still pass tools', async () => {
+    const recorded = [];
+    const recorder = async (modelId, input) => {
+        recorded.push({ model: modelId, input: structuredClone(input) });
+        return { response: 'Merhaba.' };
+    };
+    const messages = [{ role: 'user', content: 'Merhaba' }];
+
+    const gemmaModel = createChatModel({
+        AI: { run: recorder },
+        CHATBOT_MODEL: '@cf/google/gemma-4-26b-a4b-it'
+    });
+    await gemmaModel.complete({ messages });
+
+    assert.equal(recorded[0].model, '@cf/google/gemma-4-26b-a4b-it');
+    assert.strictEqual(recorded[0].input.chat_template_kwargs.enable_thinking, false);
+    assert.deepEqual(recorded[0].input, {
+        chat_template_kwargs: { enable_thinking: false },
+        messages,
+        max_tokens: 512,
+        stream: false
+    });
+
+    const tools = [
+        {
+            name: 'lookup_knowledge',
+            description: 'Read curated knowledge.',
+            parameters: { type: 'object', properties: { topic: { type: 'string' } }, required: ['topic'] }
+        }
+    ];
+    await gemmaModel.complete({ messages, tools });
+
+    assert.strictEqual(recorded[1].input.chat_template_kwargs.enable_thinking, false);
+    assert.deepEqual(recorded[1].input.tools, [
+        {
+            type: 'function',
+            function: {
+                name: 'lookup_knowledge',
+                description: 'Read curated knowledge.',
+                parameters: { type: 'object', properties: { topic: { type: 'string' } }, required: ['topic'] }
+            }
+        }
+    ]);
+});
+
+test('non-gemma models and non-prefix gemma-4 substrings do not receive chat_template_kwargs', async () => {
+    const recorded = [];
+    const recorder = async (modelId, input) => {
+        recorded.push({ model: modelId, input: structuredClone(input) });
+        return { response: 'Merhaba.' };
+    };
+    const messages = [{ role: 'user', content: 'Merhaba' }];
+
+    for (const env of [
+        { AI: { run: recorder }, CHATBOT_MODEL: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+        { AI: { run: recorder } },
+        { AI: { run: recorder }, CHATBOT_MODEL: 'x/@cf/google/gemma-4' }
+    ]) {
+        const model = createChatModel(env);
+        await model.complete({ messages });
+    }
+
+    assert.equal(recorded.length, 3);
+    for (const call of recorded) {
+        assert.equal(Object.hasOwn(call.input, 'chat_template_kwargs'), false);
+        assert.deepEqual(call.input, {
+            messages,
+            max_tokens: 512,
+            stream: false
+        });
+    }
+});
