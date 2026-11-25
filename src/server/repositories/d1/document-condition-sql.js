@@ -5,7 +5,7 @@ const CONDITIONS = Object.freeze({
     renewal: "applications.application_type = 'renewal'",
     uets: "(applications.application_type = 'renewal' OR applications.application_route = 'transition') AND applications.is_under_18 IS NOT 1",
     address_utility_bill: `(applications.application_type = 'renewal' OR applications.application_route = 'transition' OR ${ACCOMMODATION_SQL} = 'undertaking')`,
-    host_spouse_undertaking: `${ACCOMMODATION_SQL} = 'undertaking' AND applications.host_is_married = 'yes'`,
+    host_spouse_undertaking: '0 = 1',
     minor_consent: 'applications.is_under_18 = 1',
     final_uets: "(applications.application_route <> 'transition' AND applications.application_type = 'renewal') OR (applications.application_route = 'transition' AND applications.fingerprint_status = 'registered' AND length(trim(COALESCE(applications.fingerprint_code, ''))) > 0)",
     host_population_record: `${ACCOMMODATION_SQL} = 'undertaking' AND applications.host_is_turkish = 'yes'`,

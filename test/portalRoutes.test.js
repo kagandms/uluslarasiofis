@@ -87,7 +87,7 @@ test('landing document guidance renders policy-derived titles and highlights the
     assert.doesNotMatch(root.textContent, /anne\/baba bilgileri pasaport veya kimlikten tespit edilemiyorsa/);
     assert.ok([...root.querySelectorAll('.public-document-badge')].some(({ textContent }) => textContent === '18 yaş altı'));
     assert.equal(root.querySelectorAll('.address-evidence-option').length, 6);
-    assert.equal(root.querySelectorAll('.address-evidence-supporting-docs li').length, 8);
+    assert.equal(root.querySelectorAll('.address-evidence-supporting-docs li').length, 7);
     const uetsCard = [...root.querySelectorAll('.public-document-card')]
         .find((card) => card.querySelector('h3')?.textContent === 'UETS belgesi');
     assert.ok(uetsCard);

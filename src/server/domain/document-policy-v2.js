@@ -106,7 +106,7 @@ function isPolicyApplicable(policy, applicationType, isUnder18, addressContext) 
     case 'registered_address': return ['renewal', 'transition'].includes(applicationType) || accommodation === 'residence_certificate';
     case 'under18': return isUnder18 && context.minor_parents_identified === 'no';
     case 'minor_optional_parent_documents': return isUnder18;
-    case 'host_spouse_undertaking': return accommodation === 'undertaking' && context.host_is_married === 'yes';
+    case 'host_spouse_undertaking': return false;
     case 'minor_consent': return isUnder18;
     case 'minor_family_evidence': return isUnder18
         && ['divorced', 'deceased', 'single_parent', 'absent'].includes(context.minor_family_status);
