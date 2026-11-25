@@ -1,4 +1,5 @@
 import { DOCUMENT_ANSWER_FIELDS } from '../../shared/document-conditions.js';
+import { searchTokens } from '../../shared/searchFold.js';
 import { ApiError, ApplicationConflictError } from '../domain/errors.js';
 import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { evaluateApplicationTransition, listApplicationStatusTransitions } from '../domain/applicationStateMachine.js';
@@ -257,6 +258,7 @@ export async function queryStaffApplications(request, environment) {
         submittedAtFrom: query.submittedAtFrom,
         submittedAtUntil: query.submittedAtUntil,
         searchPattern: query.searchTerm ? escapeLikeTerm(query.searchTerm) : null,
+        searchNameTokens: query.searchTerm ? searchTokens(query.searchTerm) : [],
         hasNote: query.hasNote,
         pageSize: query.pageSize,
         offset

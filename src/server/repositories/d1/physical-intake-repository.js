@@ -1,3 +1,6 @@
+import { searchTokens } from '../../../shared/searchFold.js';
+import { buildNameSearchClause, escapeLikeTerm } from './search-fold-sql.js';
+
 const INTAKE_COLUMNS = `id,student_number,first_name,last_name,passport_number,
     CASE WHEN application_route='transition' THEN 'transition' ELSE application_type END AS application_type,
     application_route,status,
@@ -16,10 +19,25 @@ function buildWhere(query) {
         bindings.push(...query.statuses);
     }
     if (query.q) {
-        clauses.push(`(student_number LIKE ? ESCAPE '\\' OR first_name LIKE ? ESCAPE '\\'
-            OR last_name LIKE ? ESCAPE '\\' OR tracking_reference LIKE ? ESCAPE '\\' OR passport_number LIKE ? ESCAPE '\\')`);
-        const term = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`;
-        bindings.push(term, term, term, term, term);
+        const term = escapeLikeTerm(query.q);
+        // Keep literal LIKE on the 3 code columns; fold only name columns (at most 9 bindings total, well under D1's 100-param limit).
+        const searchClauses = [
+            "student_number LIKE ? ESCAPE '\\'",
+            "tracking_reference LIKE ? ESCAPE '\\'",
+            "passport_number LIKE ? ESCAPE '\\'"
+        ];
+        const searchBindings = [term, term, term];
+        const nameClause = buildNameSearchClause({
+            firstNameColumn: 'first_name',
+            lastNameColumn: 'last_name',
+            tokens: searchTokens(query.q)
+        });
+        if (nameClause) {
+            searchClauses.push(`(${nameClause.sql})`);
+            searchBindings.push(...nameClause.bindings);
+        }
+        clauses.push(`(${searchClauses.join(' OR ')})`);
+        bindings.push(...searchBindings);
     }
     const deliveryDate = "coalesce(nullif(application_date, ''), substr(submitted_at, 1, 10))";
     if (query.fromDate) {
