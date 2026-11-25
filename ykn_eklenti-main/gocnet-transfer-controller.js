@@ -4,14 +4,17 @@ globalThis.__YOKSIS_GOCNET_TRANSFER_CONTROLLER_LOADED__ = true;
 
 const QUERY_LABEL = 'e-ikamet başvuru no';
 const MAX_PDF_BYTES = 9 * 1024 * 1024;
+const GOCNET_QUERY_TIMEOUT_MS = 12_000;
+const QUERY_DIALOG_SELECTOR = '[role="dialog"], [role="alertdialog"], .z-window-modal, .z-messagebox-window';
+const STUDENT_DATA_FILLED_HEADERS = Object.freeze([
+    'sorgulama başarılı (yöksis verileri doldurudu)',
+    'sorgulama başarılı (yöksis verileri dolduruldu)'
+]);
 const QUERY_RESULT_MESSAGES = Object.freeze({
     no_match: ['sorgu hatası', 'başvuru sorgulama başarısız!', 'hata kodu: veri bulunamadı', 'detay: kayıt bulunamadı'],
     existing_record: ['sorgulama başarılı (db kaydı yüklendi)', 'başvuru sorgulama başarılı.',
         'öğrenci demografik bilgileri ve daha önceden kaydedilmiş veriler veritabanından forma yüklendi.'],
-    student_data_filled: ['sorgulama başarılı (yöksis verileri dolduruldu)',
-        'başvuru sorgulama başarılı.',
-        'yöksis veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve form',
-        'otomatik dolduruldu.']
+    student_data_filled: STUDENT_DATA_FILLED_HEADERS
 });
 let queryInProgress = false;
 const transferContexts = new Map();
@@ -77,14 +80,26 @@ function findQueryControls(rootDocument) {
     return targets.length === 1 ? targets[0] : null;
 }
 
+function findVisibleQueryDialogs(rootDocument) {
+    const raw = [...rootDocument.querySelectorAll(QUERY_DIALOG_SELECTOR)].filter(isVisible);
+    return raw.filter((candidate) => !raw.some((other) => other !== candidate && other.contains(candidate)));
+}
+
 function hasVisibleDialog(rootDocument) {
-    return [...rootDocument.querySelectorAll('[role="dialog"], .z-window-modal')].some(isVisible);
+    return findVisibleQueryDialogs(rootDocument).length > 0;
+}
+
+function findDialogHeaderNode(dialog) {
+    return dialog?.querySelector('.z-window-header, .z-window-highlighted-header, .z-window-modal-header, .z-caption')
+        || dialog?.querySelector('h1, h2, h3, h4, h5')
+        || null;
 }
 
 function readSanitizedDialogHeader(dialog) {
-    const headerNode = dialog.querySelector('.z-window-header') || dialog.querySelector('h1, h2, h3, h4, h5');
+    const headerNode = findDialogHeaderNode(dialog);
     if (!headerNode) return '';
     return normalizeText(headerNode.textContent)
+        .replace(/20\d{2}-\d{2}-\d{5,8}|\b\d{5,}\b/g, '')
         .replace(/[^\p{L}\p{N} .,:\-!/()]/gu, '')
         .replace(/\s+/g, ' ')
         .trim()
@@ -92,27 +107,30 @@ function readSanitizedDialogHeader(dialog) {
         .trim();
 }
 
-function waitForQueryResult(rootDocument, applicationNumber, signal, timeoutMs) {
+function waitForQueryResult(rootDocument, applicationNumber, signal, timeoutMs = GOCNET_QUERY_TIMEOUT_MS) {
     return new Promise((resolve) => {
-        const Observer = rootDocument.defaultView?.MutationObserver;
+        const view = rootDocument?.defaultView;
+        const Observer = view?.MutationObserver;
         if (!Observer || !rootDocument.documentElement) {
             resolve(noteReason('bad_input'));
             return;
         }
+        const setTimer = view?.setTimeout ? view.setTimeout.bind(view) : setTimeout;
+        const clearTimer = view?.clearTimeout ? view.clearTimeout.bind(view) : clearTimeout;
         let settled = false;
         const observer = new Observer(check);
-        const timer = rootDocument.defaultView.setTimeout(() => finish(noteReason('form_result_timeout')), timeoutMs);
+        const timer = setTimer(() => finish(noteReason('form_result_timeout')), timeoutMs);
         const finish = (result) => {
             if (settled) return;
             settled = true;
             observer.disconnect();
-            rootDocument.defaultView.clearTimeout(timer);
+            clearTimer(timer);
             signal?.removeEventListener('abort', abort);
             resolve(result);
         };
         const abort = () => finish(noteReason('form_result_aborted'));
         function check() {
-            const dialogs = [...rootDocument.querySelectorAll('[role="dialog"], .z-window-modal')].filter(isVisible);
+            const dialogs = findVisibleQueryDialogs(rootDocument);
             if (!dialogs.length) return;
             const result = readGocnetQueryResult(rootDocument, applicationNumber);
             if (result !== 'unknown') {
@@ -127,6 +145,7 @@ function waitForQueryResult(rootDocument, applicationNumber, signal, timeoutMs) 
                 finish(noteReason('form_result_multiple_dialogs'));
                 return;
             }
+            if (!normalizeText(dialogs[0].textContent)) return;
             const header = readSanitizedDialogHeader(dialogs[0]);
             finish(noteReason(header ? `form_result_unrecognized: ${header}` : 'form_result_unrecognized'));
         }
@@ -137,25 +156,44 @@ function waitForQueryResult(rootDocument, applicationNumber, signal, timeoutMs) 
     });
 }
 
-/** Returns no_match only for the exact explicit YÖKSİS response; all other DOM states remain unknown. */
+function isStudentDataFilledResult(dialog, dialogText) {
+    const headerNode = findDialogHeaderNode(dialog);
+    const headerText = headerNode ? normalizeText(headerNode.textContent) : '';
+    if (headerNode) {
+        if (!STUDENT_DATA_FILLED_HEADERS.includes(headerText)) return false;
+    } else if (dialogText.includes('db kaydı yüklendi') || !STUDENT_DATA_FILLED_HEADERS.some((header) => dialogText.includes(header))) {
+        return false;
+    }
+    const messageNode = dialog?.querySelector('.z-messagebox');
+    const bodyText = messageNode
+        ? normalizeText(messageNode.textContent)
+        : (headerText ? normalizeText(dialogText.replace(headerText, ' ')) : dialogText);
+    if (!bodyText.includes('başvuru sorgulama başarılı')) return false;
+    return (bodyText.includes('veri') && bodyText.includes('doldur'))
+        || (bodyText.includes('veritabanından') && bodyText.includes('forma') && bodyText.includes('dolduru'));
+}
+
+/** Returns explicit YÖKSİS query states; unrecognized dialogs remain unknown. */
 function readGocnetQueryResult(rootDocument, applicationNumber) {
     if (!rootDocument || typeof applicationNumber !== 'string' || !isExactSearchField(rootDocument, applicationNumber)) {
         return 'unknown';
     }
-    const dialogs = [...rootDocument.querySelectorAll('[role="dialog"], .z-window-modal')]
-        .filter(isVisible);
+    const dialogs = findVisibleQueryDialogs(rootDocument);
     if (dialogs.length !== 1) return 'unknown';
-    const dialogText = normalizeText(dialogs[0].textContent);
-    return Object.entries(QUERY_RESULT_MESSAGES).find(([, messages]) => messages.every((message) => dialogText.includes(message)))?.[0]
-        || 'unknown';
+    const dialog = dialogs[0];
+    const dialogText = normalizeText(dialog.textContent);
+    if (QUERY_RESULT_MESSAGES.no_match.every((message) => dialogText.includes(message))) return 'no_match';
+    if (QUERY_RESULT_MESSAGES.existing_record.every((message) => dialogText.includes(message))) return 'existing_record';
+    return isStudentDataFilledResult(dialog, dialogText) ? 'student_data_filled' : 'unknown';
 }
 
 function acknowledgeGocnetQuery(rootDocument, applicationNumber, allowedStates = ['student_data_filled']) {
     if (!allowedStates.includes(readGocnetQueryResult(rootDocument, applicationNumber))) return false;
-    const dialogs = [...rootDocument.querySelectorAll('[role="dialog"], .z-window-modal')].filter(isVisible);
+    const dialogs = findVisibleQueryDialogs(rootDocument);
     if (dialogs.length !== 1) return false;
-    const buttons = [...dialogs[0].querySelectorAll('button.z-messagebox-button, button')]
-        .filter((button) => isVisible(button) && normalizeText(button.textContent) === 'tamam');
+    const rawButtons = [...dialogs[0].querySelectorAll('button.z-messagebox-button, button, input[type="button"], input[type="submit"], .z-button')]
+        .filter((button) => isVisible(button) && normalizeText(button.textContent || button.value) === 'tamam');
+    const buttons = rawButtons.filter((candidate) => !rawButtons.some((other) => other !== candidate && candidate.contains(other)));
     if (buttons.length !== 1) return false;
     buttons[0].click();
     return true;
@@ -184,15 +222,69 @@ function waitForTransferResult(rootDocument, readResult, timeoutMs = 30_000) {
     });
 }
 
+function validateGocnetPhoneNational(phoneNational) {
+    if (phoneNational === undefined || phoneNational === null
+        || (typeof phoneNational === 'string' && phoneNational.trim() === '')) {
+        return { valid: false, reason: 'phone_missing' };
+    }
+    if (typeof phoneNational !== 'string' || !/^\d{7,10}$/.test(phoneNational)) {
+        return { valid: false, reason: 'phone_invalid' };
+    }
+    return { valid: true, value: phoneNational };
+}
+
+async function writeAndVerifyGocnetPhone(rootDocument, phone, phoneNational, requestId) {
+    if (phone.value === phoneNational && /^\d{7,10}$/.test(phone.value)) {
+        return { verified: true };
+    }
+    if (typeof chrome !== 'undefined' && typeof chrome.runtime?.sendMessage === 'function'
+        && typeof requestId === 'string' && requestId.length > 0 && requestId.length <= 128) {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                action: 'YOKSIS_ZK_COMMAND',
+                command: { action: 'setGocnetPhone', phoneNational, requestId }
+            });
+            const currentPhone = findGocnetPhoneInput(rootDocument);
+            if (response?.verified === true && currentPhone?.value === phoneNational
+                && /^\d{7,10}$/.test(currentPhone.value)) {
+                return { verified: true };
+            }
+            return { verified: false, reason: 'phone_write_failed' };
+        } catch {
+            return { verified: false, reason: 'phone_write_failed' };
+        }
+    }
+    const view = rootDocument.defaultView;
+    const setter = view?.HTMLInputElement?.prototype
+        ? Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, 'value')?.set
+        : null;
+    if (setter) setter.call(phone, phoneNational);
+    else phone.value = phoneNational;
+    if (view?.Event) {
+        phone.dispatchEvent(new view.Event('input', { bubbles: true }));
+        phone.dispatchEvent(new view.Event('change', { bubbles: true }));
+    }
+    const currentPhone = findGocnetPhoneInput(rootDocument);
+    if (!currentPhone || currentPhone.value !== phoneNational || !/^\d{7,10}$/.test(currentPhone.value)) {
+        return { verified: false, reason: 'phone_write_failed' };
+    }
+    return { verified: true };
+}
+
 async function saveGocnetRecord(rootDocument, request) {
     const context = transferContexts.get(request.attemptId);
     if (!context || context.state !== 'student_data_filled' || context.applicationNumber !== request.applicationNumber
         || hasVisibleDialog(rootDocument)) return { state: 'unknown' };
+    const phoneValidation = validateGocnetPhoneNational(request.phoneNational);
+    if (!phoneValidation.valid) return { state: 'unknown', reason: phoneValidation.reason };
     const identityState = readGocnetIdentityMatch(rootDocument, request);
     if (identityState !== 'verified') return { state: identityState };
     const phone = findGocnetPhoneInput(rootDocument);
     const button = findGocnetSaveButton(rootDocument);
-    if (!phone || phone.value !== request.phoneNational || !/^\d{7,10}$/.test(phone.value) || !button) return { state: 'unknown' };
+    if (!phone) return { state: 'unknown', reason: 'phone_input_missing' };
+    if (!button) return { state: 'unknown' };
+    const phoneWrite = await writeAndVerifyGocnetPhone(rootDocument, phone, phoneValidation.value, request.requestId);
+    if (!phoneWrite.verified) return { state: 'unknown', reason: phoneWrite.reason };
     queryInProgress = true;
     try {
         const resultPromise = waitForTransferResult(rootDocument, readGocnetSaveResult);
@@ -314,7 +406,19 @@ function readGocnetIdentityMatch(rootDocument, expected) {
 
 function findGocnetPhoneInput(rootDocument) {
     const inputs = [...rootDocument.querySelectorAll('input[placeholder="5XXXXXXXXX"][maxlength="10"]')].filter(isVisible);
-    return inputs.length === 1 && !inputs[0].disabled && !inputs[0].readOnly ? inputs[0] : null;
+    if (inputs.length === 1) {
+        return !inputs[0].disabled && !inputs[0].readOnly ? inputs[0] : null;
+    }
+    if (inputs.length > 1) return null;
+    for (const labelText of ['İrtibat Telefonu (*)', 'İrtibat Telefonu']) {
+        const labels = findVisibleFieldLabels(rootDocument, labelText);
+        if (labels.length !== 1) continue;
+        let valueCell = labels[0].closest('td, th, dt')?.nextElementSibling || null;
+        while (valueCell && valueCell.classList.contains('z-hbox-separator')) valueCell = valueCell.nextElementSibling;
+        const control = valueCell?.querySelector('input:not([type="radio"]):not([type="file"]):not([type="hidden"])');
+        if (control && isVisible(control) && !control.disabled && !control.readOnly) return control;
+    }
+    return null;
 }
 
 function findGocnetSaveButton(rootDocument) {
@@ -421,7 +525,7 @@ function formatFormCommandFailureReason(error) {
 }
 
 /** Performs one read-only exact-number lookup; every unrecognized result fails closed. */
-async function queryGocnetRegistration(rootDocument, applicationNumber, { signal, timeoutMs = 20_000, requestId } = {}) {
+async function queryGocnetRegistration(rootDocument, applicationNumber, { signal, timeoutMs = GOCNET_QUERY_TIMEOUT_MS, requestId } = {}) {
     lastReason = '';
     if (!rootDocument || typeof applicationNumber !== 'string' || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber)) {
         return noteReason('bad_input');
@@ -433,20 +537,36 @@ async function queryGocnetRegistration(rootDocument, applicationNumber, { signal
         if (typeof requestId !== 'string' || requestId.length < 1 || requestId.length > 128) {
             return noteReason('bad_input');
         }
-        const AbortCtor = rootDocument.defaultView?.AbortController || globalThis.AbortController;
+        const view = rootDocument.defaultView;
+        const AbortCtor = view?.AbortController || globalThis.AbortController;
         const waitController = AbortCtor ? new AbortCtor() : null;
         const onParentAbort = () => waitController?.abort();
         signal?.addEventListener('abort', onParentAbort, { once: true });
+        const setTimer = view?.setTimeout ? view.setTimeout.bind(view) : setTimeout;
+        const clearTimer = view?.clearTimeout ? view.clearTimeout.bind(view) : clearTimeout;
         const resultPromise = waitForQueryResult(rootDocument, applicationNumber, waitController?.signal || signal, timeoutMs);
+        let commandTimer = null;
+        const commandTimeoutPromise = new Promise((resolve) => {
+            commandTimer = setTimer(() => resolve({ __timedOut: true }), timeoutMs);
+        });
         try {
-            const response = await chrome.runtime.sendMessage({
+            const commandPromise = Promise.resolve(chrome.runtime.sendMessage({
                 action: 'YOKSIS_ZK_COMMAND',
                 command: { action: 'queryGocnetForm', applicationNumber, requestId }
-            });
+            }));
+            commandPromise.catch(() => {});
+            const response = await Promise.race([commandPromise, commandTimeoutPromise]);
+            clearTimer(commandTimer);
+            commandTimer = null;
             if (signal?.aborted) {
                 waitController?.abort();
                 await resultPromise.catch(() => {});
                 return noteReason('form_result_aborted');
+            }
+            if (response?.__timedOut) {
+                const waited = await resultPromise;
+                if (waited !== 'unknown') return waited;
+                return noteReason(lastReason || 'form_result_timeout');
             }
             if (response?.success !== true || response.freshResponse !== true) {
                 const reason = response?.success === true
@@ -468,6 +588,7 @@ async function queryGocnetRegistration(rootDocument, applicationNumber, { signal
             await resultPromise.catch(() => {});
             return noteReason(signal?.aborted ? 'form_result_aborted' : 'form_command_failed');
         } finally {
+            if (commandTimer !== null) clearTimer(commandTimer);
             signal?.removeEventListener('abort', onParentAbort);
         }
     }
@@ -576,8 +697,15 @@ function parseIslemKayitNo(rawValue) {
     return match && /^\d{1,12}$/.test(match[1]) ? match[1] : null;
 }
 
+function formatLookupFailureReason(rawReason) {
+    if (!rawReason) return 'query_unknown';
+    return rawReason.startsWith('form_result_unrecognized')
+        ? rawReason.replace(/^form_result_unrecognized/, 'result_unrecognised')
+        : rawReason;
+}
+
 /** Runs a strictly read-only Başvuru Sorgula lookup and reads Başvuru Kayıt No and İşlem Kayıt No. */
-async function lookupGocnetRecord(rootDocument, applicationNumber, { signal, timeoutMs = 20_000, requestId } = {}) {
+async function lookupGocnetRecord(rootDocument, applicationNumber, { signal, timeoutMs = GOCNET_QUERY_TIMEOUT_MS, requestId } = {}) {
     if (!rootDocument || typeof applicationNumber !== 'string' || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber)) {
         return { state: 'unknown', reason: 'bad_input' };
     }
@@ -586,43 +714,78 @@ async function lookupGocnetRecord(rootDocument, applicationNumber, { signal, tim
     }
     queryInProgress = true;
     lastReason = '';
+    const totalStartedAt = Date.now();
+    let queryMs = 0;
+    let readMs = 0;
+    let finalState = 'unknown';
     try {
-        const queryState = await queryGocnetRegistration(rootDocument, applicationNumber, { signal, timeoutMs, requestId });
+        const queryStartedAt = Date.now();
+        let queryState;
+        try {
+            queryState = await queryGocnetRegistration(rootDocument, applicationNumber, { signal, timeoutMs, requestId });
+        } finally {
+            queryMs = Math.max(0, Date.now() - queryStartedAt);
+        }
         if (queryState === 'no_match') {
-            acknowledgeGocnetQuery(rootDocument, applicationNumber, ['no_match']);
+            const readStartedAt = Date.now();
+            try {
+                acknowledgeGocnetQuery(rootDocument, applicationNumber, ['no_match']);
+            } finally {
+                readMs = Math.max(0, Date.now() - readStartedAt);
+            }
+            finalState = 'no_match';
             return { state: 'no_match' };
         }
         if (queryState !== 'student_data_filled' && queryState !== 'existing_record') {
-            return { state: 'unknown', reason: lastReason || 'query_unknown' };
+            finalState = 'unknown';
+            return { state: 'unknown', reason: formatLookupFailureReason(lastReason) };
         }
         if (!isExactSearchField(rootDocument, applicationNumber)) {
+            finalState = 'unknown';
             return { state: 'unknown', reason: 'form_search_value_mismatch' };
         }
-        acknowledgeGocnetQuery(rootDocument, applicationNumber, ['student_data_filled', 'existing_record']);
+        const readStartedAt = Date.now();
+        try {
+            const basvuruCount = findVisibleFieldLabels(rootDocument, 'Başvuru Kayıt No').length;
+            const islemCount = findVisibleFieldLabels(rootDocument, 'Mevcut GöçNet İşlem Kayıt No').length;
+            const rawBasvuru = basvuruCount === 1 ? findFieldValue(rootDocument, 'Başvuru Kayıt No') : null;
+            const rawIslem = islemCount === 1 ? findFieldValue(rootDocument, 'Mevcut GöçNet İşlem Kayıt No') : null;
+            acknowledgeGocnetQuery(rootDocument, applicationNumber, ['student_data_filled', 'existing_record']);
 
-        const basvuruCount = findVisibleFieldLabels(rootDocument, 'Başvuru Kayıt No').length;
-        if (basvuruCount !== 1) {
-            return { state: 'unknown', reason: basvuruCount > 1 ? 'ambiguous_fields' : 'basvuru_kayit_no_missing' };
+            if (basvuruCount !== 1) {
+                finalState = 'unknown';
+                return { state: 'unknown', reason: basvuruCount > 1 ? 'ambiguous_fields' : 'basvuru_kayit_no_missing' };
+            }
+            if (islemCount > 1) {
+                finalState = 'unknown';
+                return { state: 'unknown', reason: 'ambiguous_fields' };
+            }
+            if (typeof rawBasvuru !== 'string' || !/^\d{1,12}$/.test(rawBasvuru.trim())) {
+                finalState = 'unknown';
+                return { state: 'unknown', reason: 'basvuru_kayit_no_invalid' };
+            }
+            const basvuruKayitNo = rawBasvuru.trim();
+            const islemKayitNo = parseIslemKayitNo(rawIslem);
+            finalState = 'found';
+            return {
+                state: 'found',
+                basvuruKayitNo,
+                ...(islemKayitNo ? { islemKayitNo } : {})
+            };
+        } finally {
+            readMs = Math.max(0, Date.now() - readStartedAt);
         }
-        const islemCount = findVisibleFieldLabels(rootDocument, 'Mevcut GöçNet İşlem Kayıt No').length;
-        if (islemCount > 1) {
-            return { state: 'unknown', reason: 'ambiguous_fields' };
-        }
-        const rawBasvuru = findFieldValue(rootDocument, 'Başvuru Kayıt No');
-        if (typeof rawBasvuru !== 'string' || !/^\d{1,12}$/.test(rawBasvuru.trim())) {
-            return { state: 'unknown', reason: 'basvuru_kayit_no_invalid' };
-        }
-        const basvuruKayitNo = rawBasvuru.trim();
-        const rawIslem = islemCount === 1 ? findFieldValue(rootDocument, 'Mevcut GöçNet İşlem Kayıt No') : null;
-        const islemKayitNo = parseIslemKayitNo(rawIslem);
-        return {
-            state: 'found',
-            basvuruKayitNo,
-            ...(islemKayitNo ? { islemKayitNo } : {})
-        };
     } catch {
+        finalState = 'error';
         return { state: 'unknown', reason: 'form_query_exception' };
     } finally {
+        const totalMs = Math.max(0, Date.now() - totalStartedAt);
+        console?.info?.('[YKN][timing] gocnet lookup', {
+            queryMs,
+            readMs,
+            totalMs,
+            state: finalState
+        });
         lastReason = '';
         queryInProgress = false;
     }
@@ -631,6 +794,7 @@ async function lookupGocnetRecord(rootDocument, applicationNumber, { signal, tim
 globalThis.YoksisGocnetTransferController = Object.freeze({
     dispatchGocnetPdfUpload,
     findGocnetApplicationDocumentUploadTarget,
+    findGocnetPhoneInput,
     getLastReason: () => lastReason,
     lookupGocnetRecord,
     parseIslemKayitNo,
@@ -638,7 +802,9 @@ globalThis.YoksisGocnetTransferController = Object.freeze({
     queryGocnetRecordList,
     readGocnetUploadResult,
     readGocnetRecordListResult,
-    readGocnetQueryResult
+    readGocnetQueryResult,
+    saveGocnetRecord,
+    validateGocnetPhoneNational
 });
 
 if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
@@ -663,7 +829,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
         if (request.action === 'YOKSIS_GOCNET_LOOKUP' && typeof request.applicationNumber === 'string') {
             void lookupGocnetRecord(document, request.applicationNumber, {
                 requestId: request.requestId,
-                timeoutMs: 120_000
+                timeoutMs: GOCNET_QUERY_TIMEOUT_MS
             }).then((result) => sendResponse({ requestId: request.requestId, ...result }))
               .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'form_query_exception' }));
             return true;
@@ -699,8 +865,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
         }
         if (request.action === 'YOKSIS_GOCNET_SAVE' && request.applicationNumber
             && typeof request.studentNumber === 'string' && typeof request.passportNumber === 'string'
-            && typeof request.firstName === 'string' && typeof request.lastName === 'string'
-            && /^\d{7,10}$/.test(request.phoneNational || '')) {
+            && typeof request.firstName === 'string' && typeof request.lastName === 'string') {
             void saveGocnetRecord(document, request)
                 .then((result) => sendResponse({ requestId: request.requestId, ...result }))
                 .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown' }));

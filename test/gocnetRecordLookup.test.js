@@ -213,7 +213,8 @@ test('lookupGocnetRecord omits islemKayitNo on garbage info bar and maps no_matc
     mode = 'unrecognized';
     const unrecognizedRes = await lookupGocnetRecord(document, '2099-12-99999998', { timeoutMs: 100 });
     assert.equal(unrecognizedRes.state, 'unknown');
-    assert.match(unrecognizedRes.reason, /^form_result_unrecognized/);
+    assert.equal(unrecognizedRes.reason, 'result_unrecognised: beklenmeyen hata');
+    assert.equal(unrecognizedRes.reason.includes('Detay'), false);
     document.querySelector('[role="dialog"]').remove();
 
     mode = 'timeout';
@@ -481,4 +482,253 @@ test('background LOOKUP_GOCNET_RECORD enforces portal origin/payload, routes rea
     });
 
     assert.equal(logs.some((line) => line.includes('2026-08-1234567') || line.includes('16323286') || line.includes('85797')), false);
+});
+
+const flushMicrotasks = () => new Promise((resolve) => setImmediate(resolve));
+
+test('lookupGocnetRecord recognises live ZK .z-messagebox-window dialogs within fake clock budget and logs numeric timing', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const { dom, counts } = buildLookupDom();
+    const { window } = dom;
+    const { document } = window;
+    window.setTimeout = globalThis.setTimeout;
+    window.clearTimeout = globalThis.clearTimeout;
+    const previousChrome = globalThis.chrome;
+    const originalInfo = console.info;
+    const timingLogs = [];
+    console.info = (...args) => {
+        if (args[0] === '[YKN][timing] gocnet lookup') timingLogs.push(args[1]);
+    };
+
+    let dialogMode = 'existing_record';
+    globalThis.chrome = {
+        runtime: {
+            sendMessage: (message) => new Promise((resolve) => {
+                setTimeout(() => {
+                    document.querySelector('[data-fixture="query-input"]').value = message.command.applicationNumber;
+                    if (dialogMode === 'existing_record') {
+                        document.querySelector('input[readonly]').value = '16323286';
+                        document.querySelector('[data-fixture="islem-kayit-no"]').textContent = '85797 (TAMAMLANDI)';
+                        appendDialogWithAutoClose(document, `<div class="z-messagebox-window z-window z-window-highlighted">
+                            <div class="z-window-header">Sorgulama Başarılı (DB Kaydı Yüklendi)</div>
+                            <div class="z-messagebox"><span class="z-label">Başvuru sorgulama başarılı. Öğrenci demografik bilgileri ve daha önceden kaydedilmiş veriler veritabanından forma yüklendi.</span></div>
+                            <button type="button" class="z-messagebox-button z-button">Tamam</button>
+                        </div>`);
+                    } else if (dialogMode === 'no_match') {
+                        appendDialogWithAutoClose(document, `<div class="z-messagebox-window z-window z-window-highlighted">
+                            <div class="z-window-header">Sorgu Hatası</div>
+                            <div class="z-messagebox">
+                                <p>Başvuru sorgulama başarısız!</p>
+                                <p>Hata Kodu: Veri Bulunamadı</p>
+                                <p>Detay: Kayıt bulunamadı</p>
+                            </div>
+                            <button type="button" class="z-messagebox-button z-button">Tamam</button>
+                        </div>`);
+                    } else if (dialogMode === 'unrecognised') {
+                        appendDialogWithAutoClose(document, `<div class="z-messagebox-window z-window z-window-highlighted">
+                            <div class="z-window-header">Sistem Uyarısı 2026-08-1234567</div>
+                            <div class="z-messagebox"><span class="z-label">Gizli Öğrenci 16323286 85797</span></div>
+                            <button type="button" class="z-messagebox-button z-button">Tamam</button>
+                        </div>`);
+                    }
+                    resolve({ success: true, freshResponse: true });
+                }, 750);
+            })
+        }
+    };
+
+    try {
+        const foundPromise = lookupGocnetRecord(document, '2026-08-1234567', { requestId: 'fake-found-1' });
+        await flushMicrotasks();
+        t.mock.timers.tick(750);
+        const foundRes = await foundPromise;
+        assert.deepEqual(foundRes, { state: 'found', basvuruKayitNo: '16323286', islemKayitNo: '85797' });
+        assert.equal(document.querySelector('.z-messagebox-window'), null);
+
+        dialogMode = 'no_match';
+        const noMatchPromise = lookupGocnetRecord(document, '2026-08-1234568', { requestId: 'fake-nomatch-1' });
+        await flushMicrotasks();
+        t.mock.timers.tick(750);
+        const noMatchRes = await noMatchPromise;
+        assert.deepEqual(noMatchRes, { state: 'no_match' });
+        assert.equal(document.querySelector('.z-messagebox-window'), null);
+
+        dialogMode = 'unrecognised';
+        const unrecognisedPromise = lookupGocnetRecord(document, '2026-08-1234569', { requestId: 'fake-unrec-1' });
+        await flushMicrotasks();
+        t.mock.timers.tick(750);
+        const unrecognisedRes = await unrecognisedPromise;
+        assert.equal(unrecognisedRes.state, 'unknown');
+        assert.equal(unrecognisedRes.reason, 'result_unrecognised: sistem uyarısı');
+        assert.equal(unrecognisedRes.reason.includes('2026-08-1234567'), false);
+        assert.equal(unrecognisedRes.reason.includes('16323286'), false);
+        assert.equal(unrecognisedRes.reason.includes('85797'), false);
+        assert.equal(unrecognisedRes.reason.includes('gizli'), false);
+        document.querySelector('.z-messagebox-window')?.remove();
+
+        assert.equal(timingLogs.length, 3);
+        const expectedStates = ['found', 'no_match', 'unknown'];
+        timingLogs.forEach((entry, index) => {
+            assert.deepEqual(Object.keys(entry).sort(), ['queryMs', 'readMs', 'state', 'totalMs']);
+            assert.equal(Number.isFinite(entry.queryMs) && entry.queryMs >= 0 && entry.queryMs < 12_000, true);
+            assert.equal(Number.isFinite(entry.readMs) && entry.readMs >= 0 && entry.readMs < 12_000, true);
+            assert.equal(Number.isFinite(entry.totalMs) && entry.totalMs >= 0 && entry.totalMs < 12_000, true);
+            assert.equal(entry.state, expectedStates[index]);
+            const serialized = JSON.stringify(entry);
+            assert.equal(serialized.includes('2026-08-1234567'), false);
+            assert.equal(serialized.includes('16323286'), false);
+            assert.equal(serialized.includes('85797'), false);
+        });
+        assert.deepEqual(counts(), { saveClicks: 0, uploadClicks: 0, uploadChanges: 0 });
+    } finally {
+        console.info = originalInfo;
+        if (previousChrome === undefined) delete globalThis.chrome;
+        else globalThis.chrome = previousChrome;
+        t.mock.timers.reset();
+        dom.window.close();
+    }
+});
+
+test('YOKSIS_GOCNET_LOOKUP and background LOOKUP_GOCNET_RECORD enforce 12s query and 15s total timeouts under fake clocks', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+    const { dom } = buildLookupDom();
+    const { window } = dom;
+    window.setTimeout = globalThis.setTimeout;
+    window.clearTimeout = globalThis.clearTimeout;
+    let controllerListener = null;
+
+    window.chrome = {
+        runtime: {
+            id: 'test-extension-id',
+            onMessage: { addListener(listener) { controllerListener = listener; } },
+            sendMessage: async () => ({ success: true, freshResponse: true })
+        }
+    };
+
+    try {
+        vm.runInContext(controllerSource, dom.getInternalVMContext());
+        assert.ok(controllerListener);
+
+        let controllerSettled = false;
+        const controllerPromise = new Promise((resolveResponse) => {
+            controllerListener(
+                {
+                    action: 'YOKSIS_GOCNET_LOOKUP',
+                    requestId: 'lookup-timeout-12s',
+                    portalTabId: 7,
+                    applicationNumber: '2026-08-1234567'
+                },
+                { id: 'test-extension-id' },
+                (value) => {
+                    controllerSettled = true;
+                    resolveResponse(normalizeCrossRealm(value));
+                }
+            );
+        });
+
+        await flushMicrotasks();
+        t.mock.timers.tick(11_999);
+        await flushMicrotasks();
+        assert.equal(controllerSettled, false);
+
+        t.mock.timers.tick(1);
+        const controllerTimeoutRes = await controllerPromise;
+        assert.deepEqual(controllerTimeoutRes, {
+            requestId: 'lookup-timeout-12s',
+            state: 'unknown',
+            reason: 'form_result_timeout'
+        });
+
+        const messageListeners = [];
+        const bgContext = vm.createContext({
+            URL, Date, Set, Map, Object, Number, String, Array, Promise,
+            setTimeout, clearTimeout, setInterval, clearInterval,
+            console: { info() {}, warn() {}, error() {} },
+            chrome: {
+                runtime: {
+                    lastError: null,
+                    onStartup: { addListener() {} },
+                    onInstalled: { addListener() {} },
+                    onMessage: { addListener(listener) { messageListeners.push(listener); } },
+                    getManifest: () => ({
+                        content_scripts: [{
+                            matches: ['https://portal.example.edu/*', 'http://localhost/*'],
+                            js: ['portal-security.js', 'bridge.js']
+                        }]
+                    }),
+                    getPlatformInfo: (cb) => cb?.({})
+                },
+                storage: {
+                    local: { get: (_k, cb) => cb?.({}), set: (_v, cb) => cb?.(), remove: (_k, cb) => cb?.() },
+                    session: { get: (_k, cb) => cb?.({}), set: (_v, cb) => cb?.(), remove: (_k, cb) => cb?.() }
+                },
+                tabs: {
+                    onUpdated: { addListener() {} },
+                    query: (_q, cb) => cb([{ id: 77, url: 'https://yoksis.yok.gov.tr/menu/gocnet.zul' }]),
+                    get: (tabId, cb) => cb({ id: tabId, url: 'https://yoksis.yok.gov.tr/menu/gocnet.zul' }),
+                    sendMessage: () => {}
+                },
+                scripting: { executeScript: async () => [] }
+            }
+        });
+        bgContext.globalThis = bgContext;
+        vm.runInContext(portalSecuritySource, bgContext);
+        vm.runInContext(storageLifecycleSource, bgContext);
+        vm.runInContext(backgroundSource, bgContext);
+
+        let bgSettled = false;
+        const bgPromise = new Promise((resolveResponse) => {
+            messageListeners[0](
+                {
+                    source: 'IKAMET_PORTAL',
+                    action: 'LOOKUP_GOCNET_RECORD',
+                    requestId: 'bg-timeout-15s',
+                    applicationNumber: '2026-08-1234567'
+                },
+                { tab: { id: 12, url: 'https://portal.example.edu/yetkili/' }, frameId: 0 },
+                (value) => {
+                    bgSettled = true;
+                    resolveResponse(normalizeCrossRealm(value));
+                }
+            );
+        });
+
+        await flushMicrotasks();
+        t.mock.timers.tick(14_999);
+        await flushMicrotasks();
+        assert.equal(bgSettled, false);
+
+        t.mock.timers.tick(1);
+        const bgTimeoutRes = await bgPromise;
+        assert.deepEqual(bgTimeoutRes, {
+            success: false,
+            requestId: 'bg-timeout-15s',
+            state: 'unknown',
+            reason: 'lookup_timeout'
+        });
+    } finally {
+        t.mock.timers.reset();
+        dom.window.close();
+    }
+});
+
+test('lookupGocnetRecord recognises live YÖKSİS Verileri Doldurudu header spelling and clicks Tamam', async () => {
+    const { dom, counts } = buildLookupDom();
+    const { document } = dom.window;
+
+    document.querySelector('[data-fixture="query-btn"]').addEventListener('click', () => {
+        document.querySelector('input[readonly]').value = '16323286';
+        document.querySelector('[data-fixture="islem-kayit-no"]').textContent = '-(İşlem Henüz Başlatılmadı)-';
+        appendDialogWithAutoClose(document, `<div class="z-messagebox-window z-window z-window-highlighted">
+            <div class="z-window-header">Sorgulama Başarılı (YÖKSİS Verileri Doldurudu)</div>
+            <div class="z-messagebox"><span class="z-label">Başvuru sorgulama başarılı. YÖKSİS veritabanından öğrencinin aktif öğrenim bilgileri bulundu ve forma otomatik dolduruldu.</span></div>
+            <button type="button" class="z-messagebox-button z-button">Tamam</button>
+        </div>`);
+    });
+
+    const result = await lookupGocnetRecord(document, '2026-08-1234567', { timeoutMs: 100 });
+    assert.deepEqual(result, { state: 'found', basvuruKayitNo: '16323286' });
+    assert.equal(document.querySelector('.z-messagebox-window'), null);
+    assert.deepEqual(counts(), { saveClicks: 0, uploadClicks: 0, uploadChanges: 0 });
+    dom.window.close();
 });
