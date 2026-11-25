@@ -871,6 +871,9 @@ test('POST /api/staff/assistant enforces per-staff rate limits (429) and logs no
     assert.equal(serializedLog.includes('pasaportunu'), false);
     assert.equal(infoLogs[0][1].tool, 'run_ykn_flow');
     assert.equal(typeof infoLogs[0][1].latencyMs, 'number');
+    assert.equal(infoLogs[0][1].modelInputTokens, 0);
+    assert.equal(infoLogs[0][1].modelCachedInputTokens, 0);
+    assert.equal(infoLogs[0][1].modelOutputTokens, 0);
 
     // Pre-seed 15-minute bucket to maxRequests so next call hits 429.
     const staffKeyHash = await hashRateLimitIdentity('staff-1');
@@ -910,10 +913,19 @@ test('POST /api/staff/assistant enforces per-staff rate limits (429) and logs no
     assert.equal(dailyLimited.status, 429);
 });
 
-test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Llama 3.3) without chat_template_kwargs even when CHATBOT_MODEL is set', async () => {
+test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Llama 3.3) without chat_template_kwargs even when CHATBOT_MODEL is set', async (context) => {
+    const infoLogs = [];
+    context.mock.method(console, 'info', (...args) => {
+        infoLogs.push(args);
+    });
     const { fakeAi, environment } = await createFixture({
         aiScript: {
-            tool_calls: [{ name: 'navigate', arguments: { view: 'applications' } }]
+            tool_calls: [{ name: 'navigate', arguments: { view: 'applications' } }],
+            usage: {
+                prompt_tokens: 310,
+                completion_tokens: 18,
+                prompt_tokens_details: { cached_tokens: 200 }
+            }
         }
     });
     environment.CHATBOT_MODEL = '@cf/google/gemma-4-26b-a4b-it';
@@ -928,4 +940,20 @@ test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Llama 3.3) w
     assert.equal(STAFF_ASSISTANT_MODEL_DEFAULT, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
     assert.equal(fakeAi.calls[0].model, STAFF_ASSISTANT_MODEL_DEFAULT);
     assert.equal(Object.hasOwn(fakeAi.calls[0].input, 'chat_template_kwargs'), false);
+    assert.deepEqual(fakeAi.calls[0].options.extraHeaders, { 'x-session-affinity': 'topi-staff' });
+    assert.ok(fakeAi.calls[0].options.signal instanceof AbortSignal);
+
+    assert.equal(infoLogs.length, 1);
+    assert.deepEqual(Object.keys(infoLogs[0][1]).sort(), [
+        'latencyMs',
+        'modelCachedInputTokens',
+        'modelInputTokens',
+        'modelOutputTokens',
+        'outcome',
+        'requestId',
+        'tool'
+    ]);
+    assert.equal(infoLogs[0][1].modelInputTokens, 310);
+    assert.equal(infoLogs[0][1].modelCachedInputTokens, 200);
+    assert.equal(infoLogs[0][1].modelOutputTokens, 18);
 });

@@ -1200,6 +1200,9 @@ export async function handlePublicChat(request, environment, requestId, executio
     const executedToolNames = [];
     let outcome = 'error';
     let chatLogWrite = 'skipped';
+    let modelInputTokens = 0;
+    let modelCachedInputTokens = 0;
+    let modelOutputTokens = 0;
 
     try {
         requireMethod(request, 'POST');
@@ -1386,7 +1389,9 @@ export async function handlePublicChat(request, environment, requestId, executio
 
         let handoffRequested = false;
         try {
-            const model = createChatModel(environment);
+            const model = createChatModel(environment, {
+                sessionAffinity: `topi-public-${validated.language}`
+            });
             const requestSignal = AbortSignal.timeout(CHATBOT_REQUEST_DEADLINE_MS);
             const conversation = [
                 { role: 'system', content: buildChatbotSystemPrompt(validated.language) },
@@ -1410,6 +1415,11 @@ export async function handlePublicChat(request, environment, requestId, executio
                     signal: requestSignal,
                     ...(allowTools ? { tools: CHATBOT_TOOL_DEFINITIONS } : {})
                 });
+                if (result?.usage) {
+                    modelInputTokens += result.usage.inputTokens ?? 0;
+                    modelCachedInputTokens += result.usage.cachedInputTokens ?? 0;
+                    modelOutputTokens += result.usage.outputTokens ?? 0;
+                }
 
                 if (!result.toolCalls || result.toolCalls.length === 0) {
                     finalText = result.text;
@@ -1724,7 +1734,10 @@ export async function handlePublicChat(request, environment, requestId, executio
             outcome,
             tools: executedToolNames,
             latencyMs: Date.now() - startedAt,
-            chatLogWrite
+            chatLogWrite,
+            modelInputTokens,
+            modelCachedInputTokens,
+            modelOutputTokens
         });
     }
 }

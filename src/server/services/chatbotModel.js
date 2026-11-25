@@ -14,6 +14,7 @@ export const CHATBOT_MODEL_MAX_OUTPUT_TOKENS = 512;
 const GENERIC_UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.';
 const REGISTERED_TOOL_NAMES = Object.freeze(new Set(Object.keys(CHATBOT_TOOLS)));
 const PYTHON_TAG_PREFIX = '<|python_tag|>';
+const SESSION_AFFINITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 // Thinking/reasoning models burn the output token budget and 12 s timeout on
 // internal reasoning by default; this table disables thinking per model-id prefix.
@@ -182,37 +183,67 @@ function tryParseTextToolCalls(text, registeredToolNames) {
     };
 }
 
+function toNonNegativeInt(...candidates) {
+    for (const value of candidates) {
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+            return Math.trunc(value);
+        }
+    }
+    return 0;
+}
+
+function extractUsage(rawUsage) {
+    if (!isPlainObject(rawUsage)) return null;
+    try {
+        return {
+            inputTokens: toNonNegativeInt(rawUsage.prompt_tokens, rawUsage.input_tokens),
+            outputTokens: toNonNegativeInt(rawUsage.completion_tokens, rawUsage.output_tokens),
+            cachedInputTokens: toNonNegativeInt(
+                rawUsage.prompt_tokens_details?.cached_tokens,
+                rawUsage.input_tokens_details?.cached_tokens,
+                rawUsage.cached_tokens,
+                rawUsage.cached_input_tokens
+            )
+        };
+    } catch {
+        return null;
+    }
+}
+
 function normalizeModelResponse(raw, registeredToolNames = REGISTERED_TOOL_NAMES) {
     if (!isPlainObject(raw)) throw new Error('Model response must be an object.');
+    const usage = extractUsage(raw.usage);
     const choiceMessage = raw.choices?.[0]?.message;
     const rawText = raw.response ?? choiceMessage?.content ?? null;
     const text = typeof rawText === 'string' && rawText.trim().length > 0 ? rawText : null;
     const rawToolCalls = Array.isArray(raw.tool_calls)
         ? raw.tool_calls
         : (Array.isArray(choiceMessage?.tool_calls) ? choiceMessage.tool_calls : []);
+    let normalized;
     if (rawToolCalls.length > 0) {
-        return {
+        normalized = {
             text,
             toolCalls: rawToolCalls.map(normalizeToolCall)
         };
+    } else if (text !== null) {
+        normalized = tryParseTextToolCalls(text, registeredToolNames) ?? {
+            text,
+            toolCalls: []
+        };
+    } else {
+        normalized = {
+            text,
+            toolCalls: []
+        };
     }
-    if (text !== null) {
-        const parsedFromText = tryParseTextToolCalls(text, registeredToolNames);
-        if (parsedFromText) {
-            return parsedFromText;
-        }
-    }
-    return {
-        text,
-        toolCalls: []
-    };
+    return usage ? { ...normalized, usage } : normalized;
 }
 
 /**
  * Creates a swappable model adapter backed by the Cloudflare Workers AI binding.
  * @param {object} environment Worker bindings containing `AI` and optional `CHATBOT_MODEL`.
- * @param {{timeoutMs?: number, maxOutputTokens?: number, model?: string}} [options] Adapter bounds and optional model override.
- * @returns {{provider: string, model: string, complete: (input: {messages: Array<object>, tools?: Array<object>, signal?: AbortSignal}) => Promise<{text: string|null, toolCalls: Array<{name: string, arguments: object}>}>}} Model adapter.
+ * @param {{timeoutMs?: number, maxOutputTokens?: number, model?: string, sessionAffinity?: string}} [options] Adapter bounds, optional model override, and optional prefix-cache affinity ID.
+ * @returns {{provider: string, model: string, complete: (input: {messages: Array<object>, tools?: Array<object>, signal?: AbortSignal}) => Promise<{text: string|null, toolCalls: Array<{name: string, arguments: object}>, usage?: {inputTokens: number, outputTokens: number, cachedInputTokens: number}}>}} Model adapter.
  */
 export function createChatModel(environment, options = {}) {
     const optionModel = typeof options?.model === 'string'
@@ -226,6 +257,10 @@ export function createChatModel(environment, options = {}) {
         ? options.timeoutMs : CHATBOT_MODEL_TIMEOUT_MS;
     const maxOutputTokens = Number.isSafeInteger(options.maxOutputTokens) && options.maxOutputTokens > 0
         ? options.maxOutputTokens : CHATBOT_MODEL_MAX_OUTPUT_TOKENS;
+    const sessionAffinity = typeof options?.sessionAffinity === 'string'
+        && SESSION_AFFINITY_PATTERN.test(options.sessionAffinity)
+        ? options.sessionAffinity
+        : null;
 
     return Object.freeze({
         provider: 'workers-ai',
@@ -266,9 +301,13 @@ export function createChatModel(environment, options = {}) {
                 controller.signal.addEventListener('abort', abortListener, { once: true });
             });
 
+            const runOptions = sessionAffinity
+                ? { signal: controller.signal, extraHeaders: { 'x-session-affinity': sessionAffinity } }
+                : { signal: controller.signal };
+
             try {
                 const rawResponse = await Promise.race([
-                    environment.AI.run(model, payload, { signal: controller.signal }),
+                    environment.AI.run(model, payload, runOptions),
                     abortPromise
                 ]);
                 return normalizeModelResponse(rawResponse, registeredToolNames);

@@ -431,3 +431,108 @@ test('non-gemma models and non-prefix gemma-4 substrings do not receive chat_tem
         });
     }
 });
+
+test('options.sessionAffinity sends x-session-affinity extraHeaders only for valid ids and preserves signal', async () => {
+    const fakeAi = createFakeAiBinding({ response: 'Merhaba.' });
+    const messages = [{ role: 'user', content: 'Merhaba' }];
+
+    const validIds = [
+        'topi-public-tr',
+        'topi-public-en',
+        'topi-public-ru',
+        'topi-public-tk',
+        'topi-public-ar',
+        'topi-staff',
+        'a',
+        'a'.repeat(64)
+    ];
+    for (const id of validIds) {
+        const model = createChatModel({ AI: fakeAi }, { sessionAffinity: id });
+        await model.complete({ messages });
+        const lastCall = fakeAi.calls[fakeAi.calls.length - 1];
+        assert.deepEqual(lastCall.options.extraHeaders, { 'x-session-affinity': id });
+        assert.ok(lastCall.options.signal instanceof AbortSignal);
+    }
+
+    const invalidOrMissing = [
+        undefined,
+        null,
+        123,
+        '',
+        '   ',
+        'Topi-Public-Tr',
+        'topi_public_tr',
+        '-leading-dash',
+        ' topi-staff ',
+        'a'.repeat(65)
+    ];
+    for (const id of invalidOrMissing) {
+        const model = createChatModel({ AI: fakeAi }, id === undefined ? {} : { sessionAffinity: id });
+        await model.complete({ messages });
+        const lastCall = fakeAi.calls[fakeAi.calls.length - 1];
+        assert.equal(Object.hasOwn(lastCall.options, 'extraHeaders'), false);
+        assert.ok(lastCall.options.signal instanceof AbortSignal);
+    }
+});
+
+test('normalizeModelResponse exposes usage with defensive field-name parsing and omits it when absent', async () => {
+    const fakeAi = createFakeAiBinding([
+        {
+            response: 'Merhaba.',
+            usage: {
+                prompt_tokens: 120,
+                completion_tokens: 35,
+                prompt_tokens_details: { cached_tokens: 80 }
+            }
+        },
+        {
+            response: '',
+            tool_calls: [{ name: 'lookup_knowledge', arguments: { topic: 'office_hours' } }],
+            usage: {
+                input_tokens: 200,
+                output_tokens: 40,
+                cached_tokens: 50
+            }
+        },
+        {
+            response: JSON.stringify({ type: 'function', name: 'handoff_to_office', parameters: {} }),
+            usage: {
+                input_tokens: 150,
+                output_tokens: 25,
+                cached_input_tokens: 90
+            }
+        },
+        {
+            response: 'Defensive defaults.',
+            usage: {
+                prompt_tokens: -5,
+                completion_tokens: 'invalid',
+                prompt_tokens_details: null
+            }
+        },
+        {
+            response: 'No usage object.',
+            usage: null
+        }
+    ]);
+    const model = createChatModel({ AI: fakeAi });
+    const messages = [{ role: 'user', content: 'Merhaba' }];
+
+    const openAiStyle = await model.complete({ messages });
+    assert.deepEqual(openAiStyle.usage, { inputTokens: 120, outputTokens: 35, cachedInputTokens: 80 });
+
+    const nativeToolStyle = await model.complete({ messages });
+    assert.deepEqual(nativeToolStyle.toolCalls, [{ name: 'lookup_knowledge', arguments: { topic: 'office_hours' } }]);
+    assert.deepEqual(nativeToolStyle.usage, { inputTokens: 200, outputTokens: 40, cachedInputTokens: 50 });
+
+    const textToolStyle = await model.complete({ messages });
+    assert.deepEqual(textToolStyle.toolCalls, [{ name: 'handoff_to_office', arguments: {} }]);
+    assert.deepEqual(textToolStyle.usage, { inputTokens: 150, outputTokens: 25, cachedInputTokens: 90 });
+
+    const defensiveStyle = await model.complete({ messages });
+    assert.deepEqual(defensiveStyle.usage, { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 });
+
+    const nullUsageStyle = await model.complete({ messages });
+    assert.equal(Object.hasOwn(nullUsageStyle, 'usage'), false);
+    assert.deepEqual(nullUsageStyle, { text: 'No usage object.', toolCalls: [] });
+});
