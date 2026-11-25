@@ -9,15 +9,29 @@ import {
     validateStaffAssistantAction,
     validateStaffAssistantResponse
 } from '../shared/staff-assistant-contract.js';
+import {
+    filterAndNormalizeNetworkTebligat,
+    markTebligatRecord,
+    searchTebligatLocal,
+    toTopiTebligatItem,
+    unmarkTebligatRecord
+} from '../ui/tebligatSearch.js';
 import { buildCopiesPdfBlob } from './documentCopies.js';
 
 const ASSISTANT_ENDPOINT = '/api/staff/assistant';
 const WORK_HOURS_ENDPOINT = '/api/staff/work-hours';
 const MAX_MESSAGE_LENGTH = 300;
 const MAX_HISTORY_ITEMS = 6;
+const MAX_TEBLIGAT_ITEMS = 5;
 const BLOB_REVOKE_DELAY_MS = 60_000;
+const TEBLIGAT_YEAR_PATTERN = /^\d{4}$/;
 const UNAVAILABLE_MESSAGE = 'Asistan şu anda kullanılamıyor.';
 const INVALID_ACTION_MESSAGE = 'İşlem doğrulanamadığı için uygulanmadı.';
+const TEBLIGAT_NETWORK_LOADING_MESSAGE = 'Bulut verisi henüz yüklenmedi; canlı arama yapılıyor, biraz sürebilir.';
+const TEBLIGAT_LOOKUP_ERROR_MESSAGE = 'Tebliğ verisine şu anda ulaşamadım; Tebliğ Bul ekranını deneyin.';
+const TEBLIGAT_MARK_ERROR_MESSAGE = 'İşaretleme tamamlanamadı. Tekrar deneyin.';
+const TEBLIGAT_MARK_MULTI_PROMPT = 'Hangisini işaretleyeyim? Kartın altındaki İşaretle düğmesini kullanın.';
+const TEBLIGAT_UNMARK_MULTI_PROMPT = 'Hangisinin işaretini kaldırayım? Kartın altındaki İşareti kaldır düğmesini kullanın.';
 const WELCOME_MESSAGE =
     "Merhaba, ben Topi, yetkili asistanınız. Başvuru bulma, YKN zincirini çalıştırma, tebliğ arama, dilekçe ve çalışma saati kaydı konularında yardımcı olabilirim. Örneğin: «Ad Soyad için tebliğe bak» ya da «Pasaport no için YKN ver». İyi çalışmalar dilerim, ihtiyacınız olduğunda yardıma hazırım.";
 
@@ -75,6 +89,31 @@ function resolveFetcher(doc, customFetcher) {
     return null;
 }
 
+function resolveStorage(doc) {
+    try {
+        const storage = doc?.defaultView?.localStorage;
+        if (storage && typeof storage.getItem === 'function') return storage;
+    } catch {
+        // Ignore opaque-origin SecurityError in test documents.
+    }
+    return undefined;
+}
+
+function getIstanbulCalendarYear(nowFn = Date.now) {
+    const timestamp = typeof nowFn === 'function' ? nowFn() : nowFn;
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    const safeDate = Number.isFinite(date.getTime()) ? date : new Date();
+    const year = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Istanbul',
+        year: 'numeric'
+    }).format(safeDate);
+    return TEBLIGAT_YEAR_PATTERN.test(year) ? year : String(safeDate.getUTCFullYear());
+}
+
+function normalizeTurkishCaseForPattern(text) {
+    return String(text || '').replace(/İ/g, 'i').replace(/I/g, 'ı');
+}
+
 function prefersReducedMotion(doc) {
     return Boolean(doc?.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
 }
@@ -92,7 +131,190 @@ function clickWorkspaceView(doc, viewName) {
     if (button) button.click();
 }
 
-function buildResultsElement(doc, results) {
+function buildTebligatCard(doc, item, handlers) {
+    const {
+        storage,
+        getFetcher,
+        appendMessage,
+        setMascotState,
+        isDestroyed,
+        scrollLogToBottom
+    } = handlers;
+
+    const li = doc.createElement('li');
+    li.className = 'staff-assistant-result-item';
+
+    const displayName = item.name || 'İsimsiz kayıt';
+    const primary = doc.createElement('div');
+    primary.className = 'staff-assistant-result-primary';
+    primary.textContent = displayName;
+
+    const metaParts = [];
+    if (item.sheet) metaParts.push(`Sayfa: ${item.sheet}`);
+    metaParts.push(`No: ${item.number || '-'}`);
+    if (item.date && item.date !== item.sheet) {
+        metaParts.push(`Tarih: ${item.date}`);
+    }
+
+    const meta = doc.createElement('div');
+    meta.className = 'staff-assistant-result-meta';
+    meta.textContent = metaParts.join(' · ');
+
+    const footer = doc.createElement('div');
+    footer.className = 'staff-assistant-tebligat-footer';
+
+    const statusBadge = doc.createElement('span');
+    const hasMarkRef = Boolean(
+        item.ref
+        && String(item.ref.sayfa ?? '').trim()
+        && String(item.ref.isim ?? '').trim()
+        && String(item.ref.no ?? '').trim()
+    );
+
+    let marked = Boolean(item.marked);
+    let isMutating = false;
+    let confirmRow = null;
+    let toggleButton = null;
+
+    function syncCardAppearance() {
+        statusBadge.className = marked
+            ? 'staff-assistant-tebligat-status is-marked'
+            : 'staff-assistant-tebligat-status';
+        statusBadge.textContent = marked ? 'İşaretlendi' : 'İşaretlenmedi';
+        if (toggleButton) {
+            toggleButton.textContent = marked ? 'İşareti kaldır' : 'İşaretle';
+            toggleButton.setAttribute(
+                'aria-label',
+                marked
+                    ? `${displayName} kaydının işaretini kaldır`
+                    : `${displayName} kaydını işaretle`
+            );
+        }
+    }
+
+    function openConfirm() {
+        if (!hasMarkRef || isDestroyed()) return;
+        if (confirmRow && confirmRow.isConnected) {
+            confirmRow.querySelector('.staff-assistant-tebligat-confirm-yes')?.focus?.();
+            return;
+        }
+
+        const targetMarked = !marked;
+        confirmRow = doc.createElement('div');
+        confirmRow.className = 'staff-assistant-tebligat-confirm';
+        confirmRow.setAttribute('role', 'group');
+        confirmRow.setAttribute(
+            'aria-label',
+            targetMarked ? `${displayName} işaretleme onayı` : `${displayName} işaret kaldırma onayı`
+        );
+
+        const promptText = doc.createElement('p');
+        promptText.className = 'staff-assistant-tebligat-confirm-text';
+        promptText.textContent = targetMarked
+            ? `${displayName} kaydı işaretlensin mi?`
+            : `${displayName} kaydının işareti kaldırılsın mı?`;
+
+        const actions = doc.createElement('div');
+        actions.className = 'staff-assistant-tebligat-confirm-actions';
+
+        const yesButton = doc.createElement('button');
+        yesButton.type = 'button';
+        yesButton.className = 'staff-assistant-confirm-save staff-assistant-tebligat-confirm-yes';
+        yesButton.textContent = 'Evet';
+        yesButton.setAttribute(
+            'aria-label',
+            targetMarked
+                ? `${displayName} kaydını işaretlemeyi onayla`
+                : `${displayName} kaydının işaretini kaldırmayı onayla`
+        );
+
+        const cancelButton = doc.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'staff-assistant-confirm-cancel staff-assistant-tebligat-confirm-no';
+        cancelButton.textContent = 'Vazgeç';
+        cancelButton.setAttribute(
+            'aria-label',
+            targetMarked
+                ? `${displayName} işaretlemeden vazgeç`
+                : `${displayName} işaret kaldırmadan vazgeç`
+        );
+
+        cancelButton.addEventListener('click', () => {
+            if (isMutating) return;
+            confirmRow?.remove();
+            confirmRow = null;
+            toggleButton?.focus?.();
+        });
+
+        yesButton.addEventListener('click', async () => {
+            if (isMutating || isDestroyed()) return;
+            isMutating = true;
+            yesButton.disabled = true;
+            cancelButton.disabled = true;
+            if (toggleButton) toggleButton.disabled = true;
+
+            const fetchFn = getFetcher();
+            const succeeded = targetMarked
+                ? await markTebligatRecord(item.ref, { storage, fetcher: fetchFn })
+                : await unmarkTebligatRecord(item.ref, { storage, fetcher: fetchFn });
+
+            if (isDestroyed()) return;
+            isMutating = false;
+
+            if (succeeded) {
+                marked = targetMarked;
+                item.marked = targetMarked;
+                syncCardAppearance();
+                confirmRow?.remove();
+                confirmRow = null;
+                if (toggleButton) toggleButton.disabled = false;
+                appendMessage({
+                    role: 'assistant',
+                    text: targetMarked ? 'İşaretlendi.' : 'İşaret kaldırıldı.'
+                });
+                setMascotState('understood');
+                return;
+            }
+
+            yesButton.disabled = false;
+            cancelButton.disabled = false;
+            if (toggleButton) toggleButton.disabled = false;
+            appendMessage({ role: 'assistant', text: TEBLIGAT_MARK_ERROR_MESSAGE, isError: true });
+            setMascotState('confused');
+        });
+
+        actions.append(yesButton, cancelButton);
+        confirmRow.append(promptText, actions);
+        li.append(confirmRow);
+        scrollLogToBottom();
+        yesButton.focus?.();
+    }
+
+    if (hasMarkRef) {
+        toggleButton = doc.createElement('button');
+        toggleButton.type = 'button';
+        toggleButton.className = 'staff-assistant-tebligat-toggle';
+        toggleButton.addEventListener('click', openConfirm);
+        syncCardAppearance();
+        footer.append(statusBadge, toggleButton);
+    } else {
+        syncCardAppearance();
+        footer.append(statusBadge);
+    }
+
+    li.append(primary, meta, footer);
+    return {
+        element: li,
+        entry: {
+            name: displayName,
+            isMarked: () => marked,
+            canToggle: () => hasMarkRef,
+            openConfirm
+        }
+    };
+}
+
+function buildResultsElement(doc, results, tebligatHandlers) {
     const section = doc.createElement('div');
     section.className = 'staff-assistant-results';
 
@@ -105,6 +327,7 @@ function buildResultsElement(doc, results) {
 
     const list = doc.createElement('ul');
     list.className = 'staff-assistant-results-list';
+    const tebligatEntries = [];
 
     if (results.kind === 'applications') {
         for (const item of results.items) {
@@ -168,32 +391,9 @@ function buildResultsElement(doc, results) {
         }
     } else if (results.kind === 'tebligat') {
         for (const item of results.items) {
-            const li = doc.createElement('li');
-            li.className = 'staff-assistant-result-item';
-
-            const primary = doc.createElement('div');
-            primary.className = 'staff-assistant-result-primary';
-            primary.textContent = item.name || 'İsimsiz kayıt';
-
-            const metaParts = [];
-            if (item.sheet) metaParts.push(`Sayfa: ${item.sheet}`);
-            metaParts.push(`No: ${item.number || '-'}`);
-            if (item.date && item.date !== item.sheet) {
-                metaParts.push(`Tarih: ${item.date}`);
-            }
-
-            const meta = doc.createElement('div');
-            meta.className = 'staff-assistant-result-meta';
-            meta.textContent = metaParts.join(' · ');
-
-            const statusBadge = doc.createElement('span');
-            statusBadge.className = item.marked
-                ? 'staff-assistant-tebligat-status is-marked'
-                : 'staff-assistant-tebligat-status';
-            statusBadge.textContent = item.marked ? 'İşaretlendi' : 'İşaretlenmedi';
-
-            li.append(primary, meta, statusBadge);
-            list.append(li);
+            const card = buildTebligatCard(doc, item, tebligatHandlers);
+            tebligatEntries.push(card.entry);
+            list.append(card.element);
         }
     }
 
@@ -201,7 +401,7 @@ function buildResultsElement(doc, results) {
         section.append(list);
     }
 
-    return section;
+    return { element: section, tebligatEntries };
 }
 
 /**
@@ -223,12 +423,14 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
     ensureTopiStyles(doc);
 
     const view = doc.defaultView || globalThis;
+    const storage = resolveStorage(doc);
     const reducedMotion = prefersReducedMotion(doc);
     let isOpen = false;
     let isSending = false;
     let hasShownWelcome = false;
     let destroyed = false;
     let conversationHistory = [];
+    let lastTebligatEntries = [];
     const activeTimers = new Set();
     const activeBlobUrls = new Set();
 
@@ -379,7 +581,18 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
         wrapper.append(bubble);
 
         if (results) {
-            wrapper.append(buildResultsElement(doc, results));
+            const built = buildResultsElement(doc, results, {
+                storage,
+                getFetcher: () => resolveFetcher(doc, fetcher),
+                appendMessage,
+                setMascotState,
+                isDestroyed: () => destroyed,
+                scrollLogToBottom
+            });
+            if (results.kind === 'tebligat') {
+                lastTebligatEntries = built.tebligatEntries;
+            }
+            wrapper.append(built.element);
         }
 
         if (extraNode) {
@@ -551,6 +764,123 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
         }
     }
 
+    function renderTebligatLookupRecords(query, year, orderedRecords) {
+        const total = orderedRecords.length;
+        const truncated = total > MAX_TEBLIGAT_ITEMS;
+        const items = orderedRecords.slice(0, MAX_TEBLIGAT_ITEMS).map(toTopiTebligatItem);
+        const results = { kind: 'tebligat', total, truncated, items };
+
+        let reply;
+        let state;
+        if (total === 0) {
+            reply = `"${query}" için ${year} yılında kayıt bulamadım.`;
+            state = 'confused';
+        } else if (truncated) {
+            reply = `"${query}" için ${year} yılında ${total} kayıt buldum; ilk ${MAX_TEBLIGAT_ITEMS}'ini gösteriyorum; adı ve soyadıyla daraltın.`;
+            state = 'understood';
+        } else {
+            reply = `"${query}" için ${year} yılında ${total} kayıt buldum.`;
+            state = 'understood';
+        }
+
+        appendMessage({ role: 'assistant', text: reply, results });
+        setMascotState(state);
+    }
+
+    async function applyTebligatLookupAction(action, fetchFn) {
+        const year = getIstanbulCalendarYear(now);
+        const localResult = searchTebligatLocal(action.query, year, { storage });
+        if (localResult.ready) {
+            renderTebligatLookupRecords(action.query, year, localResult.records);
+            return;
+        }
+
+        appendMessage({ role: 'status', text: TEBLIGAT_NETWORK_LOADING_MESSAGE });
+        setMascotState('checking');
+
+        if (!fetchFn) {
+            appendMessage({ role: 'assistant', text: TEBLIGAT_LOOKUP_ERROR_MESSAGE, isError: true });
+            setMascotState('confused');
+            return;
+        }
+
+        try {
+            const url = `/api/search-tebligat?q=${encodeURIComponent(action.query)}&year=${encodeURIComponent(year)}`;
+            const response = await fetchFn(url, { credentials: 'same-origin' });
+            if (destroyed) return;
+            const data = await response.json();
+            if (destroyed) return;
+
+            if (!response.ok || !Array.isArray(data?.results)) {
+                throw new Error('TEBLIGAT_SEARCH_FAILED');
+            }
+
+            const orderedRecords = filterAndNormalizeNetworkTebligat(
+                data.results,
+                action.query,
+                year,
+                { storage }
+            );
+            renderTebligatLookupRecords(action.query, year, orderedRecords);
+        } catch {
+            if (destroyed) return;
+            appendMessage({ role: 'assistant', text: TEBLIGAT_LOOKUP_ERROR_MESSAGE, isError: true });
+            setMascotState('confused');
+        }
+    }
+
+    function tryHandleLocalTebligatMarkIntent(trimmed) {
+        if (lastTebligatEntries.length === 0) return false;
+        const foldedCase = normalizeTurkishCaseForPattern(trimmed);
+        const wantsUnmark = /i[sş]areti\s+kald[ıi]r/i.test(foldedCase) && !/sil/i.test(foldedCase);
+        const wantsMark = !wantsUnmark
+            && /i[sş]aret(?:le|ler)/i.test(foldedCase)
+            && !/kald[ıi]r|sil|geri/i.test(foldedCase);
+
+        if (!wantsMark && !wantsUnmark) return false;
+
+        if (lastTebligatEntries.length > 1) {
+            input.value = '';
+            updateInputMeta();
+            appendMessage({ role: 'user', text: trimmed });
+            appendMessage({
+                role: 'assistant',
+                text: wantsMark ? TEBLIGAT_MARK_MULTI_PROMPT : TEBLIGAT_UNMARK_MULTI_PROMPT
+            });
+            setMascotState('confused');
+            return true;
+        }
+
+        const single = lastTebligatEntries[0];
+        if (!single.canToggle()) return false;
+
+        input.value = '';
+        updateInputMeta();
+        appendMessage({ role: 'user', text: trimmed });
+
+        if (wantsMark) {
+            if (single.isMarked()) {
+                appendMessage({ role: 'assistant', text: `${single.name} kaydı zaten işaretlenmiş.` });
+                setMascotState('understood');
+            } else {
+                single.openConfirm();
+                appendMessage({ role: 'assistant', text: `${single.name} kaydını işaretlemek için onaylayın.` });
+                setMascotState('checking');
+            }
+            return true;
+        }
+
+        if (!single.isMarked()) {
+            appendMessage({ role: 'assistant', text: `${single.name} kaydı zaten işaretli değil.` });
+            setMascotState('understood');
+        } else {
+            single.openConfirm();
+            appendMessage({ role: 'assistant', text: `${single.name} kaydının işaretini kaldırmak için onaylayın.` });
+            setMascotState('checking');
+        }
+        return true;
+    }
+
     async function applyAction(rawAction, fetchFn) {
         let action;
         try {
@@ -573,6 +903,10 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
                     detail: { passportNo: action.passportNo, silent: true }
                 }));
             }
+            return;
+        }
+        case 'tebligat.lookup': {
+            await applyTebligatLookupAction(action, fetchFn);
             return;
         }
         case 'tebligat.search': {
@@ -612,6 +946,7 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
             return;
         }
         if (trimmed.length === 0) return;
+        if (tryHandleLocalTebligatMarkIntent(trimmed)) return;
 
         const historyPayload = conversationHistory.slice(-MAX_HISTORY_ITEMS);
         input.value = '';

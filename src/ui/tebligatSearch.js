@@ -8,6 +8,56 @@ const TEBLIGAT_CACHE_SYNC_KEY = 'tebligat_last_sync_time_v2';
 
 // In-Memory Normalized Cache for 0 ms Instant Search
 let inMemoryCache = [];
+let inMemoryCacheStorage = null;
+
+function resolveStorage(customStorage) {
+    if (customStorage) return customStorage;
+    try {
+        if (globalThis.localStorage && typeof globalThis.localStorage.getItem === 'function') {
+            return globalThis.localStorage;
+        }
+    } catch {
+        // Ignore unavailable global localStorage in Node test environments.
+    }
+    try {
+        if (globalThis.window?.localStorage && typeof globalThis.window.localStorage.getItem === 'function') {
+            return globalThis.window.localStorage;
+        }
+    } catch {
+        // Ignore unavailable window.localStorage.
+    }
+    return null;
+}
+
+function resolveFetcher(customFetcher) {
+    if (typeof customFetcher === 'function') return customFetcher;
+    if (typeof globalThis.fetch === 'function') return globalThis.fetch.bind(globalThis);
+    if (typeof globalThis.window?.fetch === 'function') return globalThis.window.fetch.bind(globalThis.window);
+    return null;
+}
+
+function readLocalMark(uniqueId, storage) {
+    if (!storage) return false;
+    try {
+        return storage.getItem(`tebligat_marked_${uniqueId}`) === 'true';
+    } catch {
+        return false;
+    }
+}
+
+function writeLocalMark(uniqueId, marked, storage) {
+    if (!storage) return;
+    try {
+        const key = `tebligat_marked_${uniqueId}`;
+        if (marked) {
+            storage.setItem(key, 'true');
+        } else {
+            storage.removeItem(key);
+        }
+    } catch {
+        // Ignore storage quota or security errors.
+    }
+}
 
 function parseDateStr(sayfaStr) {
     if (!sayfaStr) return 0;
@@ -21,7 +71,7 @@ function parseDateStr(sayfaStr) {
     return y * 10000 + m * 100 + d;
 }
 
-function getSheetYear(sheetName) {
+export function getSheetYear(sheetName) {
     if (!sheetName) return String(new Date().getFullYear());
     const match = String(sheetName).match(/(?:^|\.)(\d{4})(?:$|\.|-)/);
     return match ? match[1] : String(new Date().getFullYear());
@@ -160,13 +210,13 @@ function evaluateNameMatch(record, queryUpper, queryFolded, queryTokens) {
     };
 }
 
-function normalizeRecord(r) {
-    const rawIsim = r.isim ? String(r.isim) : '';
-    const rawSayfa = r.sayfa ? String(r.sayfa) : '';
-    const rawNo = r.no !== undefined && r.no !== null ? String(r.no) : '';
+export function normalizeRecord(r, storage = resolveStorage()) {
+    const rawIsim = r?.isim ? String(r.isim) : '';
+    const rawSayfa = r?.sayfa ? String(r.sayfa) : '';
+    const rawNo = r?.no !== undefined && r?.no !== null ? String(r.no) : '';
     const uniqueId = `${rawSayfa}-${rawIsim}-${rawNo}`;
-    const isMarkedLocally = localStorage.getItem('tebligat_marked_' + uniqueId) === 'true';
-    const isMarked = Boolean(r.isMarked || r.isaretli || isMarkedLocally);
+    const isMarkedLocally = readLocalMark(uniqueId, storage);
+    const isMarked = Boolean(r?.isMarked || r?.isaretli || isMarkedLocally);
     const folded = foldText(rawIsim);
 
     return {
@@ -186,13 +236,14 @@ function normalizeRecord(r) {
     };
 }
 
-function loadCacheIntoMemory() {
+export function loadCacheIntoMemory(storage = resolveStorage()) {
+    inMemoryCacheStorage = storage;
     try {
-        const cachedStr = localStorage.getItem(TEBLIGAT_CACHE_KEY);
+        const cachedStr = storage?.getItem(TEBLIGAT_CACHE_KEY);
         if (cachedStr) {
             const rawArr = JSON.parse(cachedStr);
             if (Array.isArray(rawArr)) {
-                inMemoryCache = rawArr.map(normalizeRecord);
+                inMemoryCache = rawArr.map((record) => normalizeRecord(record, storage));
                 return inMemoryCache.length;
             }
         }
@@ -201,6 +252,249 @@ function loadCacheIntoMemory() {
     }
     inMemoryCache = [];
     return 0;
+}
+
+function matchCachedRecords(records, query, year) {
+    const trimmed = String(query || '').trim();
+    if (trimmed.length < 2 || !Array.isArray(records) || records.length === 0) {
+        return [];
+    }
+
+    const targetYear = String(year);
+    const queryUpper = trimmed.toLocaleUpperCase('tr-TR');
+    const queryFolded = foldText(trimmed);
+    const queryTokens = queryFolded.split(' ').filter(Boolean);
+    const searchableSheetNames = getNewestSheetNames(records, targetYear);
+    const exactMatches = [];
+    const fuzzyMatches = [];
+
+    for (let i = 0; i < records.length; i += 1) {
+        const item = records[i];
+        if (item._year !== targetYear || !searchableSheetNames.has(item.sayfa)) continue;
+
+        const matchResult = evaluateNameMatch(item, queryUpper, queryFolded, queryTokens);
+        if (matchResult.isMatch) {
+            if (matchResult.isExact) {
+                exactMatches.push({ ...item, _isFuzzy: false, _score: matchResult.score });
+            } else {
+                fuzzyMatches.push({ ...item, _isFuzzy: true, _score: matchResult.score });
+            }
+        }
+    }
+
+    exactMatches.sort((a, b) => (b._dateVal - a._dateVal) || (b._noNum - a._noNum));
+    fuzzyMatches.sort((a, b) => (b._score - a._score) || (b._dateVal - a._dateVal));
+    return [...exactMatches, ...fuzzyMatches];
+}
+
+export function dedupeAndSortTebligatRecords(records) {
+    const uniqueResults = [];
+    const seen = new Set();
+    for (const record of records || []) {
+        const key = `${record.sayfa}_${record.no}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        uniqueResults.push(record);
+    }
+
+    return uniqueResults.sort((left, right) => {
+        const isFuzzyLeft = Boolean(left._isFuzzy);
+        const isFuzzyRight = Boolean(right._isFuzzy);
+        if (isFuzzyLeft !== isFuzzyRight) return isFuzzyLeft ? 1 : -1;
+        if (isFuzzyLeft && isFuzzyRight && left._score !== right._score) {
+            return (right._score || 0) - (left._score || 0);
+        }
+        const dateLeft = left._dateVal ?? parseDateStr(left.sayfa);
+        const dateRight = right._dateVal ?? parseDateStr(right.sayfa);
+        if (dateRight !== dateLeft) return dateRight - dateLeft;
+        const numberLeft = left._noNum ?? (parseInt(left.no, 10) || 0);
+        const numberRight = right._noNum ?? (parseInt(right.no, 10) || 0);
+        return numberRight - numberLeft;
+    });
+}
+
+function normalizeNetworkRecord(apiRes, queryUpper, queryFolded, queryTokens, storage) {
+    const norm = normalizeRecord(apiRes, storage);
+    const matchRes = evaluateNameMatch(norm, queryUpper, queryFolded, queryTokens);
+    norm._isFuzzy = !matchRes.isExact;
+    norm._score = matchRes.score || 100;
+    return norm;
+}
+
+/**
+ * Searches the in-memory tebligat cache for the given query and calendar year.
+ * Loads `localStorage` cache into memory when empty or when bound to a different storage instance.
+ * @param {string} query Search query string.
+ * @param {string|number} [year] Target calendar year.
+ * @param {{ storage?: Storage }} [options]
+ * @returns {{ ready: boolean, records: Array<object> }}
+ */
+export function searchTebligatLocal(query, year = new Date().getFullYear(), { storage = resolveStorage() } = {}) {
+    if (inMemoryCache.length === 0 || (storage && inMemoryCacheStorage !== storage)) {
+        loadCacheIntoMemory(storage);
+    }
+    if (inMemoryCache.length === 0) {
+        return { ready: false, records: [] };
+    }
+
+    const matched = matchCachedRecords(inMemoryCache, query, year);
+    const ordered = dedupeAndSortTebligatRecords(matched);
+    const records = ordered.map((record) => {
+        const isMarked = Boolean(record.isMarked || record.isaretli || readLocalMark(record._uniqueId, storage));
+        return isMarked === record.isMarked
+            ? record
+            : { ...record, isaretli: isMarked, isMarked };
+    });
+    return { ready: true, records };
+}
+
+/**
+ * Filters and normalizes live `/api/search-tebligat` records using the same year filter and ranking as the screen.
+ * @param {Array<object>} rawResults Raw network results.
+ * @param {string} query Search query string.
+ * @param {string|number} [year] Target calendar year.
+ * @param {{ storage?: Storage }} [options]
+ * @returns {Array<object>}
+ */
+export function filterAndNormalizeNetworkTebligat(
+    rawResults,
+    query,
+    year = new Date().getFullYear(),
+    { storage = resolveStorage() } = {}
+) {
+    const trimmed = String(query || '').trim();
+    const targetYear = String(year);
+    const queryUpper = trimmed.toLocaleUpperCase('tr-TR');
+    const queryFolded = foldText(trimmed);
+    const queryTokens = queryFolded.split(' ').filter(Boolean);
+    const matched = [];
+
+    for (const apiRes of rawResults || []) {
+        if (getSheetYear(apiRes?.sayfa) !== targetYear) continue;
+        matched.push(normalizeNetworkRecord(apiRes, queryUpper, queryFolded, queryTokens, storage));
+    }
+
+    return dedupeAndSortTebligatRecords(matched);
+}
+
+function extractTebligatDate(record, sheet) {
+    const rawDate = record?.tarih ?? record?.date ?? null;
+    if (typeof rawDate === 'string' && rawDate.trim().length > 0) {
+        return rawDate.trim();
+    }
+    const isoMatch = sheet.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    if (isoMatch) return isoMatch[1];
+    const dotMatch = sheet.match(/\b(\d{2}\.\d{2}\.\d{4})\b/);
+    if (dotMatch) return dotMatch[1];
+    const shortDotMatch = sheet.match(/\b(\d{2}\.\d{2})\b/);
+    if (shortDotMatch) return shortDotMatch[1];
+    return null;
+}
+
+/**
+ * Purely maps a tebligat record into the Topi chat card item shape.
+ * @param {object} record Tebligat record from cache or network search.
+ * @returns {{ name: string, sheet: string, number: string, date: string|null, marked: boolean, ref: { sayfa: string, isim: string, no: string } }}
+ */
+export function toTopiTebligatItem(record) {
+    const rawIsim = record?.isim ?? record?.name ?? '';
+    const rawSayfa = record?.sayfa ?? record?.sheet ?? '';
+    const rawNo = record?.no !== undefined && record?.no !== null
+        ? record.no
+        : record?.number;
+    const isim = String(rawIsim);
+    const sayfa = String(rawSayfa);
+    const no = rawNo !== undefined && rawNo !== null ? String(rawNo) : '';
+    const sheet = sayfa.trim();
+
+    return {
+        name: isim.trim(),
+        sheet,
+        number: no.trim(),
+        date: extractTebligatDate(record, sheet),
+        marked: Boolean(record?.isMarked || record?.isaretli || record?.marked),
+        ref: { sayfa, isim, no }
+    };
+}
+
+function extractRecordRef(record) {
+    const source = record?.ref && typeof record.ref === 'object' ? record.ref : record;
+    const sayfa = source?.sayfa ?? source?.sheet ?? '';
+    const isim = source?.isim ?? source?.name ?? '';
+    const rawNo = source?.no !== undefined && source?.no !== null
+        ? source.no
+        : source?.number;
+    return {
+        sayfa: String(sayfa),
+        isim: String(isim),
+        no: rawNo !== undefined && rawNo !== null ? String(rawNo) : ''
+    };
+}
+
+async function mutateTebligatMark(record, { targetMarked, endpoint, storage, fetcher }) {
+    const { sayfa, isim, no } = extractRecordRef(record);
+    if (!sayfa || !isim) return false;
+
+    const uniqueId = `${sayfa}-${isim}-${no || ''}`;
+    writeLocalMark(uniqueId, targetMarked, storage);
+    const memItem = inMemoryCache.find((entry) => entry._uniqueId === uniqueId);
+    if (memItem) {
+        memItem.isaretli = targetMarked;
+        memItem.isMarked = targetMarked;
+    }
+
+    try {
+        if (!fetcher) throw new Error('NO_FETCHER');
+        const response = await fetcher(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ sayfa, isim, no })
+        });
+        const data = await response.json();
+        if (response.ok && data?.success === true) {
+            return true;
+        }
+        throw new Error('TEBLIGAT_MARK_FAILED');
+    } catch {
+        writeLocalMark(uniqueId, !targetMarked, storage);
+        if (memItem) {
+            memItem.isaretli = !targetMarked;
+            memItem.isMarked = !targetMarked;
+        }
+        return false;
+    }
+}
+
+/**
+ * Optimistically marks a tebligat record locally and posts `/api/update-tebligat`, rolling back on failure.
+ * @param {object} record Tebligat record or ref `{ sayfa, isim, no }`.
+ * @param {{ storage?: Storage, fetcher?: typeof fetch }} [options]
+ * @returns {Promise<boolean>}
+ */
+export function markTebligatRecord(record, { storage = resolveStorage(), fetcher = resolveFetcher() } = {}) {
+    return mutateTebligatMark(record, {
+        targetMarked: true,
+        endpoint: '/api/update-tebligat',
+        storage,
+        fetcher
+    });
+}
+
+/**
+ * Optimistically unmarks a tebligat record locally and posts `/api/unmark-tebligat`, rolling back on failure.
+ * @param {object} record Tebligat record or ref `{ sayfa, isim, no }`.
+ * @param {{ storage?: Storage, fetcher?: typeof fetch }} [options]
+ * @returns {Promise<boolean>}
+ */
+export function unmarkTebligatRecord(record, { storage = resolveStorage(), fetcher = resolveFetcher() } = {}) {
+    return mutateTebligatMark(record, {
+        targetMarked: false,
+        endpoint: '/api/unmark-tebligat',
+        storage,
+        fetcher
+    });
 }
 
 export function initTebligatSearch() {
@@ -433,34 +727,12 @@ export function initTebligatSearch() {
             return;
         }
 
-        const uniqueResults = [];
-        const seen = new Set();
-        for (const record of resultsArray) {
-            const key = `${record.sayfa}_${record.no}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            uniqueResults.push(record);
-        }
-
-        const orderedResults = uniqueResults.sort((left, right) => {
-            const isFuzzyLeft = Boolean(left._isFuzzy);
-            const isFuzzyRight = Boolean(right._isFuzzy);
-            if (isFuzzyLeft !== isFuzzyRight) return isFuzzyLeft ? 1 : -1;
-            if (isFuzzyLeft && isFuzzyRight && left._score !== right._score) {
-                return (right._score || 0) - (left._score || 0);
-            }
-            const dateLeft = left._dateVal ?? parseDateStr(left.sayfa);
-            const dateRight = right._dateVal ?? parseDateStr(right.sayfa);
-            if (dateRight !== dateLeft) return dateRight - dateLeft;
-            const numberLeft = left._noNum ?? (parseInt(left.no, 10) || 0);
-            const numberRight = right._noNum ?? (parseInt(right.no, 10) || 0);
-            return numberRight - numberLeft;
-        });
-
+        const orderedResults = dedupeAndSortTebligatRecords(resultsArray);
+        const storage = resolveStorage();
         const query = currentQuery || searchInput.value.trim();
         for (const record of orderedResults) {
             const uniqueId = record._uniqueId || `${record.sayfa}-${record.isim}-${record.no || ''}`;
-            const isMarkedLocally = localStorage.getItem(`tebligat_marked_${uniqueId}`) === 'true';
+            const isMarkedLocally = readLocalMark(uniqueId, storage);
             searchResults.append(createTebligatResultCard({
                 document,
                 record,
@@ -497,29 +769,7 @@ export function initTebligatSearch() {
         const queryTokens = queryFolded.split(' ').filter(Boolean);
 
         // 1. ADIM (0 ms - ANINDA): Bellek İçi RAM İndeksinden Tara (Tam ve Benzer Eşleşmeler)
-        let exactMatches = [];
-        let fuzzyMatches = [];
-
-        if (inMemoryCache.length > 0) {
-            const searchableSheetNames = getNewestSheetNames(inMemoryCache, currYear);
-            for (let i = 0; i < inMemoryCache.length; i++) {
-                const item = inMemoryCache[i];
-                if (item._year !== currYear || !searchableSheetNames.has(item.sayfa)) continue;
-
-                const matchResult = evaluateNameMatch(item, queryUpper, queryFolded, queryTokens);
-                if (matchResult.isMatch) {
-                    if (matchResult.isExact) {
-                        exactMatches.push({ ...item, _isFuzzy: false, _score: matchResult.score });
-                    } else {
-                        fuzzyMatches.push({ ...item, _isFuzzy: true, _score: matchResult.score });
-                    }
-                }
-            }
-            exactMatches.sort((a, b) => (b._dateVal - a._dateVal) || (b._noNum - a._noNum));
-            fuzzyMatches.sort((a, b) => (b._score - a._score) || (b._dateVal - a._dateVal));
-        }
-
-        let localMatches = [...exactMatches, ...fuzzyMatches];
+        const localMatches = matchCachedRecords(inMemoryCache, query, currYear);
 
         // Yerel sonuç varsa ANINDA ekrana bas (İskelet animasyonu gösterme!)
         if (localMatches.length > 0) {
@@ -554,10 +804,7 @@ export function initTebligatSearch() {
                             const key = apiRes.sayfa + '_' + apiRes.no;
                             if (!seenKeys.has(key)) {
                                 seenKeys.add(key);
-                                const norm = normalizeRecord(apiRes);
-                                const matchRes = evaluateNameMatch(norm, queryUpper, queryFolded, queryTokens);
-                                norm._isFuzzy = !matchRes.isExact;
-                                norm._score = matchRes.score || 100;
+                                const norm = normalizeNetworkRecord(apiRes, queryUpper, queryFolded, queryTokens, resolveStorage());
                                 combined.push(norm);
                                 inMemoryCache.push(norm); // Gelecek aramalar için belleğe ekle
                             }
@@ -646,55 +893,29 @@ export function initTebligatSearch() {
             unmarkBtn.style.display = 'flex';
         }
 
-        const uniqueId = `${sayfa}-${isim}-${no || ''}`;
-        localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
-
-        const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
-        if (memItem) {
-            memItem.isaretli = true;
-            memItem.isMarked = true;
+        const succeeded = await markTebligatRecord({ sayfa, isim, no });
+        if (succeeded) {
+            if (window.showToast) {
+                window.showToast('E-Tablo güncellendi (İsim yeşil oldu, C kolonuna tarih yazıldı).', 'success');
+            }
+            return;
         }
 
-        try {
-            const response = await fetch('/api/update-tebligat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ sayfa, isim, no })
-            });
-
-            const data = await response.json();
-            
-            if (response.ok && data.success === true) {
-                if (window.showToast) {
-                    window.showToast('E-Tablo güncellendi (İsim yeşil oldu, C kolonuna tarih yazıldı).', 'success');
-                }
-            } else {
-                throw new Error('UPDATE_FAILED');
-            }
-        } catch (error) {
-            // Hata durumunda geri al
-            btn.innerHTML = originalHtml;
-            btn.style.backgroundColor = originalBg;
-            btn.style.color = originalColor;
-            btn.style.borderColor = originalBorder;
-            btn.style.cursor = originalCursor;
-            btn.classList.remove('marked');
-            btn.disabled = false;
-            if (unmarkBtn) {
-                unmarkBtn.style.display = 'none';
-            }
-            localStorage.removeItem('tebligat_marked_' + uniqueId);
-            if (memItem) {
-                memItem.isaretli = false;
-                memItem.isMarked = false;
-            }
-            if (window.showToast) {
-                window.showToast('İşaretleme tamamlanamadı. Tekrar deneyin.', 'error');
-            } else {
-                alert('İşaretleme tamamlanamadı. Lütfen tekrar deneyin.');
-            }
+        // Hata durumunda geri al
+        btn.innerHTML = originalHtml;
+        btn.style.backgroundColor = originalBg;
+        btn.style.color = originalColor;
+        btn.style.borderColor = originalBorder;
+        btn.style.cursor = originalCursor;
+        btn.classList.remove('marked');
+        btn.disabled = false;
+        if (unmarkBtn) {
+            unmarkBtn.style.display = 'none';
+        }
+        if (window.showToast) {
+            window.showToast('İşaretleme tamamlanamadı. Tekrar deneyin.', 'error');
+        } else {
+            alert('İşaretleme tamamlanamadı. Lütfen tekrar deneyin.');
         }
     });
 
@@ -712,8 +933,6 @@ export function initTebligatSearch() {
         const no = card.dataset.no;
 
         const markBtn = card.querySelector('.btn-mark-tebligat');
-        const uniqueId = `${sayfa}-${isim}-${no || ''}`;
-        const memItem = inMemoryCache.find(x => x._uniqueId === uniqueId);
 
         // Anlık (İyimser) durum güncellemesi: milisaniyesinde kaldır butonunu gizle ve İşaretle butonunu aktifleştir
         btn.style.display = 'none';
@@ -726,52 +945,30 @@ export function initTebligatSearch() {
             markBtn.classList.remove('marked');
             markBtn.disabled = false;
         }
-        localStorage.removeItem('tebligat_marked_' + uniqueId);
-        if (memItem) {
-            memItem.isaretli = false;
-            memItem.isMarked = false;
+
+        const succeeded = await unmarkTebligatRecord({ sayfa, isim, no });
+        if (succeeded) {
+            if (window.showToast) {
+                window.showToast('İşaret başarıyla kaldırıldı.', 'success');
+            }
+            return;
         }
 
-        try {
-            const response = await fetch('/api/unmark-tebligat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ sayfa, isim, no })
-            });
-
-            const data = await response.json();
-            
-            if (response.ok && data.success === true) {
-                if (window.showToast) {
-                    window.showToast('İşaret başarıyla kaldırıldı.', 'success');
-                }
-            } else {
-                throw new Error('UNMARK_FAILED');
-            }
-        } catch (error) {
-            // Hata durumunda geri al (tekrar işaretli hale getir)
-            btn.style.display = 'flex';
-            if (markBtn) {
-                markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
-                markBtn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
-                markBtn.style.color = '#27ae60';
-                markBtn.style.borderColor = '#27ae60';
-                markBtn.style.cursor = 'default';
-                markBtn.classList.add('marked');
-                markBtn.disabled = true;
-            }
-            localStorage.setItem('tebligat_marked_' + uniqueId, 'true');
-            if (memItem) {
-                memItem.isaretli = true;
-                memItem.isMarked = true;
-            }
-            if (window.showToast) {
-                window.showToast('İşaret kaldırılamadı. Tekrar deneyin.', 'error');
-            } else {
-                alert('İşaret kaldırılamadı. Lütfen tekrar deneyin.');
-            }
+        // Hata durumunda geri al (tekrar işaretli hale getir)
+        btn.style.display = 'flex';
+        if (markBtn) {
+            markBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg> İşaretlendi';
+            markBtn.style.backgroundColor = 'rgba(39, 174, 96, 0.1)';
+            markBtn.style.color = '#27ae60';
+            markBtn.style.borderColor = '#27ae60';
+            markBtn.style.cursor = 'default';
+            markBtn.classList.add('marked');
+            markBtn.disabled = true;
+        }
+        if (window.showToast) {
+            window.showToast('İşaret kaldırılamadı. Tekrar deneyin.', 'error');
+        } else {
+            alert('İşaret kaldırılamadı. Lütfen tekrar deneyin.');
         }
     });
 }

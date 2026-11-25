@@ -96,7 +96,8 @@ const ACTION_KEYS_BY_TYPE = Object.freeze({
     'ykn.run': new Set(['type', 'passportNo']),
     'documents.print': new Set(['type', 'documentId', 'copies']),
     'workHours.propose': new Set(['type', 'person', 'minutes', 'label']),
-    'tebligat.search': new Set(['type', 'query'])
+    'tebligat.search': new Set(['type', 'query']),
+    'tebligat.lookup': new Set(['type', 'query'])
 });
 
 function isPlainObject(value) {
@@ -376,7 +377,8 @@ export function validateStaffAssistantAction(value) {
             label: value.label
         };
     }
-    case 'tebligat.search': {
+    case 'tebligat.search':
+    case 'tebligat.lookup': {
         if (!isString(value.query)) {
             throw new Error('invalid-action');
         }
@@ -384,7 +386,7 @@ export function validateStaffAssistantAction(value) {
         if (query.length < 2 || query.length > 80) {
             throw new Error('invalid-action');
         }
-        return { type: 'tebligat.search', query };
+        return { type: value.type, query };
     }
     default:
         throw new Error('invalid-action');
