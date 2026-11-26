@@ -78,3 +78,62 @@ test('staff scanner panel reports the full failed count, not the listed sample',
     assert.match(root.textContent, /ilk 1 kayıt gösteriliyor/);
     document.defaultView.close();
 });
+
+test('staff scanner panel treats 48-hour-old signatures as active within 72-hour window', async () => {
+    const module = await import('../src/staff/scanner-manager.js');
+    const document = new JSDOM('<section></section>').window.document;
+    const root = document.querySelector('section');
+    document.defaultView.setTimeout = () => 0;
+    const nowMs = Date.now();
+    const api = {
+        readStatus: async () => ({
+            jobs: [],
+            runners: [{
+                runner_id: 'mac',
+                health: 'ready',
+                seen_at: new Date(nowMs).toISOString(),
+                signature_updated_at: new Date(nowMs - 48 * 3_600_000).toISOString()
+            }],
+            last_successful_scan: null,
+            failed_jobs: []
+        }),
+        retry: async () => {}
+    };
+    module.initializeScannerManager(root, api);
+
+    root.querySelector('[data-action="refresh-scanner"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.doesNotMatch(root.textContent, /çevrimdışı|bayat/i);
+    assert.match(root.querySelector('.staff-scanner-badge').textContent, /Tarama Servisi Aktif/);
+    document.defaultView.close();
+});
+
+test('staff scanner panel marks 4-day-old signatures as stale', async () => {
+    const module = await import('../src/staff/scanner-manager.js');
+    const document = new JSDOM('<section></section>').window.document;
+    const root = document.querySelector('section');
+    document.defaultView.setTimeout = () => 0;
+    const nowMs = Date.now();
+    const api = {
+        readStatus: async () => ({
+            jobs: [],
+            runners: [{
+                runner_id: 'mac',
+                health: 'ready',
+                seen_at: new Date(nowMs).toISOString(),
+                signature_updated_at: new Date(nowMs - 4 * 86_400_000).toISOString()
+            }],
+            last_successful_scan: null,
+            failed_jobs: []
+        }),
+        retry: async () => {}
+    };
+    module.initializeScannerManager(root, api);
+
+    root.querySelector('[data-action="refresh-scanner"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.match(root.textContent, /çevrimdışı|bayat/);
+    document.defaultView.close();
+});

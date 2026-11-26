@@ -36,8 +36,9 @@ function readHostSummary(runners) {
     const latestRunner = runners[0];
     if (!latestRunner) return 'Tarama hostundan henüz sinyal alınmadı.';
     if (Date.now() - Date.parse(latestRunner.seen_at) > 120_000) return 'Tarama hostu çevrimdışı; işler kuyrukta korunuyor.';
+    // Matches the runner's SCANNER_MAX_SIGNATURE_AGE_SECONDS upper bound (72 hours).
     if (latestRunner.health !== 'ready' || !latestRunner.signature_updated_at
-        || Date.now() - Date.parse(latestRunner.signature_updated_at) > 86_400_000) {
+        || Date.now() - Date.parse(latestRunner.signature_updated_at) > 259_200_000) {
         return 'Tarama motoru hazır değil veya imzalar bayat; güvenli sonuç üretilemiyor.';
     }
     return 'Tarama hostu hazır. Durum bu yenilemenin anını gösterir.';
