@@ -63,3 +63,20 @@
 ## 7. Sonraki adım
 
 - Aşama 1'in yerelde yapılması ve sonucun bu plana göre kaydedilmesi.
+
+## 8. GöçNet akışının tamamlanması (ayrı iş kalemi)
+
+- Tarih: 2026-11-26. Kaynak: Yandex üzerinde YÖKSİS "İkamet İzni Başvuru Belgelerinin GöçNet'e İletilmesi" ekranı ve staff ekranındaki "GöçNet'e aktar" düğmesi. Doğrulama durumu: **Henüz doğrulanmadı.**
+- Mevcut durum: Eklenti, E-İkamet başvuru numarasını sorgulayıp "Başvuru Kayıt No" ve "Mevcut GöçNet İşlem Kayıt No" değerlerini okuyabiliyor. Staff tarafı birleşik PDF hazırlayıp eklentiye gönderiyor. Eksik olan: kayıt numarası yazıldıktan sonra **İşlemi Başlat / Kaydet** tıklanması ve ardından yükleme bölümünün açılması.
+- Hedef sıra:
+  1. Staff "GöçNet'e aktar" düğmesine basar.
+  2. Sistem `isim_soyisim_pasaportno.pdf` adında PDF'i hazırlar ve indirir.
+  3. Eklenti YÖKSİS'te zorunlu alanları doldurur ve **İşlemi Başlat / Kaydet** düğmesine basar.
+  4. Açılan onay penceresi kapatılır ve yükleme bölümü açılır.
+  5. Eklenti indirilen PDF'i yükleme alanına ekler.
+  6. Sonrası mevcut akışa devredilir.
+- Yeniden başlatma: Bu akış yarıda kesilirse, mevcut kayıt numarası okunmuş olarak kalmalı ve tekrar denemede aynı kayıt devam etmeli.
+- Açık sorular:
+  - İndirilen PDF her zaman birleşik belge mi, yoksa farklı bir dosya mı?
+  - İşlemi Başlat / Kaydet düğmesi eklenti tarafından otomatik tıklansın mı? YÖKSİS'te kayıt oluşturduğu için onay gerekir.
+  - İndirilen PDF diskte kalıcı kalsın mı, yoksa yükleme sonrası silinsin mi? Öğrenci belgesi olduğu için önerim silinmesi.
