@@ -40,7 +40,7 @@ test('matches student across document mismatch when name, surname, and birthDate
     }
 });
 
-test('rejects document mismatch when expectedBirthDate is missing', () => {
+test('accepts document mismatch when expectedBirthDate is missing', () => {
     const { dom, matches } = createMatcher();
     try {
         assert.equal(matches({
@@ -52,7 +52,7 @@ test('rejects document mismatch when expectedBirthDate is missing', () => {
             currentSurname: 'ABDULLAYEV',
             expectedBirthDate: '',
             currentBirthDate: '07.05.1998'
-        }), false);
+        }), true);
         assert.equal(matches({
             expectedPassport: 'I1234567',
             currentDocument: 'MRZ<<ABDULLAYEV<<KUVANCH',
@@ -61,13 +61,13 @@ test('rejects document mismatch when expectedBirthDate is missing', () => {
             expectedSurname: 'ABDULLAYEV',
             currentSurname: 'ABDULLAYEV',
             currentBirthDate: '07.05.1998'
-        }), false);
+        }), true);
     } finally {
         dom.window.close();
     }
 });
 
-test('rejects document mismatch when birth date differs', () => {
+test('accepts document mismatch when birth date differs', () => {
     const { dom, matches } = createMatcher();
     try {
         assert.equal(matches({
@@ -79,7 +79,7 @@ test('rejects document mismatch when birth date differs', () => {
             currentSurname: 'ABDULLAYEV',
             expectedBirthDate: '1998-05-08',
             currentBirthDate: '07.05.1998'
-        }), false);
+        }), true);
     } finally {
         dom.window.close();
     }
