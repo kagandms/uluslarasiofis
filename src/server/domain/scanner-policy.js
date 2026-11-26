@@ -2,6 +2,8 @@ import { ApiError } from './errors.js';
 
 export const SCANNER_POLICY_VERSION = 'clamav-full-v1';
 export const MAX_SCAN_BYTES = 10 * 1024 * 1024;
+// Matches the runner's SCANNER_MAX_SIGNATURE_AGE_SECONDS upper bound (72 hours).
+const MAX_SIGNATURE_AGE_MS = 259_200_000;
 const RESULT_CODES = new Set(['scanned','malware','engine_unavailable','signature_stale','update_failed','scan_timeout',
     'scan_error','policy_blocked','download_failed','content_mismatch','unsupported_content']);
 const RESULT_KEYS = new Set(['file_id','revision_id','storage_key','byte_size','object_etag','sha256','outcome',
@@ -35,7 +37,7 @@ function isRecentTime(value, now, maxAge) {
 /** @param {object} result Scan evidence. @param {number} now Epoch milliseconds. @returns {void} Validated engine evidence. @throws {ApiError} Incomplete or stale evidence. */
 function requireEngineEvidence(result, now) {
     if (![result.engine_version,result.signature_version].every((value) => typeof value === 'string' && /^[\w.+-]{1,64}$/.test(value))) throw createInvalidResultError();
-    if (!isRecentTime(result.signature_updated_at, now, 86_400_000)) throw createInvalidResultError();
+    if (!isRecentTime(result.signature_updated_at, now, MAX_SIGNATURE_AGE_MS)) throw createInvalidResultError();
     if ((result.outcome === 'clean' && result.full_scan !== true) || !/^[a-f0-9]{64}$/.test(result.sha256 || '')) throw createInvalidResultError();
     if (result.outcome === 'clean' && result.result_code !== 'scanned') throw createInvalidResultError();
     if (result.outcome === 'unsafe' && result.result_code !== 'malware') throw createInvalidResultError();
