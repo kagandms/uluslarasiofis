@@ -22,7 +22,6 @@
     function matches(options) {
         const expectedPassport = normalizeText(options.expectedPassport);
         const currentDocument = normalizeText(options.currentDocument);
-        const hasPassportMismatch = Boolean(expectedPassport && currentDocument && expectedPassport !== currentDocument);
         const nameMatches = normalizeText(options.expectedName) === normalizeText(options.currentName)
             && Boolean(normalizeText(options.expectedName));
         const surnameMatches = normalizeText(options.expectedSurname) === normalizeText(options.currentSurname)
@@ -30,9 +29,11 @@
         const expectedBirthDate = normalizeDate(options.expectedBirthDate);
         const currentBirthDate = normalizeDate(options.currentBirthDate);
 
-        if (expectedPassport && currentDocument && !hasPassportMismatch) return true;
-        if (!nameMatches || !surnameMatches) return hasPassportMismatch ? false : null;
-        if (hasPassportMismatch) return Boolean(expectedBirthDate && currentBirthDate && expectedBirthDate === currentBirthDate);
+        if (expectedPassport && currentDocument) {
+            if (expectedPassport === currentDocument) return true;
+            return nameMatches && surnameMatches;
+        }
+        if (!nameMatches || !surnameMatches) return null;
         if (expectedBirthDate && currentBirthDate) return expectedBirthDate === currentBirthDate;
         return true;
     }

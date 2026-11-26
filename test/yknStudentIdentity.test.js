@@ -38,7 +38,7 @@ test('accepts exact name, surname, and birth date when document numbers differ',
     } finally { dom.window.close(); }
 });
 
-test('rejects a document mismatch when the birth date differs', () => {
+test('accepts a document mismatch even when the birth date differs', () => {
     const { dom, matches } = createMatcher();
     try {
         assert.equal(matches({
@@ -50,18 +50,79 @@ test('rejects a document mismatch when the birth date differs', () => {
             currentSurname: 'Mwali',
             expectedBirthDate: '2003-06-19',
             currentBirthDate: '20.06.2003'
-        }), false);
+        }), true);
     } finally { dom.window.close(); }
 });
 
-test('rejects a document mismatch without a complete secondary identity', () => {
+test('accepts a document mismatch without a complete secondary identity', () => {
     const { dom, matches } = createMatcher();
     try {
         assert.equal(matches({
             expectedPassport: 'AB123', currentDocument: 'CD456',
             expectedName: 'Kevin', currentName: 'Kevin',
             expectedSurname: 'Mwali', currentSurname: 'Mwali'
+        }), true);
+    } finally { dom.window.close(); }
+});
+
+test('rejects a document mismatch when name or surname differs', () => {
+    const { dom, matches } = createMatcher();
+    try {
+        assert.equal(matches({
+            expectedPassport: 'AB123',
+            currentDocument: 'CD456',
+            expectedName: 'Kevin',
+            currentName: 'Other',
+            expectedSurname: 'Mwali',
+            currentSurname: 'Banda',
+            expectedBirthDate: '2003-06-19',
+            currentBirthDate: '20.06.2003'
         }), false);
+
+        assert.equal(matches({
+            expectedPassport: 'AB123',
+            currentDocument: 'CD456',
+            expectedName: 'Kevin',
+            currentName: 'Kevin',
+            expectedSurname: 'Mwali',
+            currentSurname: 'Banda',
+            expectedBirthDate: '2003-06-19',
+            currentBirthDate: '19.06.2003'
+        }), false);
+    } finally { dom.window.close(); }
+});
+
+test('keeps secondary identity checks when passport data is missing on either side', () => {
+    const { dom, matches } = createMatcher();
+    try {
+        assert.equal(matches({
+            expectedPassport: 'AB123',
+            currentDocument: '',
+            expectedName: 'Kevin',
+            currentName: 'Other',
+            expectedSurname: 'Mwali',
+            currentSurname: 'Mwali'
+        }), null);
+
+        assert.equal(matches({
+            expectedPassport: '',
+            currentDocument: 'CD456',
+            expectedName: 'Kevin',
+            currentName: 'Kevin',
+            expectedSurname: 'Mwali',
+            currentSurname: 'Mwali',
+            expectedBirthDate: '2003-06-19',
+            currentBirthDate: '20.06.2003'
+        }), false);
+
+        assert.equal(matches({
+            expectedPassport: 'AB123',
+            currentDocument: '',
+            expectedName: 'Kevin',
+            currentName: 'Kevin',
+            expectedSurname: 'Mwali',
+            currentSurname: 'Mwali'
+        }), true);
     } finally { dom.window.close(); }
 });
 
@@ -155,7 +216,7 @@ test('explain matches result with matches() across all identity cases and expose
                     birthMonthEqual: false,
                     birthDayEqual: false,
                     birthDayMonthSwappedEqual: false,
-                    result: false
+                    result: true
                 }
             },
             {
@@ -188,7 +249,7 @@ test('explain matches result with matches() across all identity cases and expose
                     birthMonthEqual: true,
                     birthDayEqual: false,
                     birthDayMonthSwappedEqual: false,
-                    result: false
+                    result: true
                 }
             },
             {
@@ -221,7 +282,7 @@ test('explain matches result with matches() across all identity cases and expose
                     birthMonthEqual: true,
                     birthDayEqual: true,
                     birthDayMonthSwappedEqual: false,
-                    result: false
+                    result: true
                 }
             },
             {
@@ -254,7 +315,7 @@ test('explain matches result with matches() across all identity cases and expose
                     birthMonthEqual: false,
                     birthDayEqual: false,
                     birthDayMonthSwappedEqual: true,
-                    result: false
+                    result: true
                 }
             },
             {
@@ -344,7 +405,7 @@ test('explain matches result with matches() across all identity cases and expose
                     birthMonthEqual: false,
                     birthDayEqual: false,
                     birthDayMonthSwappedEqual: false,
-                    result: false
+                    result: true
                 }
             },
             {
@@ -377,7 +438,7 @@ test('explain matches result with matches() across all identity cases and expose
                     birthMonthEqual: false,
                     birthDayEqual: false,
                     birthDayMonthSwappedEqual: false,
-                    result: false
+                    result: true
                 }
             }
         ];
