@@ -84,7 +84,30 @@ jobs:
           git fetch --no-tags origin production
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           test "$(git rev-parse refs/remotes/origin/production)" = "$RELEASE_SHA"
-      - name: Download artifact produced by exact-SHA CI
+      - name: Download artifact produced by exact-SHA CI (attempt 1)
+        id: download1
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate-release
+      - name: Wait for artifact listing to settle (before attempt 2)
+        if: steps.download1.outcome == 'failure'
+        run: sleep 60
+      - name: Download artifact produced by exact-SHA CI (attempt 2)
+        id: download2
+        if: steps.download1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/candidate-release
+      - name: Wait for artifact listing to settle (before attempt 3)
+        if: steps.download1.outcome == 'failure' && steps.download2.outcome == 'failure'
+        run: sleep 120
+      - name: Download artifact produced by exact-SHA CI (attempt 3)
+        id: download3
+        if: steps.download1.outcome == 'failure' && steps.download2.outcome == 'failure'
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: candidate-${{ github.run_id }}-${{ github.run_attempt }}
