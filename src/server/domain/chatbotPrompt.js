@@ -1,4 +1,4 @@
-import { CHATBOT_LANGUAGES } from './chatbotKnowledge.js';
+import { CHATBOT_LANGUAGES, readKnowledge } from './chatbotKnowledge.js';
 
 export const CHATBOT_REFUSAL_MARKER = '[[REFUSAL]]';
 
@@ -74,11 +74,25 @@ export const CHATBOT_FIXED_TEXTS = Object.freeze({
         ar: 'قد تختلف القائمة حسب بيانات طلبك؛ تُعرض القائمة النهائية أثناء التقديم، وتتم المراجعة الرسمية من قِبل مكتب الطلاب الدوليين.'
     }),
     statusNeedsReference: Object.freeze({
-        tr: 'Başvurunuzun durumunu görmek için onay e-postanızdaki ITU-XXXX-XXXX biçimindeki başvuru numaranızı yazın.',
-        en: 'To check your application status, please enter your application number in ITU-XXXX-XXXX format from your confirmation e-mail.',
-        ru: 'Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX из письма с подтверждением.',
-        tk: 'Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzdaky ITU-XXXX-XXXX görnüşli arza belgiňizi ýazyň.',
-        ar: 'لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX الموجود في بريد التأكيد الإلكتروني.'
+        tr: `Başvurunuzun durumunu görmek için onay e-postanızda veya başvuru belgenizde yer alan ITU-XXXX-XXXX biçimindeki (örneğin ITU-7K9M-4X2P) başvuru numaranızı yazın.\n\n${readKnowledge('forgot_reference', 'tr').text}`,
+        en: `To check your application status, please enter your application number in ITU-XXXX-XXXX format (for example, ITU-7K9M-4X2P) from your confirmation e-mail or application document.\n\n${readKnowledge('forgot_reference', 'en').text}`,
+        ru: `Чтобы узнать статус вашей заявки, введите номер заявки в формате ITU-XXXX-XXXX (например, ITU-7K9M-4X2P), который указан в письме с подтверждением или в документе заявки.\n\n${readKnowledge('forgot_reference', 'ru').text}`,
+        tk: `Arzaňyzyň ýagdaýyny görmek üçin tassyklama e-poçtaňyzda ýa-da arza resminamaňyzda görkezilen ITU-XXXX-XXXX görnüşli (mysal üçin, ITU-7K9M-4X2P) arza belgiňizi ýazyň.\n\n${readKnowledge('forgot_reference', 'tk').text}`,
+        ar: `لمعرفة حالة طلبك، يرجى كتابة رقم الطلب بصيغة ITU-XXXX-XXXX (مثال: ITU-7K9M-4X2P) الموجود في بريد التأكيد الإلكتروني أو مستند الطلب.\n\n${readKnowledge('forgot_reference', 'ar').text}`
+    }),
+    invalidReferenceFormat: Object.freeze({
+        tr: `Girdiğiniz numara geçerli başvuru numarası biçimiyle eşleşmiyor. Başvuru numaranız ITU-XXXX-XXXX biçiminde olmalıdır (örneğin ITU-7K9M-4X2P); bu numarayı onay e-postanızda veya başvuru belgenizde bulabilirsiniz.\n\n${readKnowledge('forgot_reference', 'tr').text}`,
+        en: `The number you entered does not match the valid application number format. Your application number must be in ITU-XXXX-XXXX format (for example, ITU-7K9M-4X2P); you can find it in your confirmation e-mail or application document.\n\n${readKnowledge('forgot_reference', 'en').text}`,
+        ru: `Введённый номер не соответствует формату номера заявки. Номер заявки должен быть в формате ITU-XXXX-XXXX (например, ITU-7K9M-4X2P); его можно найти в письме с подтверждением или в документе заявки.\n\n${readKnowledge('forgot_reference', 'ru').text}`,
+        tk: `Girizen belgiňiz dogry arza belgisi görnüşine gabat gelmeýär. Arza belgiňiz ITU-XXXX-XXXX görnüşinde bolmalydyr (mysal üçin, ITU-7K9M-4X2P); ony tassyklama e-poçtaňyzda ýa-da arza resminamaňyzda tapyp bilersiňiz.\n\n${readKnowledge('forgot_reference', 'tk').text}`,
+        ar: `الرقم الذي أدخلته لا يطابق صيغة رقم الطلب الصحيحة. يجب أن يكون رقم الطلب بصيغة ITU-XXXX-XXXX (مثال: ITU-7K9M-4X2P)، ويمكنك العثور عليه في بريد التأكيد الإلكتروني أو مستند الطلب.\n\n${readKnowledge('forgot_reference', 'ar').text}`
+    }),
+    invalidReferenceEscalation: Object.freeze({
+        tr: 'Geçerli bir başvuru numarasına ulaşılamadığı için sonraki adım olarak ana sayfadaki soru formunu kullanarak Uluslararası Öğrenci Ofisine ulaşabilirsiniz.',
+        en: 'Since a valid application number could not be matched, please use the question form on the home page as the next step to reach the International Student Office.',
+        ru: 'Поскольку не удалось определить действительный номер заявки, в качестве следующего шага обратитесь в Международный студенческий офис через форму вопросов на главной странице.',
+        tk: 'Dogry arza belgisini tapyp bolmandygy sebäpli, indiki ädim hökmünde baş sahypadaky sorag formasy arkaly Halkara talyplar ofisine ýüz tutup bilersiňiz.',
+        ar: 'نظراً لعدم التمكن من مطابقة رقم طلب صالح، يرجى استخدام نموذج الأسئلة في الصفحة الرئيسية كخطوة تالية للتواصل مع مكتب الطلاب الدوليين.'
     }),
     missingDocumentsIntro: Object.freeze({
         tr: 'Size doğru belge listesini verebilmem için şunları yazar mısınız: ',
@@ -432,7 +446,7 @@ function resolveLanguage(language) {
 
 /**
  * Returns a fixed localized chatbot message for refusal, third-party status refusal, guarantee/legal refusal, fallback, daily-limit, document-list, missing-facts, missing-reference status, fingerprint-needed, or greeting responses.
- * @param {'refusal'|'otherPersonStatusRefusal'|'guaranteeOrLegalRefusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'missingDocumentsIntro'|'otherPersonStatusNote'|'fingerprintNeeded'|'greeting'} kind Fixed text category.
+ * @param {'refusal'|'otherPersonStatusRefusal'|'guaranteeOrLegalRefusal'|'fallback'|'dailyLimit'|'documentListIntro'|'documentListClosing'|'statusNeedsReference'|'invalidReferenceFormat'|'invalidReferenceEscalation'|'missingDocumentsIntro'|'otherPersonStatusNote'|'fingerprintNeeded'|'greeting'} kind Fixed text category.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string} Localized fixed response text.
  */
@@ -528,8 +542,8 @@ export function buildChatbotSystemPrompt(language = 'tr') {
         '- Never estimate or promise processing or decision times (use lookup_knowledge with topic processing_time), and never answer a post-status next-step question with initial application_steps.',
         '- For any question about which documents are needed (required documents), ALWAYS call get_required_documents with the facts the student explicitly stated and their verbatim quotes in `quotes` (in whatever language or script the student used, including typos, slang, transliteration, and dialect); never answer document questions in prose, never list documents from memory, and never guess, infer, or default values for facts the student did not state. Omit unknown facts (if any of application_type, under-18 status, accommodation_type, undertaking host_is_married/host_is_turkish, or transition fingerprint_status is missing, omit it).',
         '- When get_required_documents runs, the server verifies the quotes and either asks for any missing facts or returns the authoritative document list.',
-        `- Always call handoff_to_office (and NEVER refuse with ${CHATBOT_REFUSAL_MARKER}) when the student asks to talk to a person, human, staff member, or the office, submits a complaint, describes a special or urgent personal situation, or needs case-specific help. Also use handoff_to_office when appropriate for office contact or student ID card procedures.`,
-        '- For any question about the student’s own application progress (status, whether it was sent/forwarded to the migration authority / Göç İdaresi, approval, appointment, or result), always ask for their reference number (format: ITU-XXXX-XXXX); never guess an application status and never answer it from memory.',
+        `- Always call handoff_to_office (and NEVER refuse with ${CHATBOT_REFUSAL_MARKER}) when the student asks to talk to a person, human, staff member, or the office, asks to reach the office, reports missing documents or no reply from the office, submits a complaint, describes a special or urgent personal situation, or needs case-specific help. Never end with a bare question like "do you want to be transferred" without calling handoff_to_office so the home page question form is provided. Also use handoff_to_office when appropriate for office contact or student ID card procedures.`,
+        '- For any question about the student’s own application progress (status, whether it was sent/forwarded to the migration authority / Göç İdaresi, approval, appointment, or result), always ask for their reference number (format: ITU-XXXX-XXXX, e.g. ITU-7K9M-4X2P), mention where to find it (confirmation e-mail or application document), and include the forgot-number steps from lookup_knowledge (topic: forgot_reference); never guess an application status and never answer it from memory.',
         '',
         'Strict prohibitions:',
         '- Never promise or guarantee residence permit approval, YKN issuance, processing times, or legal outcomes by Göç İdaresi (Migration Authority) or the university.',

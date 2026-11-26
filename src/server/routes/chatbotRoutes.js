@@ -81,24 +81,24 @@ const OPTIONAL_DOCUMENT_SUFFIX = Object.freeze({
 
 const STATUS_RULES_BY_LANGUAGE = Object.freeze({
     tr: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:durum[\p{L}\p{N}]*|sonuc[\p{L}\p{N}]*|onay(?!li\s+(?:kira|taahhut|sozlesme|belge|evrak|cevir|tercume))[\p{L}\p{N}]*|gonderildi[\p{L}\p{N}]*|iletildi[\p{L}\p{N}]*|goc(?:\s+idaresinde\s+mi|\s+idaresine|e\s+(?:gonder|iletil|gitti|ulast|aktar))|kontrol[\p{L}\p{N}]*|incele[\p{L}\p{N}]*|kabul(?!\s+mektu)(?:\s+edil[\p{L}\p{N}]*)?|cikti\s*mi|belli\s+oldu\s*mu|hazir\s*mi)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:durum[\p{L}\p{N}]*|sonuc[\p{L}\p{N}]*|onay(?!li\s+(?:kira|taahhut|sozlesme|belge|evrak|cevir|tercume))[\p{L}\p{N}]*|gonderildi[\p{L}\p{N}]*|iletildi[\p{L}\p{N}]*|goc(?:\s+idaresinde\s+mi|\s+idaresine|e\s+(?:gonder|iletil|gitti|ulast|aktar))|kontrol[\p{L}\p{N}]*|incele[\p{L}\p{N}]*|kabul(?!\s+mektu)(?:\s+edil[\p{L}\p{N}]*)?|cikti\s*mi|belli\s+oldu\s*mu|hazir\s*mi|ne\s+oldu|nerede)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:basvuru[\p{L}\p{N}]*|(?:^|[^\p{L}])(?:dosya[\p{L}\p{N}]*|ikamet(?:im|\s+iznim)?|oturma\s+iznim|iznim)(?:[^\p{L}]|$))/u])
     }),
     en: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:status[\p{L}\p{N}]*|results?|accepted|approved|sent|migration|check(?:ed|ing)?)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:status[\p{L}\p{N}]*|results?|accepted|approved|sent|migration|check(?:ed|ing)?|track(?:ing)?|where\s+is|what\s+happened)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:^|[^\p{L}])(?:applications?|files?|permits?|residence(?:\s+permit)?|ikamet)(?:[^\p{L}]|$)/u])
     }),
     ru: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:статус[\p{L}\p{N}]*|результат[\p{L}\p{N}]*|одобр[\p{L}\p{N}]*|принят[\p{L}\p{N}]*|отправ[\p{L}\p{N}]*|миграц[\p{L}\p{N}]*|провер[\p{L}\p{N}]*|готов[\p{L}\p{N}]*|вышел|вышл[\p{L}\p{N}]*|status[\p{L}\p{N}]*|prinyat[\p{L}\p{N}]*|odobren[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:статус[\p{L}\p{N}]*|результат[\p{L}\p{N}]*|одобр[\p{L}\p{N}]*|принят[\p{L}\p{N}]*|отправ[\p{L}\p{N}]*|миграц[\p{L}\p{N}]*|провер[\p{L}\p{N}]*|готов[\p{L}\p{N}]*|вышел|вышл[\p{L}\p{N}]*|где\s+мо[\p{L}\p{N}]*|что\s+с\s+мо[\p{L}\p{N}]*|status[\p{L}\p{N}]*|prinyat[\p{L}\p{N}]*|odobren[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:^|[^\p{L}])(?:заявк[\p{L}\p{N}]*|заявлен[\p{L}\p{N}]*|дел(?:о|а|у|ом|е)|досье|внж|vnzh|икамет[\p{L}\p{N}]*|ikamet[\p{L}\p{N}]*|вид[\p{L}\p{N}]*\s+на\s+жительств[\p{L}\p{N}]*|zayavk[\p{L}\p{N}]*|zayavl[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u])
     }),
     tk: Object.freeze({
-        status: Object.freeze([/(?:^|[^\p{L}])(?:yagday[\p{L}\p{N}]*|netije[\p{L}\p{N}]*|(?<!notariusda\s+)tassyk(?!lanan\s+(?:kira|karende|kirey|borcnama|sertname|sertnama|resminama|dokument|terjime))[\p{L}\p{N}]*|iberildi[\p{L}\p{N}]*|migrasiya[\p{L}\p{N}]*|barla[\p{L}\p{N}]*|cykdymy|tayynmy|kabul(?:\s+edil[\p{L}\p{N}]*)?)(?:[^\p{L}]|$)/u]),
+        status: Object.freeze([/(?:^|[^\p{L}])(?:yagday[\p{L}\p{N}]*|netije[\p{L}\p{N}]*|(?<!notariusda\s+)tassyk(?!lanan\s+(?:kira|karende|kirey|borcnama|sertname|sertnama|resminama|dokument|terjime))[\p{L}\p{N}]*|iberildi[\p{L}\p{N}]*|migrasiya[\p{L}\p{N}]*|barla[\p{L}\p{N}]*|cykdymy|tayynmy|kabul(?:\s+edil[\p{L}\p{N}]*)?|nirede|name\s+boldy)(?:[^\p{L}]|$)/u]),
         application: Object.freeze([/(?:^|[^\p{L}])(?:arza[\p{L}\p{N}]*|fayl[\p{L}\p{N}]*|dosye[\p{L}\p{N}]*|rugsa[td][\p{L}\p{N}]*|ikamet[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u])
     }),
     ar: Object.freeze({
         status: Object.freeze([
-            /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:حاله|نتيجه|موافقه|وافق[\p{L}\p{N}]*|قبول[\p{L}\p{N}]*|مقبول[\p{L}\p{N}]*|ارسل[\p{L}\p{N}]*|ارسال[\p{L}\p{N}]*|هجره|الهجره|راجع[\p{L}\p{N}]*|مراجع[\p{L}\p{N}]*|تراجع[\p{L}\p{N}]*|يراجع[\p{L}\p{N}]*|طلع[\p{L}\p{N}]*|صدر[\p{L}\p{N}]*|جاهز[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+            /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:حاله|نتيجه|موافقه|وافق[\p{L}\p{N}]*|قبول[\p{L}\p{N}]*|مقبول[\p{L}\p{N}]*|ارسل[\p{L}\p{N}]*|ارسال[\p{L}\p{N}]*|هجره|الهجره|راجع[\p{L}\p{N}]*|مراجع[\p{L}\p{N}]*|تراجع[\p{L}\p{N}]*|يراجع[\p{L}\p{N}]*|طلع[\p{L}\p{N}]*|صدر[\p{L}\p{N}]*|جاهز[\p{L}\p{N}]*|اين|وين|ما\s+صار)(?:[^\p{L}]|$)/u,
             /(?:^|[^\p{L}])(?:natij[\p{L}\p{N}]*|ma2bul[\p{L}\p{N}]*|qabul[\p{L}\p{N}]*|halat|halet|hala(?=\s+(?:el\s+|al\s+)?(?:talab|iqam|igam))|wad3|wada3|m[uo]wafaq[\p{L}\p{N}]*|tala3|tla3|wasal|arsal|irsal|hijra)(?:[^\p{L}]|$)/u
         ]),
         application: Object.freeze([/(?:طلب[\p{L}\p{N}]*|(?:^|[^\p{L}])(?:(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:ملف[\p{L}\p{N}]*|اقامت[\p{L}\p{N}]*)|talab[\p{L}\p{N}]*|iqamt[\p{L}\p{N}]*|igamt[\p{L}\p{N}]*)(?:[^\p{L}]|$))/u])
@@ -312,6 +312,8 @@ const EXPLICIT_HANDOFF_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])gercek\s*(?:bir\s*)?(?:insan|kisi)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])sikayet[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])acil(?:\s+durum[\p{L}\p{N}]*)?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:eksik\s+(?:belge|evrak|dokuman)[\p{L}\p{N}]*|(?:belge|evrak|dokuman)[\p{L}\p{N}]*\s+eksik(?:ti|tir)?|belgem\s+eksik|evragim\s+eksik)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:ofis(?:ten)?\s+(?:cevap|yanit|donus)\s+(?:yok|gelmedi|vermiyor|alamadim)|(?:cevap|yanit|donus)\s+(?:yok|gelmedi|vermiyor|alamadim)|kimse\s+(?:cevap|yanit|donus)\s+vermiyor)(?:[^\p{L}]|$)/u,
     // en
     /(?:^|[^\p{L}])(?:talk|speak|chat|connect[\p{L}\p{N}]*)\s+(?:to|with)\s+(?:an?\s+)?(?:real\s+|human\s+)?(?:person|human|staff|advisor|representative|agent|someone)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:need|want)\s+(?:to\s+(?:talk|speak|chat|connect)\s+(?:to|with)\s+)?(?:an?\s+)?(?:human\s+)?advisor(?:[^\p{L}]|$)/u,
@@ -320,17 +322,23 @@ const EXPLICIT_HANDOFF_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])real\s+person(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])complaint[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])urgent(?:ly)?(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:missing\s+(?:a\s+|my\s+|some\s+)?(?:documents?|docs?|files?|papers?)|(?:documents?|docs?|files?)\s+(?:is|are)\s+missing)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:no\s+(?:reply|response|answer)\s+from\s+(?:the\s+)?office|office\s+(?:has\s+not|hasn't|did\s+not|didn't|is\s+not|isn't)\s+(?:replied|responded|answering|responding|replying)|nobody\s+(?:is\s+)?(?:replying|responding|answering))(?:[^\p{L}]|$)/u,
     // ru
     /(?:^|[^\p{L}])(?:поговорить|связаться|пообщаться|соединить)\s+с\s+(?:живым\s+|реальным\s+)?(?:человеком|сотрудником|оператором|специалистом|представителем)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:консультант[\p{L}\p{N}]*|соедините|свяжите\s+меня)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])помощь\s+сотрудник[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])жалоб[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])срочн[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:не\s+хватает\s+(?:документ[\p{L}\p{N}]*|фаил[\p{L}\p{N}]*)|отсутству[\p{L}\p{N}]*\s+(?:документ[\p{L}\p{N}]*|фаил[\p{L}\p{N}]*)|пропущен[\p{L}\p{N}]*\s+документ[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:нет\s+ответа\s+(?:от\s+офиса|из\s+офиса)|офис\s+не\s+отвечает|никто\s+не\s+отвечает)(?:[^\p{L}]|$)/u,
     // tk
     /(?:^|[^\p{L}])adam\s+bilen\s+gurles[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:(?:ofis\s+)?isgar[\p{L}\p{N}]*(?:\s+bilen)?|maslahatcy[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])sikayat[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])gyssagly(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:kem\s+resminama[\p{L}\p{N}]*|resminama[\p{L}\p{N}]*\s+kem|yetmezcilik\s+edyan\s+resminama)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:ofis(?:den)?\s+jogap\s+(?:yok|gelmedi|bermeyar)|jogap\s+(?:yok|gelmedi|bermeyar))(?:[^\p{L}]|$)/u,
     // ar
     /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تحدث|التحدث|اتحدث|تكلم|التكلم|اتكلم|تواصل|التواصل|اتواصل)\s+مع\s+(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:شخص|انسان|موظف|احد)(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:و|ف)?(?:احكي\s+مع|بدي\s+احكي|اتكلم\s+مع|اتحدث\s+مع)(?:[^\p{L}]|$)/u,
@@ -338,17 +346,22 @@ const EXPLICIT_HANDOFF_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?شخص\s+حقيقي(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مساعده\s+(?:من\s+)?(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?موظف(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?شكو[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?عاجل[\p{L}\p{N}]*(?:[^\p{L}]|$)/u
+    /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?عاجل[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:(?:مستند|مستندات|وثيقه|وثايق|اوراق)\s+ناقص[\p{L}\p{N}]*|نقص\s+(?:في\s+)?(?:ال)?(?:مستندات|وثايق|اوراق))(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:لا\s+(?:يوجد\s+)?رد\s+من\s+(?:ال)?مكتب|(?:ال)?مكتب\s+(?:لا\s+يرد|لم\s+يرد)|ما\s+في\s+رد\s+من\s+(?:ال)?مكتب)(?:[^\p{L}]|$)/u
 ]);
 
 const OFFICE_HANDOFF_PATTERNS = Object.freeze([
     /(?:^|[^\p{L}])ofisle\s*(?:gorus[\p{L}\p{N}]*|konus[\p{L}\p{N}]*|iletisim[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])ofise\s*(?:ulas[\p{L}\p{N}]*|yaz[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
-    /(?:^|[^\p{L}])(?:talk|speak|chat|connect[\p{L}\p{N}]*)\s+(?:to|with)\s+(?:the\s+)?office(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])ofise\s*(?:ulas[\p{L}\p{N}]*|yaz[\p{L}\p{N}]*|baglan[\p{L}\p{N}]*|aktar[\p{L}\p{N}]*)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:talk|speak|chat|connect[\p{L}\p{N}]*|reach|contact|message|write|get\s+in\s+touch)\s+(?:to\s+|with\s+)?(?:the\s+)?office(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])office\s+team(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:need|want)\s+help\s+from\s+(?:the\s+)?office(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:поговорить|связаться|пообщаться|соединить)\s+с\s+офисом(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:написать|обратиться|дозвониться)\s+(?:в\s+офис|до\s+офиса)(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])ofis(?:e|bilen)\s+(?:habarlas|yuz\s+tut|yet)[\p{L}\p{N}]*(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?(?:تحدث|التحدث|اتحدث|تكلم|التكلم|اتكلم|تواصل|التواصل|اتواصل)\s+مع\s+(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مكتب(?:[^\p{L}]|$)/u,
+    /(?:^|[^\p{L}])(?:الوصول|مراسله)\s+(?:الي\s+|ل)?(?:ال)?مكتب(?:[^\p{L}]|$)/u,
     /(?:^|[^\p{L}])(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مساعده\s+(?:من\s+)?(?:وال|بال|فال|لل|ال|و|ف|ب|ل)?مكتب(?:[^\p{L}]|$)/u
 ]);
 
@@ -643,10 +656,31 @@ function extractApplicationReferences(messageContent) {
     return validReferences;
 }
 
+const INVALID_APPLICATION_REF_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}\p{N}])it[uü]\s*[-_:]\s*[a-z0-9]{2,}(?:\s*[-_]\s*[a-z0-9]{1,})*/iu,
+    /(?:^|[^\p{L}\p{N}])it[uü]\s*(?=[a-z0-9\s-]*\d)[a-z0-9]{4,}(?:\s+[a-z0-9]{2,})*/iu
+]);
+
+const STUDENT_NUMBER_ATTEMPT_PATTERNS = Object.freeze([
+    /(?:^|[^\p{L}\p{N}])\d{6,12}(?:[^\p{L}\p{N}]|$)/u,
+    /(?:^|[^\p{L}\p{N}])(?:ogrenci\s*(?:numara[\p{L}\p{N}]*|no)|student\s*(?:number|num|no|id)|номер\s+студента|talyp\s+belgi[\p{L}\p{N}]*|رقم[\p{L}\p{N}]*\s+(?:ال)?(?:طالب|جامع[\p{L}\p{N}]*))\s*[:#-]?\s*\d{4,12}(?:[^\p{L}\p{N}]|$)/u
+]);
+
+const BARE_TRANSFER_OFFER_PATTERNS = Object.freeze([
+    /(?:do\s+you\s+want|would\s+you\s+like|shall\s+i|should\s+i)\s+(?:me\s+to\s+|to\s+be\s+)?(?:transfer|connect|forward|escalate|hand\s+off|direct)(?:ed)?\s+(?:you\s+)?(?:to\s+(?:the\s+)?office|to\s+staff|to\s+an?\s+(?:advisor|agent|human))/iu,
+    /(?:ofise|yetkiliye|personele)\s+(?:yonlendirmemi|aktarmami|yonlendirilmek|aktarilmak)\s+ister\s+misiniz/iu,
+    /(?:хотите|желаете)(?:\s+ли\s+вы)?,?\s+(?:чтобы\s+я\s+)?(?:перевел|передал|соединил|направил)[\p{L}\p{N}]*\s+(?:вас\s+)?(?:в\s+офис|с\s+офисом|к\s+сотруднику)/iu,
+    /(?:ofise|isgare)\s+(?:ugrukdyrmagymy|gecirmegimi|ugrukdyrylmak)\s+isleyarsinizmi/iu,
+    /(?:هل\s+تريد|هل\s+ترغب)\s+(?:في\s+|ان\s+)?(?:تحويلك|احالتك|توصيلك)\s+(?:الي\s+|ب)?(?:ال)?(?:مكتب|موظف)/iu
+]);
+
 function extractScopedUserReferences(messages, lastUserMessage) {
     const lastTurnReferences = extractApplicationReferences(lastUserMessage);
     if (lastTurnReferences.length > 0) {
         return lastTurnReferences;
+    }
+    if (isInvalidReferenceOrStudentNumberAttempt(lastUserMessage)) {
+        return [];
     }
     if (
         isOtherStudentsDataRequest(lastUserMessage)
@@ -998,6 +1032,35 @@ export function isOtherPersonApplicationStatusRequest(messageContent) {
     return Object.values(STATUS_RULES_BY_LANGUAGE).some(({ status }) =>
         status.some((pattern) => pattern.test(normalized))
     );
+}
+
+/**
+ * Returns true when the user message looks like an application reference that does not match ITU-XXXX-XXXX,
+ * or contains a student number instead of a valid ITU-XXXX-XXXX reference.
+ * @param {string} messageContent Raw user message text.
+ * @returns {boolean} True when format guidance (or escalation after 3 attempts) applies.
+ */
+export function isInvalidReferenceOrStudentNumberAttempt(messageContent) {
+    if (typeof messageContent !== 'string' || !messageContent.trim()) return false;
+    if (extractApplicationReferences(messageContent).length > 0) return false;
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    if (INVALID_APPLICATION_REF_PATTERNS.some((pattern) => pattern.test(messageContent) || pattern.test(normalized))) {
+        return true;
+    }
+    return STUDENT_NUMBER_ATTEMPT_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function isStudentNumberAttempt(messageContent) {
+    if (typeof messageContent !== 'string' || !messageContent.trim()) return false;
+    if (extractApplicationReferences(messageContent).length > 0) return false;
+    const normalized = evidence.normalizeForEvidence(messageContent);
+    return STUDENT_NUMBER_ATTEMPT_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function looksLikeBareTransferOffer(replyText) {
+    if (typeof replyText !== 'string' || !replyText.trim()) return false;
+    const normalized = evidence.normalizeForEvidence(replyText);
+    return BARE_TRANSFER_OFFER_PATTERNS.some((pattern) => pattern.test(replyText) || pattern.test(normalized));
 }
 
 export function isStatusQuestionWithoutReference(messageContent) {
@@ -1463,11 +1526,40 @@ export async function handlePublicChat(request, environment, requestId, executio
             });
         }
         if (isStatusQuestionWithoutReference(lastUserMessage)) {
+            const invalidAttemptCount = sanitizedMessages
+                .filter((message) => message.role === 'user' && isInvalidReferenceOrStudentNumberAttempt(message.content))
+                .length;
+            if (invalidAttemptCount >= 3 && isInvalidReferenceOrStudentNumberAttempt(lastUserMessage)) {
+                outcome = 'invalid_reference_handoff';
+                return routeResult({
+                    reply: getChatbotFixedText('invalidReferenceEscalation', validated.language),
+                    actions: [{ type: 'inquiry' }]
+                });
+            }
             outcome = 'status_needs_reference';
             return routeResult({
                 reply: getChatbotFixedText('statusNeedsReference', validated.language),
                 actions: []
             });
+        }
+        if (isInvalidReferenceOrStudentNumberAttempt(lastUserMessage)) {
+            const invalidAttemptCount = sanitizedMessages
+                .filter((message) => message.role === 'user' && isInvalidReferenceOrStudentNumberAttempt(message.content))
+                .length;
+            if (invalidAttemptCount >= 3) {
+                outcome = 'invalid_reference_handoff';
+                return routeResult({
+                    reply: getChatbotFixedText('invalidReferenceEscalation', validated.language),
+                    actions: [{ type: 'inquiry' }]
+                });
+            }
+            if (isStudentNumberAttempt(lastUserMessage)) {
+                outcome = 'invalid_reference_format';
+                return routeResult({
+                    reply: getChatbotFixedText('invalidReferenceFormat', validated.language),
+                    actions: []
+                });
+            }
         }
         if (isDeterministicHandoffRequest(lastUserMessage)) {
             outcome = 'handoff';
@@ -1873,6 +1965,14 @@ export async function handlePublicChat(request, environment, requestId, executio
                 outcome = 'fallback';
                 return routeResult({
                     reply: getChatbotFixedText('fallback', validated.language),
+                    actions: [{ type: 'inquiry' }]
+                });
+            }
+
+            if (looksLikeBareTransferOffer(trimmedText)) {
+                outcome = 'handoff';
+                return routeResult({
+                    reply: CHATBOT_HANDOFF_TEXT[validated.language] || CHATBOT_HANDOFF_TEXT.tr,
                     actions: [{ type: 'inquiry' }]
                 });
             }
