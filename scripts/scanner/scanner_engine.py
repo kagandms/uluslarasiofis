@@ -31,7 +31,7 @@ class EngineHealth:
     signature: Signature | None = None
 
 
-def read_signature(database_directory: Path, now: datetime) -> Signature:
+def read_signature(database_directory: Path, now: datetime, max_age_seconds: int = 86400) -> Signature:
     """Read daily CVD/CLD build time, never filesystem mtime; raises ValueError if stale."""
     daily = next((database_directory / name for name in ('daily.cld', 'daily.cvd') if (database_directory / name).exists()), None)
     if daily is None:
@@ -42,7 +42,7 @@ def read_signature(database_directory: Path, now: datetime) -> Signature:
         raise ValueError('signature_stale')
     updated_at = datetime.fromtimestamp(int(fields[8]), timezone.utc)
     age_seconds = (now - updated_at).total_seconds()
-    if not 0 <= age_seconds <= 86400:
+    if not 0 <= age_seconds <= max_age_seconds:
         raise ValueError('signature_stale')
     return Signature(fields[2], updated_at)
 
@@ -50,7 +50,7 @@ def read_signature(database_directory: Path, now: datetime) -> Signature:
 def read_engine_health(config: ScannerConfig) -> EngineHealth:
     """Check installed engine and signature identity; returns a safe degraded state on error."""
     try:
-        signature = read_signature(config.database_directory, datetime.now(timezone.utc))
+        signature = read_signature(config.database_directory, datetime.now(timezone.utc), config.max_signature_age_seconds)
         for component in ('main', 'bytecode'):
             if not any((config.database_directory / f'{component}.{suffix}').exists() for suffix in ('cvd', 'cld')):
                 return EngineHealth('engine_unavailable')

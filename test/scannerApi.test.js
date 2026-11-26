@@ -197,6 +197,47 @@ test('ready heartbeat requires real, fresh signature time and complete engine me
     assert.equal((await request(environment, 'heartbeat', { body: ready })).status, 200);
 });
 
+test('ready heartbeat accepts signature_updated_at up to 72 hours old and rejects 4 days old', async () => {
+    const { environment, database } = fixture();
+    const ready = { runner_id: 'mac', health: 'ready', engine_version: '1.5.4', signature_version: '28141' };
+    const acceptedTimestamp = new Date(Date.now() - 48 * 3_600_000).toISOString();
+    const rejectedTimestamp = new Date(Date.now() - 4 * 86_400_000).toISOString();
+
+    const rejected = await request(environment, 'heartbeat', { body: { ...ready, signature_updated_at: rejectedTimestamp } });
+    assert.equal(rejected.status, 400);
+    assert.equal((await rejected.json()).error.code, 'INVALID_SCANNER_INPUT');
+    assert.equal(database.prepare('SELECT count(*) AS count FROM scanner_heartbeats').first().count, 0);
+
+    const accepted = await request(environment, 'heartbeat', { body: { ...ready, signature_updated_at: acceptedTimestamp } });
+    assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json()).recorded, true);
+    assert.equal(database.prepare('SELECT count(*) AS count FROM scanner_heartbeats').first().count, 1);
+});
+
+test('scan result accepts signature_updated_at 48 hours old and rejects 4 days old', async () => {
+    const staleFixture = fixture();
+    const staleJob = await lease(staleFixture.environment);
+    const staleBody = {
+        ...await resultBody(staleFixture.environment, staleJob),
+        signature_updated_at: new Date(Date.now() - 4 * 86_400_000).toISOString()
+    };
+    const rejected = await request(staleFixture.environment, `jobs/${staleJob.id}/result`, { body: staleBody, token: staleJob.lease_token });
+    assert.equal(rejected.status, 400);
+    assert.equal((await rejected.json()).error.code, 'INVALID_SCAN_RESULT');
+    assert.equal(staleFixture.database.prepare("SELECT scan_status FROM document_revision_files WHERE id='f'").first().scan_status, 'pending');
+
+    const freshFixture = fixture();
+    const freshJob = await lease(freshFixture.environment);
+    const freshBody = {
+        ...await resultBody(freshFixture.environment, freshJob),
+        signature_updated_at: new Date(Date.now() - 48 * 3_600_000).toISOString()
+    };
+    const accepted = await request(freshFixture.environment, `jobs/${freshJob.id}/result`, { body: freshBody, token: freshJob.lease_token });
+    assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json()).recorded, true);
+    assert.equal(freshFixture.database.prepare("SELECT scan_status FROM document_revision_files WHERE id='f'").first().scan_status, 'clean');
+});
+
 test('scanner heartbeat records health without reconciling the queue', async () => {
     const { environment, database } = fixture();
     const originalPrepare = database.prepare.bind(database);

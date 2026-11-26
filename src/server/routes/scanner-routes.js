@@ -5,6 +5,9 @@ import { createScannerRepository } from '../repositories/d1/scanner-repository.j
 import { readJsonBody } from '../http/requestBody.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
 
+// Matches the runner's SCANNER_MAX_SIGNATURE_AGE_SECONDS upper bound (72 hours).
+const MAX_SIGNATURE_AGE_MS = 259_200_000;
+
 /** @returns {ApiError} A safe lease conflict. */
 function createLeaseConflict() {
     return new ApiError(409, 'SCAN_LEASE_INVALID', 'Tarama işi veya sahiplenme süresi değişti.');
@@ -112,7 +115,7 @@ async function heartbeat(request, repository, now) {
         && /^\d{4}-\d{2}-\d{2}T.*Z$/.test(body.signature_updated_at) ? Date.parse(body.signature_updated_at) : NaN;
     if (body.signature_updated_at!==null && !Number.isFinite(signatureTime)) throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
     if (body.health==='ready' && (!body.engine_version || !body.signature_version
-        || !Number.isFinite(signatureTime) || signatureTime>Date.parse(now)+30_000 || signatureTime<Date.parse(now)-86_400_000)) {
+        || !Number.isFinite(signatureTime) || signatureTime>Date.parse(now)+30_000 || signatureTime<Date.parse(now)-MAX_SIGNATURE_AGE_MS)) {
         throw new ApiError(400,'INVALID_SCANNER_INPUT','Tarama isteği doğrulanamadı.');
     }
     await repository.heartbeat({ ...body,now });

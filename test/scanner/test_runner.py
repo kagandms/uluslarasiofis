@@ -35,6 +35,65 @@ class RunnerContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'signature_stale'):
                 read_signature(Path(directory), now)
 
+    def test_signature_freshness_respects_configured_max_age_seconds(self) -> None:
+        import subprocess
+        from unittest.mock import patch
+        from scanner_config import load_config
+        from scanner_engine import read_engine_health, read_signature
+        now = datetime.now(timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            secret_path = root / 'secret'
+            secret_path.write_text('s' * 43)
+            secret_path.chmod(0o600)
+            build_time = int((now - timedelta(hours=48)).timestamp())
+            (root / 'daily.cvd').write_bytes(
+                f'ClamAV-VDB:date:28141:1:90:hash:signature:builder:{build_time}'.encode().ljust(512, b' ')
+            )
+            (root / 'main.cvd').write_bytes(b'main')
+            (root / 'bytecode.cvd').write_bytes(b'bytecode')
+            settings = {
+                'SCANNER_ORIGIN': 'https://scanner.example',
+                'SCANNER_SECRET_FILE': str(secret_path),
+                'SCANNER_STATE_DIR': directory,
+                'SCANNER_DATABASE_DIR': directory,
+                'SCANNER_RUNNER_ID': 'mac',
+                'SCANNER_MAX_SIGNATURE_AGE_SECONDS': '259200',
+            }
+            config = load_config(settings)
+
+            with self.assertRaisesRegex(ValueError, 'signature_stale'):
+                read_signature(root, now)
+            signature = read_signature(root, now, config.max_signature_age_seconds)
+            self.assertEqual(signature.version, '28141')
+
+            completed = subprocess.CompletedProcess([], 0, 'ClamAV 1.5.4/28141/Fri Oct 2 2026\n', '')
+            with patch('scanner_engine.subprocess.run', return_value=completed):
+                health = read_engine_health(config)
+            self.assertEqual(health.health, 'ready')
+
+    def test_config_defaults_max_signature_age_to_86400_and_rejects_invalid_values(self) -> None:
+        from scanner_config import load_config
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / 'secret'
+            secret_path.write_text('s' * 43)
+            secret_path.chmod(0o600)
+            settings = {
+                'SCANNER_ORIGIN': 'https://scanner.example',
+                'SCANNER_SECRET_FILE': str(secret_path),
+                'SCANNER_STATE_DIR': directory,
+                'SCANNER_RUNNER_ID': 'mac',
+            }
+
+            self.assertEqual(load_config(settings).max_signature_age_seconds, 86400)
+            self.assertEqual(
+                load_config({**settings, 'SCANNER_MAX_SIGNATURE_AGE_SECONDS': '259200'}).max_signature_age_seconds,
+                259200,
+            )
+            for invalid in ('abc', '0', '-10', '3599', '300000'):
+                with self.assertRaisesRegex(ValueError, 'max_signature_age_invalid'):
+                    load_config({**settings, 'SCANNER_MAX_SIGNATURE_AGE_SECONDS': invalid})
+
     def test_config_rejects_http_and_secrets_cannot_enter_error_output(self) -> None:
         from scanner_config import load_config
         with tempfile.TemporaryDirectory() as directory:
