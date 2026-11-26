@@ -187,15 +187,21 @@ function readGocnetQueryResult(rootDocument, applicationNumber) {
     return isStudentDataFilledResult(dialog, dialogText) ? 'student_data_filled' : 'unknown';
 }
 
+function findDialogTamamButton(dialog) {
+    if (!dialog) return null;
+    const rawButtons = [...dialog.querySelectorAll('button.z-messagebox-button, button, input[type="button"], input[type="submit"], .z-button')]
+        .filter((button) => isVisible(button) && normalizeText(button.textContent || button.value) === 'tamam');
+    const buttons = rawButtons.filter((candidate) => !rawButtons.some((other) => other !== candidate && candidate.contains(other)));
+    return buttons.length === 1 && !isButtonDisabled(buttons[0]) ? buttons[0] : null;
+}
+
 function acknowledgeGocnetQuery(rootDocument, applicationNumber, allowedStates = ['student_data_filled']) {
     if (!allowedStates.includes(readGocnetQueryResult(rootDocument, applicationNumber))) return false;
     const dialogs = findVisibleQueryDialogs(rootDocument);
     if (dialogs.length !== 1) return false;
-    const rawButtons = [...dialogs[0].querySelectorAll('button.z-messagebox-button, button, input[type="button"], input[type="submit"], .z-button')]
-        .filter((button) => isVisible(button) && normalizeText(button.textContent || button.value) === 'tamam');
-    const buttons = rawButtons.filter((candidate) => !rawButtons.some((other) => other !== candidate && candidate.contains(other)));
-    if (buttons.length !== 1) return false;
-    buttons[0].click();
+    const button = findDialogTamamButton(dialogs[0]);
+    if (!button) return false;
+    button.click();
     return true;
 }
 
@@ -791,10 +797,224 @@ async function lookupGocnetRecord(rootDocument, applicationNumber, { signal, tim
     }
 }
 
+function isValidGocnetPdfFile(pdfFile) {
+    return Boolean(pdfFile
+        && pdfFile.type === 'application/pdf'
+        && typeof pdfFile.name === 'string'
+        && pdfFile.name.toLowerCase().endsWith('.pdf')
+        && Number.isSafeInteger(pdfFile.size)
+        && pdfFile.size >= 1
+        && pdfFile.size <= MAX_PDF_BYTES);
+}
+
+async function resolveGocnetPdfFile(rootDocument, { pdfFile, pdfBase64, pdfSha256, pdfFileName } = {}) {
+    if (pdfFile !== undefined && pdfFile !== null) {
+        return isValidGocnetPdfFile(pdfFile) ? { file: pdfFile } : { error: 'pdf_invalid' };
+    }
+    if (typeof pdfBase64 !== 'string' || !pdfBase64) {
+        return { error: 'pdf_missing' };
+    }
+    if (pdfBase64.length > 12_582_912) {
+        return { error: 'pdf_invalid' };
+    }
+    if (pdfSha256 !== undefined && !/^[a-f0-9]{64}$/.test(pdfSha256 || '')) {
+        return { error: 'pdf_invalid' };
+    }
+    try {
+        const binary = atob(pdfBase64);
+        const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+        if (bytes.byteLength < 1 || bytes.byteLength > MAX_PDF_BYTES
+            || bytes[0] !== 0x25 || bytes[1] !== 0x50 || bytes[2] !== 0x44 || bytes[3] !== 0x46) {
+            return { error: 'pdf_invalid' };
+        }
+        if (pdfSha256) {
+            const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+                .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+            if (digest !== pdfSha256) return { error: 'pdf_invalid' };
+        }
+        const FileCtor = rootDocument?.defaultView?.File || globalThis.File;
+        const safeName = typeof pdfFileName === 'string' && pdfFileName.toLowerCase().endsWith('.pdf')
+            ? pdfFileName : 'gocnet-basvuru.pdf';
+        return { file: new FileCtor([bytes], safeName, { type: 'application/pdf' }) };
+    } catch {
+        return { error: 'pdf_invalid' };
+    }
+}
+
+function readSaveDialogOutcome(rootDocument) {
+    const saveResult = readGocnetSaveResult(rootDocument);
+    if (saveResult) {
+        return { kind: 'saved', recordId: saveResult.recordId, dialog: saveResult.dialog, button: saveResult.button };
+    }
+    const dialogs = findVisibleQueryDialogs(rootDocument);
+    if (dialogs.length === 1) {
+        const dialog = dialogs[0];
+        const header = normalizeText(findDialogHeaderNode(dialog)?.textContent);
+        const body = normalizeText(dialog.textContent);
+        if (header.includes('hata') || header.includes('başarısız') || body.includes('hata kodu:')) {
+            return { kind: 'error', dialog };
+        }
+        const button = findDialogTamamButton(dialog);
+        if (button) {
+            return { kind: 'dialog', dialog, button };
+        }
+        if (body) {
+            return { kind: 'dialog_no_tamam', dialog };
+        }
+    }
+    if (!hasVisibleDialog(rootDocument) && findGocnetApplicationDocumentUploadTarget(rootDocument)) {
+        return { kind: 'upload_ready' };
+    }
+    return null;
+}
+
+function readReadyUploadTarget(rootDocument, context) {
+    const saveResult = readGocnetSaveResult(rootDocument);
+    if (saveResult) {
+        if (context && !context.recordId) context.recordId = saveResult.recordId;
+        saveResult.button.click();
+        return null;
+    }
+    if (hasVisibleDialog(rootDocument)) return null;
+    return findGocnetApplicationDocumentUploadTarget(rootDocument);
+}
+
+function findOrCreateAutoSaveContext(applicationNumber, attemptId) {
+    if (attemptId && transferContexts.has(attemptId)) {
+        return { key: attemptId, context: transferContexts.get(attemptId) };
+    }
+    for (const [key, existing] of transferContexts.entries()) {
+        if (existing?.applicationNumber === applicationNumber) {
+            return { key, context: existing };
+        }
+    }
+    const key = attemptId || applicationNumber;
+    const context = { applicationNumber, state: 'initialized' };
+    transferContexts.set(key, context);
+    return { key, context };
+}
+
+/**
+ * Completes the GöçNet save + confirmation popup + upload section wait + PDF dispatch flow.
+ * Resumable per application: skips clicking save when the record is already saved or exists.
+ */
+async function autoSaveAndUploadGocnet(rootDocument, request = {}) {
+    const { applicationNumber, attemptId, existingRecord = false, islemKayitNo, timeoutMs = 12_000 } = request || {};
+    if (!rootDocument || typeof applicationNumber !== 'string' || !/^20\d{2}-\d{2}-\d{5,8}$/.test(applicationNumber)) {
+        return { state: 'unknown', reason: 'bad_input' };
+    }
+    if (queryInProgress) {
+        return { state: 'unknown', reason: 'busy' };
+    }
+    const resolvedPdf = await resolveGocnetPdfFile(rootDocument, request);
+    if (resolvedPdf.error) {
+        return { state: 'unknown', reason: resolvedPdf.error };
+    }
+
+    const { key: contextKey, context } = findOrCreateAutoSaveContext(applicationNumber, attemptId);
+    if (context.applicationNumber !== applicationNumber) {
+        return { state: 'unknown', reason: 'bad_input' };
+    }
+
+    const domIslemNo = parseIslemKayitNo(findFieldValue(rootDocument, 'Mevcut GöçNet İşlem Kayıt No') || '');
+    const explicitIslemNo = parseIslemKayitNo(typeof islemKayitNo === 'string' ? islemKayitNo : '');
+    if (domIslemNo && !context.recordId) context.recordId = domIslemNo;
+    if (explicitIslemNo && !context.recordId) context.recordId = explicitIslemNo;
+
+    let alreadySaved = Boolean(
+        existingRecord === true
+        || domIslemNo
+        || explicitIslemNo
+        || context.state === 'saved'
+        || context.state === 'existing_record'
+        || context.state === 'uploaded'
+        || context.state === 'dispatched'
+    );
+
+    if (hasVisibleDialog(rootDocument)) {
+        const queryState = readGocnetQueryResult(rootDocument, applicationNumber);
+        if (queryState === 'existing_record') {
+            acknowledgeGocnetQuery(rootDocument, applicationNumber, ['existing_record']);
+            alreadySaved = true;
+            context.state = 'saved';
+        } else if (queryState === 'student_data_filled') {
+            if (!acknowledgeGocnetQuery(rootDocument, applicationNumber, ['student_data_filled'])) {
+                return { state: 'unknown', reason: 'dialog_already_open' };
+            }
+        } else {
+            const saveDialog = readGocnetSaveResult(rootDocument);
+            if (saveDialog) {
+                context.recordId = saveDialog.recordId;
+                context.state = 'saved';
+                alreadySaved = true;
+                saveDialog.button.click();
+            } else {
+                return { state: 'unknown', reason: 'dialog_already_open' };
+            }
+        }
+    }
+
+    queryInProgress = true;
+    let saveClicked = false;
+    try {
+        if (!alreadySaved) {
+            const saveButton = findGocnetSaveButton(rootDocument);
+            if (!saveButton) {
+                return { state: 'unknown', reason: 'save_button_missing' };
+            }
+            const outcomePromise = waitForTransferResult(rootDocument, readSaveDialogOutcome, timeoutMs);
+            saveButton.click();
+            saveClicked = true;
+            const outcome = await outcomePromise;
+            if (!outcome) {
+                return { state: 'unknown', reason: 'save_no_response' };
+            }
+            if (outcome.kind === 'error') {
+                return { state: 'unknown', reason: 'save_failed' };
+            }
+            if (outcome.kind === 'dialog_no_tamam') {
+                return { state: 'unknown', reason: 'save_popup_ack_failed' };
+            }
+            if (outcome.kind === 'saved' || outcome.kind === 'dialog') {
+                if (outcome.recordId) context.recordId = outcome.recordId;
+                context.state = 'saved';
+                outcome.button.click();
+            } else if (outcome.kind === 'upload_ready') {
+                context.state = 'saved';
+            }
+        } else if (context.state !== 'saved') {
+            context.state = 'saved';
+        }
+
+        const uploadTarget = await waitForTransferResult(
+            rootDocument,
+            (doc) => readReadyUploadTarget(doc, context),
+            timeoutMs
+        );
+        if (!uploadTarget) {
+            return { state: 'unknown', reason: 'upload_section_missing' };
+        }
+        if (!dispatchGocnetPdfUpload(rootDocument, resolvedPdf.file)) {
+            return { state: 'unknown', reason: 'pdf_dispatch_failed' };
+        }
+        const recordId = context.recordId;
+        transferContexts.delete(contextKey);
+        return {
+            state: 'dispatched',
+            saveClicked,
+            ...(recordId ? { recordId } : {})
+        };
+    } finally {
+        queryInProgress = false;
+    }
+}
+
 globalThis.YoksisGocnetTransferController = Object.freeze({
+    autoSaveAndUploadGocnet,
     dispatchGocnetPdfUpload,
     findGocnetApplicationDocumentUploadTarget,
     findGocnetPhoneInput,
+    findGocnetSaveButton,
     getLastReason: () => lastReason,
     lookupGocnetRecord,
     parseIslemKayitNo,
@@ -869,6 +1089,12 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage
             void saveGocnetRecord(document, request)
                 .then((result) => sendResponse({ requestId: request.requestId, ...result }))
                 .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown' }));
+            return true;
+        }
+        if (request.action === 'YOKSIS_GOCNET_AUTO_SAVE_UPLOAD' && request.applicationNumber) {
+            void autoSaveAndUploadGocnet(document, request)
+                .then((result) => sendResponse({ requestId: request.requestId, ...result }))
+                .catch(() => sendResponse({ requestId: request.requestId, state: 'unknown', reason: 'auto_save_exception' }));
             return true;
         }
         if (request.action === 'YOKSIS_GOCNET_UPLOAD' && request.applicationNumber
