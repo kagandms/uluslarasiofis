@@ -1880,57 +1880,79 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 await event('existing_record');
                 state.gocnetResults[applicationId] = 'Mevcut GöçNet kaydı bulundu; otomatik işlem durdu.';
             } else if (result.state === 'no_match') {
-                const form = await check('form');
-                if (form.state !== 'student_data_filled' || form.yoksisTabId !== result.yoksisTabId) {
-                    await event(form.state === 'existing_record' ? 'existing_record' : 'failed');
-                    const formReason = typeof form.reason === 'string' && form.reason ? ` Neden: ${form.reason.slice(0, 160)}` : '';
-                    state.gocnetResults[applicationId] = form.state === 'existing_record'
-                        ? 'YÖKSİS kayıt sorgusu mevcut kaydı gösterdi; işlem durdu.'
-                        : `YÖKSİS öğrenci verisi doğrulanamadı; kayıt açılmadı.${formReason}`;
+                const bytes = new Uint8Array(await prepared.pdfFile.arrayBuffer());
+                let pdfBase64 = '';
+                for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+                    pdfBase64 += document.defaultView.btoa(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
+                }
+                let autoSave;
+                try {
+                    autoSave = await requestGocnetAction('YOKSIS_GOCNET_AUTO_SAVE_UPLOAD', {
+                        applicationNumber: prepared.applicationNumber,
+                        attemptId,
+                        existingRecord: false,
+                        pdfBase64,
+                        pdfSha256: prepared.pdfSha256,
+                        pdfFileName: prepared.downloadFilename
+                    }, 90_000);
+                } catch {
+                    autoSave = { state: 'unknown' };
+                }
+                if (autoSave?.state === 'uploaded' || autoSave?.state === 'dispatched') {
+                    const recordId = /^\d{1,12}$/.test(autoSave.recordId || '') ? autoSave.recordId : null;
+                    await event('uploaded_for_review', recordId);
+                    state.gocnetResults[applicationId] = 'Belge GöçNet’e yüklendi; son kontrol ofis görevlisinde.';
+                } else if (autoSave?.state === 'existing_record') {
+                    await event('existing_record');
+                    state.gocnetResults[applicationId] = 'Kayıt kontrol sırasında oluşmuş; ikinci kayıt açılmadı.';
                 } else {
-                    await event('saving');
-                    const saved = await requestGocnetAction('SAVE_GOCNET_RECORD', {
-                        attemptId, targetTabId: form.yoksisTabId, applicationNumber: prepared.applicationNumber,
-                        studentNumber: prepared.studentNumber, passportNumber: prepared.passportNumber,
-                        firstName: prepared.firstName, lastName: prepared.lastName, phoneNational: prepared.phoneNational
-                    });
-                    if (saved.state === 'existing_record') {
-                        await event('existing_record');
-                        state.gocnetResults[applicationId] = 'Kayıt kontrol sırasında oluşmuş; ikinci kayıt açılmadı.';
-                    } else if (saved.state !== 'saved' || !/^\d{1,12}$/.test(saved.recordId || '')) {
-                        const unknown = ['unknown', 'outcome_unknown'].includes(saved.state);
-                        await event(unknown ? 'outcome_unknown' : 'failed');
-                        state.gocnetResults[applicationId] = unknown
-                            ? 'GöçNet kayıt sonucu belirsiz kaldı. YÖKSİS’te kontrol edin; otomatik tekrar yapılmadı.'
-                            : 'GöçNet kaydı doğrulanamadı; belge yükleme durduruldu.';
+                    const form = await check('form');
+                    if (form.state !== 'student_data_filled' || form.yoksisTabId !== result.yoksisTabId) {
+                        await event(form.state === 'existing_record' ? 'existing_record' : 'failed');
+                        const formReason = typeof form.reason === 'string' && form.reason ? ` Neden: ${form.reason.slice(0, 160)}` : '';
+                        state.gocnetResults[applicationId] = form.state === 'existing_record'
+                            ? 'YÖKSİS kayıt sorgusu mevcut kaydı gösterdi; işlem durdu.'
+                            : `YÖKSİS öğrenci verisi doğrulanamadı; kayıt açılmadı.${formReason}`;
                     } else {
-                        await event('uploading', saved.recordId);
-                        const ackSave = await requestGocnetAction('ACK_GOCNET_SAVE', { attemptId, targetTabId: form.yoksisTabId });
-                        if (ackSave.success !== true) {
-                            await event('failed', saved.recordId);
-                            state.gocnetResults[applicationId] = 'Kayıt açıldı ancak onay ekranı kapatılamadı; belge yüklenmedi.';
+                        await event('saving');
+                        const saved = await requestGocnetAction('SAVE_GOCNET_RECORD', {
+                            attemptId, targetTabId: form.yoksisTabId, applicationNumber: prepared.applicationNumber,
+                            studentNumber: prepared.studentNumber, passportNumber: prepared.passportNumber,
+                            firstName: prepared.firstName, lastName: prepared.lastName, phoneNational: prepared.phoneNational
+                        });
+                        if (saved.state === 'existing_record') {
+                            await event('existing_record');
+                            state.gocnetResults[applicationId] = 'Kayıt kontrol sırasında oluşmuş; ikinci kayıt açılmadı.';
+                        } else if (saved.state !== 'saved' || !/^\d{1,12}$/.test(saved.recordId || '')) {
+                            const unknown = ['unknown', 'outcome_unknown'].includes(saved.state);
+                            await event(unknown ? 'outcome_unknown' : 'failed');
+                            state.gocnetResults[applicationId] = unknown
+                                ? 'GöçNet kayıt sonucu belirsiz kaldı. YÖKSİS’te kontrol edin; otomatik tekrar yapılmadı.'
+                                : 'GöçNet kaydı doğrulanamadı; belge yükleme durduruldu.';
                         } else {
-                            const bytes = new Uint8Array(await prepared.pdfFile.arrayBuffer());
-                            let pdfBase64 = '';
-                            for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-                                pdfBase64 += document.defaultView.btoa(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
-                            }
-                            const uploaded = await requestGocnetAction('UPLOAD_GOCNET_DOCUMENT', {
-                                attemptId, targetTabId: form.yoksisTabId, applicationNumber: prepared.applicationNumber,
-                                recordId: saved.recordId, pdfSha256: prepared.pdfSha256, pdfBase64
-                            }, 90_000);
-                            if (uploaded.state === 'uploaded' && /^\d{1,12}$/.test(uploaded.documentId || '')) {
-                                await event('uploaded_for_review', saved.recordId);
-                                const ackUpload = await requestGocnetAction('ACK_GOCNET_UPLOAD', { attemptId, targetTabId: form.yoksisTabId });
-                                state.gocnetResults[applicationId] = ackUpload.success === true
-                                    ? 'Belge GöçNet’e yüklendi; son kontrol ofis görevlisinde.'
-                                    : 'Belge yüklendi ancak sonuç penceresi açık kaldı; son kontrol ofis görevlisinde.';
+                            await event('uploading', saved.recordId);
+                            const ackSave = await requestGocnetAction('ACK_GOCNET_SAVE', { attemptId, targetTabId: form.yoksisTabId });
+                            if (ackSave.success !== true) {
+                                await event('failed', saved.recordId);
+                                state.gocnetResults[applicationId] = 'Kayıt açıldı ancak onay ekranı kapatılamadı; belge yüklenmedi.';
                             } else {
-                                const unknown = ['unknown', 'outcome_unknown'].includes(uploaded.state);
-                                await event(unknown ? 'outcome_unknown' : 'failed', saved.recordId);
-                                state.gocnetResults[applicationId] = unknown
-                                    ? 'Belge yükleme sonucu belirsiz; YÖKSİS’i kontrol edin ve otomatik tekrar yapmayın.'
-                                    : 'Belge yüklenemedi; GöçNet kaydı oluşturuldu, yeni kayıt açmayın.';
+                                const uploaded = await requestGocnetAction('UPLOAD_GOCNET_DOCUMENT', {
+                                    attemptId, targetTabId: form.yoksisTabId, applicationNumber: prepared.applicationNumber,
+                                    recordId: saved.recordId, pdfSha256: prepared.pdfSha256, pdfBase64
+                                }, 90_000);
+                                if (uploaded.state === 'uploaded' && /^\d{1,12}$/.test(uploaded.documentId || '')) {
+                                    await event('uploaded_for_review', saved.recordId);
+                                    const ackUpload = await requestGocnetAction('ACK_GOCNET_UPLOAD', { attemptId, targetTabId: form.yoksisTabId });
+                                    state.gocnetResults[applicationId] = ackUpload.success === true
+                                        ? 'Belge GöçNet’e yüklendi; son kontrol ofis görevlisinde.'
+                                        : 'Belge yüklendi ancak sonuç penceresi açık kaldı; son kontrol ofis görevlisinde.';
+                                } else {
+                                    const unknown = ['unknown', 'outcome_unknown'].includes(uploaded.state);
+                                    await event(unknown ? 'outcome_unknown' : 'failed', saved.recordId);
+                                    state.gocnetResults[applicationId] = unknown
+                                        ? 'Belge yükleme sonucu belirsiz; YÖKSİS’i kontrol edin ve otomatik tekrar yapmayın.'
+                                        : 'Belge yüklenemedi; GöçNet kaydı oluşturuldu, yeni kayıt açmayın.';
+                                }
                             }
                         }
                     }

@@ -408,6 +408,9 @@ test('portal record and upload phase failure messages remain unchanged', async (
         if (payload.action === 'CHECK_GOCNET_TRANSFER' && payload.phase === 'form') {
             return { state: 'student_data_filled', yoksisTabId: 42 };
         }
+        if (payload.action === 'YOKSIS_GOCNET_AUTO_SAVE_UPLOAD') {
+            return { state: 'unknown', reason: 'unavailable' };
+        }
         if (payload.action === 'SAVE_GOCNET_RECORD') {
             return { state: 'unknown', reason: 'not_on_gocnet_screen' };
         }
@@ -426,6 +429,9 @@ test('portal record and upload phase failure messages remain unchanged', async (
         }
         if (payload.action === 'CHECK_GOCNET_TRANSFER' && payload.phase === 'form') {
             return { state: 'student_data_filled', yoksisTabId: 42 };
+        }
+        if (payload.action === 'YOKSIS_GOCNET_AUTO_SAVE_UPLOAD') {
+            return { state: 'unknown', reason: 'unavailable' };
         }
         if (payload.action === 'SAVE_GOCNET_RECORD') {
             return { state: 'saved', recordId: SYNTHETIC_RECORD_ID };
