@@ -24,6 +24,7 @@ class ScannerConfig:
     idle_poll_seconds: int = 10
     active_poll_seconds: int = 3
     active_window_seconds: int = 180
+    max_signature_age_seconds: int = 86400
 
 
 def _read_bounded_int(
@@ -76,6 +77,9 @@ def load_config(settings: Mapping[str, str]) -> ScannerConfig:
     idle_poll = _read_bounded_int(settings, 'SCANNER_IDLE_POLL_SECONDS', 10, 2, 120, 'idle_poll_invalid')
     active_poll = _read_bounded_int(settings, 'SCANNER_ACTIVE_POLL_SECONDS', 3, 1, 30, 'active_poll_invalid')
     active_window = _read_bounded_int(settings, 'SCANNER_ACTIVE_WINDOW_SECONDS', 180, 0, 900, 'active_window_invalid')
+    max_signature_age = _read_bounded_int(
+        settings, 'SCANNER_MAX_SIGNATURE_AGE_SECONDS', 86400, 3600, 259200, 'max_signature_age_invalid'
+    )
     raw_application_ids = settings.get('SCANNER_APPLICATION_IDS', '')
     application_ids = tuple(value.strip() for value in raw_application_ids.split(',') if value.strip())
     if len(application_ids) > 50 or len(set(application_ids)) != len(application_ids) or any(
@@ -89,4 +93,4 @@ def load_config(settings: Mapping[str, str]) -> ScannerConfig:
         Path(settings.get('SCANNER_CERTS_DIR', str(Path(__file__).parent / 'certs'))),
         settings.get('SCANNER_CLAMSCAN', 'clamscan'),
         settings.get('SCANNER_FRESHCLAM', 'freshclam'), state / 'freshclam.conf', settings.get('SCANNER_CA_FILE'), timeout,
-        application_ids, idle_poll, active_poll, active_window)
+        application_ids, idle_poll, active_poll, active_window, max_signature_age)
