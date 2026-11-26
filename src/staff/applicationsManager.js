@@ -1862,6 +1862,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                     corrections = { ...corrections, ...corrected };
                 }
             }
+            savePdfFile(prepared.pdfFile, prepared.downloadFilename);
             attemptId = document.defaultView.crypto.randomUUID();
             const attempt = await api.createGocnetAttempt(applicationId, {
                 attemptId,

@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import { extractApplicationNumberCandidates, extractFromCoordinates } from '../utils/parser.js';
 import { loadPdfJs } from '../services/pdfjs-loader.js';
 import { mergeDocumentsToPdf } from '../services/pdfMergerService.js';
+import { createStudentFilename } from '../shared/studentFilename.js';
 import { readApplicationDocumentFiles } from './application-document-files.js';
 
 const MAX_PDF_BYTES = 9 * 1024 * 1024;
@@ -147,6 +148,13 @@ async function recognizeFormNumber(file, signal) {
 /** Prepares all current documents before any external GöçNet action begins. */
 export async function prepareGocnetTransfer({ applicationId, api, signal, registrationNumberCorrection = '', phoneCorrection = '' }) {
     const { application, manifest, manifestFingerprint, files } = await readApplicationDocumentFiles({ applicationId, api, signal });
+    const firstName = typeof application.first_name === 'string' ? application.first_name.trim() : '';
+    const lastName = typeof application.last_name === 'string' ? application.last_name.trim() : '';
+    const passportNumber = typeof application.passport_number === 'string' ? application.passport_number.trim() : '';
+    if (!firstName || !lastName || !passportNumber) {
+        throw new Error('Öğrenci adı, soyadı veya pasaport numarası eksik.');
+    }
+    const downloadFilename = createStudentFilename({ firstName, lastName, passportNumber });
     const formIndex = manifest.files.findIndex((file) => file.code === 'residence_application_form');
     if (formIndex < 0) throw new Error('Güncel ikamet başvuru formu bulunamadı.');
     // The merge is the slowest local step and does not depend on the number, so it starts alongside number recognition.
@@ -185,6 +193,7 @@ export async function prepareGocnetTransfer({ applicationId, api, signal, regist
         phoneNational,
         manifestFingerprint,
         pdfFile,
+        downloadFilename,
         pdfSha256
     };
 }
