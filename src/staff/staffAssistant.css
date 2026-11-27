@@ -47,7 +47,8 @@
 .staff-assistant-send:focus-visible,
 .staff-assistant-confirm-save:focus-visible,
 .staff-assistant-confirm-cancel:focus-visible,
-.staff-assistant-tebligat-toggle:focus-visible {
+.staff-assistant-tebligat-toggle:focus-visible,
+.staff-assistant-choice-btn:focus-visible {
     outline: 2px solid var(--accent, #7e1830);
     outline-offset: 2px;
 }
@@ -607,6 +608,45 @@
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--success, #28a745);
+}
+
+.staff-assistant-choice-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    list-style: none;
+    margin: 0.35rem 0 0;
+    padding: 0;
+}
+
+.staff-assistant-choice-item {
+    margin: 0;
+}
+
+.staff-assistant-choice-btn {
+    padding: 0.38rem 0.68rem;
+    border: 1px solid var(--accent, #7e1830);
+    border-radius: 999px;
+    background: var(--card-bg, #ffffff);
+    color: var(--accent, #7e1830);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: start;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.staff-assistant-choice-btn:hover:not(:disabled),
+.staff-assistant-choice-btn.is-selected {
+    background: var(--accent, #7e1830);
+    color: #ffffff;
+}
+
+.staff-assistant-choice-btn:disabled {
+    opacity: 0.65;
+    cursor: default;
 }
 
 .staff-assistant-composer {

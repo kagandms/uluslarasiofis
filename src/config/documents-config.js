@@ -19,6 +19,7 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'uluslararasi_ogrenci_basvuru_formu.pdf',
         fileUrl: '/documents/uluslararasi_ogrenci_basvuru_formu.pdf',
         tags: ['başvuru', 'application form', 'kayıt', 'öğrenci bilgileri', 'adres', 'ikamet'],
+        aliases: ['başvuru formu', 'öğrenci başvuru formu', 'kayıt formu', 'application form'],
         badge: 'PDF • Form'
     },
     {
@@ -30,6 +31,7 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'sartli_kayit_eksik_evrak_taahhutnamesi.pdf',
         fileUrl: '/documents/sartli_kayit_eksik_evrak_taahhutnamesi.pdf',
         tags: ['taahhütname', 'eksik evrak', 'şartlı kayıt', 'denklik', 'diploma', 'undertaking', 'kayıt'],
+        aliases: ['taahhütname', 'eksik evrak taahhütnamesi', 'şartlı kayıt taahhütnamesi', 'undertaking'],
         badge: 'PDF • TR/EN'
     },
     {
@@ -41,6 +43,14 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'on_lisans_lisans_ogrenci_evrak_kontrol_listesi.pdf',
         fileUrl: '/documents/on_lisans_lisans_ogrenci_evrak_kontrol_listesi.pdf',
         tags: ['ön lisans', 'lisans', 'kontrol listesi', 'checklist', 'evrak', 'başvuru', 'kabul mektubu', 'tömer', 'denklik'],
+        aliases: [
+            'lisans checklist',
+            'ön lisans checklist',
+            'ön lisans lisans checklist',
+            'lisans kontrol listesi',
+            'ön lisans kontrol listesi',
+            'ön lisans/lisans kontrol listesi'
+        ],
         badge: 'PDF • Liste'
     },
     {
@@ -52,6 +62,16 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'yuksek_lisans_doktora_ogrenci_evrak_kontrol_listesi.pdf',
         fileUrl: '/documents/yuksek_lisans_doktora_ogrenci_evrak_kontrol_listesi.pdf',
         tags: ['yüksek lisans', 'doktora', 'kontrol listesi', 'checklist', 'evrak', 'transkript', 'tömer', 'tanınırlık'],
+        aliases: [
+            'yüksek lisans checklist',
+            'master checklist',
+            'doktora checklist',
+            'lisansüstü checklist',
+            'yüksek lisans doktora checklist',
+            'yüksek lisans kontrol listesi',
+            'doktora kontrol listesi',
+            'lisansüstü kontrol listesi'
+        ],
         badge: 'PDF • Liste'
     },
     {
@@ -63,6 +83,7 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'kayit_silme_ilisik_kesme_formu.pdf',
         fileUrl: '/documents/kayit_silme_ilisik_kesme_formu.pdf',
         tags: ['kayıt silme', 'ilişik kesme', 'disenrollment', 'ayrılma', 'muhasebe onayı'],
+        aliases: ['kayıt silme', 'kayıt silme formu', 'kayıt silme dilekçesi', 'ilişik kesme', 'ilişik kesme formu', 'kayıt sildirme'],
         badge: 'PDF • TR/EN'
     },
     {
@@ -74,6 +95,7 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'ogrenim_ucreti_taksitlendirme_dilekcesi.pdf',
         fileUrl: '/documents/ogrenim_ucreti_taksitlendirme_dilekcesi.pdf',
         tags: ['taksitlendirme', 'ücret', 'mütevelli heyet', 'dilekçe', 'ödeme planı', 'öğrenim harcı'],
+        aliases: ['taksit', 'taksit dilekçesi', 'taksitlendirme', 'taksitlendirme dilekçesi', 'taksit formu'],
         badge: 'PDF • Dilekçe'
     },
     {
@@ -85,6 +107,7 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'bos_dilekce_formu.pdf',
         fileUrl: '/documents/bos_dilekce_formu.pdf',
         tags: ['boş dilekçe', 'dilekçe', 'mütevelli heyet', 'talep', 'başvuru'],
+        aliases: ['boş dilekçe', 'boş dilekçe formu', 'genel dilekçe'],
         badge: 'PDF • Dilekçe'
     },
     {
@@ -96,6 +119,16 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
         fileUrl: '/documents/ikamet_kimlik_basvurusu_icin_verilmesi_gereken_evraklar.pdf',
         tags: ['ikamet', 'kimlik', 'göç idaresi', 'başvuru', 'evrak listesi', 'uets', 'öğrenci belgesi', 'kira sözleşmesi', 'kart bedeli', 'sigorta', 'parmak izi', 'checklist'],
+        aliases: [
+            'ikamet listesi',
+            'ikamet evrak listesi',
+            'kimlik evrak listesi',
+            'ikamet evrakları',
+            'kimlik listesi',
+            'ikamet kimlik evrak listesi',
+            'ikamet checklist',
+            'ikamet kontrol listesi'
+        ],
         badge: 'PDF • Liste'
     },
     {
@@ -107,6 +140,7 @@ export const OFFICE_DOCUMENTS = [
         fileName: 'indirim_dilekcesi.pdf',
         fileUrl: '/documents/indirim_dilekcesi.pdf',
         tags: ['indirim dilekçesi', 'tömer', 'indirim', 'mütevelli heyet', 'ücret', 'dilekçe', 'tömer ücreti'],
+        aliases: ['indirim', 'indirim dilekçesi', 'tömer indirim', 'tömer indirim dilekçesi'],
         badge: 'PDF • Dilekçe'
     }
 ];

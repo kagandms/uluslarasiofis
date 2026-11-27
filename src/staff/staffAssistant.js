@@ -41,8 +41,8 @@ const APPLICATION_STATUS_LABELS = Object.freeze({
     under_review: 'İncelemede',
     resubmission_required: 'Yeniden yükleme gerekli',
     approved_for_processing: 'İşleme alınmak üzere onaylandı',
-    sent_to_migration: 'Göç İdaresine gönderildi',
-    migration_approved: 'Göç İdaresi onayladı',
+    sent_to_migration: 'Göç İdaresi inceliyor',
+    migration_approved: 'Göç İdaresi tarafından onaylandı',
     completed: 'Tamamlandı',
     cancelled: 'İptal edildi',
     rejected: 'Reddedildi'
@@ -320,13 +320,19 @@ function buildResultsElement(doc, results, tebligatHandlers) {
 
     const totalLine = doc.createElement('p');
     totalLine.className = 'staff-assistant-results-total';
-    totalLine.textContent = results.kind === 'tebligat' && results.truncated
-        ? `Toplam ${results.total} (ilk ${results.items.length})`
-        : `Toplam ${results.total}`;
+    if (results.kind === 'documentChoices') {
+        totalLine.textContent = `${results.copies} kopya için belge seçin:`;
+    } else if (results.kind === 'tebligat' && results.truncated) {
+        totalLine.textContent = `Toplam ${results.total} (ilk ${results.items.length})`;
+    } else {
+        totalLine.textContent = `Toplam ${results.total}`;
+    }
     section.append(totalLine);
 
     const list = doc.createElement('ul');
-    list.className = 'staff-assistant-results-list';
+    list.className = results.kind === 'documentChoices'
+        ? 'staff-assistant-choice-list'
+        : 'staff-assistant-results-list';
     const tebligatEntries = [];
 
     if (results.kind === 'applications') {
@@ -394,6 +400,34 @@ function buildResultsElement(doc, results, tebligatHandlers) {
             const card = buildTebligatCard(doc, item, tebligatHandlers);
             tebligatEntries.push(card.entry);
             list.append(card.element);
+        }
+    } else if (results.kind === 'documentChoices') {
+        const choiceButtons = [];
+        for (const item of results.items) {
+            const li = doc.createElement('li');
+            li.className = 'staff-assistant-choice-item';
+
+            const btn = doc.createElement('button');
+            btn.type = 'button';
+            btn.className = 'staff-assistant-choice-btn';
+            btn.textContent = item.title;
+            btn.dataset.documentId = item.documentId;
+            btn.dataset.copies = String(results.copies);
+            btn.addEventListener('click', () => {
+                for (const otherBtn of choiceButtons) {
+                    otherBtn.disabled = true;
+                }
+                btn.classList.add('is-selected');
+                void tebligatHandlers?.onSelectDocumentChoice?.({
+                    documentId: item.documentId,
+                    title: item.title,
+                    copies: results.copies
+                });
+            });
+
+            choiceButtons.push(btn);
+            li.append(btn);
+            list.append(li);
         }
     }
 
@@ -587,7 +621,19 @@ export function initializeStaffAssistant({ root = globalThis.document, fetcher, 
                 appendMessage,
                 setMascotState,
                 isDestroyed: () => destroyed,
-                scrollLogToBottom
+                scrollLogToBottom,
+                onSelectDocumentChoice: async ({ documentId, title, copies }) => {
+                    if (destroyed) return;
+                    appendMessage({
+                        role: 'assistant',
+                        text: `${title} için ${copies} kopya yazdırma önerisini hazırladım; onayınızla yazdırabilirsiniz.`
+                    });
+                    setMascotState('understood');
+                    await applyAction(
+                        { type: 'documents.print', documentId, copies },
+                        resolveFetcher(doc, fetcher)
+                    );
+                }
             });
             if (results.kind === 'tebligat') {
                 lastTebligatEntries = built.tebligatEntries;

@@ -256,6 +256,23 @@ test('validateStaffAssistantResponse accepts valid responses with action and res
     assert.equal(withTebligat.results.kind, 'tebligat');
     assert.equal(withTebligat.results.truncated, true);
     assert.equal(withTebligat.results.items.length, 5);
+
+    const withDocumentChoices = validateStaffAssistantResponse({
+        reply: 'Hangisini hazırlayayım?',
+        state: 'confused',
+        results: {
+            kind: 'documentChoices',
+            copies: 5,
+            items: [
+                { documentId: 'taksitlendirme-dilekcesi', title: 'Taksit Dilekçesi' },
+                { documentId: 'bos-dilekce-formu', title: 'Boş Dilekçe' },
+                { documentId: 'indirim-dilekcesi', title: 'İndirim Dilekçesi' }
+            ]
+        }
+    });
+    assert.equal(withDocumentChoices.results.kind, 'documentChoices');
+    assert.equal(withDocumentChoices.results.copies, 5);
+    assert.equal(withDocumentChoices.results.items.length, 3);
 });
 
 test('validateStaffAssistantResponse rejects unknown state, >5 items, and extra keys at every level', () => {
@@ -377,6 +394,65 @@ test('validateStaffAssistantResponse rejects unknown state, >5 items, and extra 
                 total: 1,
                 truncated: false,
                 items: [{ ...makeTebligatItem(1), marked: 'true' }]
+            }
+        },
+        {
+            reply: 'Seçenekler',
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies: 0,
+                items: [{ documentId: 'bos-dilekce-formu', title: 'Boş Dilekçe' }]
+            }
+        },
+        {
+            reply: 'Seçenekler',
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies: 51,
+                items: [{ documentId: 'bos-dilekce-formu', title: 'Boş Dilekçe' }]
+            }
+        },
+        {
+            reply: 'Seçenekler',
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies: 2,
+                items: []
+            }
+        },
+        {
+            reply: 'Seçenekler',
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies: 2,
+                items: [
+                    { documentId: 'bos-dilekce-formu', title: 'Boş Dilekçe' },
+                    { documentId: 'taksitlendirme-dilekcesi', title: 'Taksit Dilekçesi' },
+                    { documentId: 'indirim-dilekcesi', title: 'İndirim Dilekçesi' },
+                    { documentId: 'kayit-silme-formu', title: 'Kayıt Silme' }
+                ]
+            }
+        },
+        {
+            reply: 'Seçenekler',
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies: 2,
+                items: [{ documentId: 'BAD ID!', title: 'Boş Dilekçe' }]
+            }
+        },
+        {
+            reply: 'Seçenekler',
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies: 2,
+                items: [{ documentId: 'bos-dilekce-formu', title: 'Boş Dilekçe', extra: true }]
             }
         }
     ];

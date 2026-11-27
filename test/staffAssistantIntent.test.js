@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+    cleanDocumentPrintQuery,
     isRedLineStaffMessage,
     parseCount,
     parseHoursText,
@@ -251,4 +252,48 @@ test('isRedLineStaffMessage and parseStaffIntent refuse Turkish inflected red-li
             `Expected null for red-line message: ${redLineMessage}`
         );
     }
+});
+
+test('parseCount and cleanDocumentPrintQuery handle attached counts, x-formats, fillers, and preserve on lisans', () => {
+    assert.equal(parseCount('başvuru formu cıkarır mısın 10tane'), 10);
+    assert.equal(parseCount('lisans checklist çıkar 10tane'), 10);
+    assert.equal(parseCount('10 adet taksit dilekçesi'), 10);
+    assert.equal(parseCount('10x indirim dilekçesi'), 10);
+    assert.equal(parseCount('x10 taahhütname'), 10);
+    assert.equal(parseCount('10 boş dilekçe'), 10);
+    assert.equal(parseCount('on tane ikamet listesi'), 10);
+    assert.equal(parseCount('ön lisans checklist çıkar'), null);
+    assert.equal(parseCount('bir de on tane taksit dilekçesi'), 10);
+
+    assert.equal(cleanDocumentPrintQuery('başvuru formu cıkarır mısın 10tane'), 'basvuru formu');
+    assert.equal(cleanDocumentPrintQuery('lisans checklist çıkar 10tane'), 'lisans checklist');
+    assert.equal(cleanDocumentPrintQuery('bana şu taksit dilekçesinden 10x bas lütfen'), 'taksit dilekcesinden');
+    assert.equal(cleanDocumentPrintQuery('bir de 5 adet taahütname rica etsem'), 'taahutname');
+    assert.equal(cleanDocumentPrintQuery('on tane ön lisans checklist verir misin'), 'on lisans checklist');
+    assert.equal(cleanDocumentPrintQuery('ikamet listesi lazım yazdır'), 'ikamet listesi');
+});
+
+test('non-print requests (tebligat, work hours, YKN, YÖKSİS, application search, inquiries, red-line) are not routed to document print', () => {
+    assert.equal(parseStaffIntent('Ahmet Demir tebligat bul')?.tool, 'search_tebligat');
+    assert.equal(parseStaffIntent('Kağan için bugün 6 saat')?.tool, 'propose_work_hours');
+    assert.equal(parseStaffIntent("AB123456 pasaportunu ykn'ye ver")?.tool, 'run_ykn_flow');
+    assert.equal(parseStaffIntent('20260000001 eksik evrak durumu')?.tool, 'lookup_yoksis_audit');
+    assert.equal(parseStaffIntent('Ahmet Demir başvurusuna bakar mısınız')?.tool, 'search_applications');
+
+    for (const msg of [
+        'formdan gelen soruları göster',
+        'gelen sorular formu',
+        'öğrencinin kayıt silme durumunu değiştir',
+        'indirimli öğrenciyi sorgula'
+    ]) {
+        const parsed = parseStaffIntent(msg);
+        assert.notEqual(
+            parsed?.tool,
+            'propose_documents_print',
+            `Expected "${msg}" NOT to route to propose_documents_print`
+        );
+    }
+    assert.equal(parseStaffIntent('formdan gelen soruları göster')?.tool, 'navigate');
+    assert.equal(parseStaffIntent('öğrencinin kayıt silme durumunu değiştir'), null);
+    assert.equal(parseStaffIntent('indirimli öğrenciyi sorgula')?.tool, 'search_applications');
 });
