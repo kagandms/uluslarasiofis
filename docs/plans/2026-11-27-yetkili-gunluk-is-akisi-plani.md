@@ -210,3 +210,18 @@ Veritabanı kodları (`sent_to_migration`, `migration_approved`) değişmez.
 ## Excel yükleme saati
 
 Sabah mesai başında günde bir kez: YÖKSİS'ten taze indir, yükle, durumları işle. Böylece eksik evrak son tarihi olanlar aynı gün aranabilir. Önce YÖKSİS'te Göç sorgusunun ne zaman yenilendiği ("Göç Son Sorgu Tarihi") gözlenmeli; birkaç gün sabah ve akşam dosyası karşılaştırılıp saat kesinleştirilmeli.
+
+## Görev 7: Excel'de görünmeyen eksik evrak (2026-11-27 saha bulgusu)
+
+**Belirti:** Bir başvuru YÖKSİS ekranında "Eksik Belge İstendi (son: 25.12.2026)", portalda ise "İşlem Bekliyor / Eksik evrak bulunmadı".
+
+**Kök neden 1 — kaynak veri eski (portal hatası değil):** Aynı gün 09:19'da indirilen Excel'de satırın kendisi "İşlem Bekliyor", eksik belge alanları boş ve "Göç Son Sorgu Tarihi" 12.11.2026. Uygulamanın kendi ayrıştırıcısı dosyayı aynen okuyor; birleştirmede hiçbir eksik evrak durumu kaybolmuyor. YÖKSİS ekran görüntüsü indirmeden sonra (09:27) alınmış. Çıkarım: Excel her kaydın **son sorgulandığı andaki** durumunu verir; kayıt yeniden sorgulanınca güncellenir. Dosyada "İşlem Bekliyor" satırlarının 1.033'ünün son sorgusu 8 günden eski.
+
+**Kök neden 2 — Görev 4'teki tarih koruması yanlış (yayımlanmadan bulundu):** E-İkamet numarasının ikinci bölümü ay değil (`00`–`99`). Gerçek dosyada koruma 2.192 başvurunun yalnız 90'ını kabul ediyor.
+
+**Düzeltme:**
+- Excel "Kayıt Tarihi" aktarılır ve saklanır (`record_date`, henüz uygulanmamış migration 0049'a eklenir). Tarih koruması bu tarihi kullanır: portal kaydının tarihinden 30 günden daha eski satır uygulanmaz; tarihi olmayan satır "Elle kontrol"e girer. Birden çok satırda en yeni kayıt tarihi, eşitse en yeni Göç sorgusu seçilir.
+- Daha eski sorguya dayanan satır, daha yeni sorguyla konmuş eksik evrak işaretini kaldıramaz.
+- YÖKSİS listesinde her satırda "Göç son sorgu: GG.AA.YYYY (N gün önce)"; sonuçlanmamış ve 7 günden eski ise "güncel olmayabilir" uyarısı, "Eksik evrak bulunmadı" yerine "Son sorguda eksik evrak yoktu".
+- Filtre: "Göç sorgusu eski (7+ gün)". Yükleme özetinde ve eşitleme önizlemesinde eski sorgulu kayıt sayısı.
+- Personel talimatı: kesin sonuç için kayıt önce YÖKSİS'te yeniden sorgulanır, sonra Excel indirilir. YÖKSİS'te toplu sorgu olup olmadığı **doğrulanmadı**.
