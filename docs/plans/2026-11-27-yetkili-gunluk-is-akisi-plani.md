@@ -3,7 +3,7 @@
 > **For agentic workers:** Kod `agy` tarafından yazılır; orkestratör görev görev yürütür, diff'i okur ve testleri kendisi çalıştırır. Claude alt ajanı kullanılmaz. Adımlar onay kutusu (`- [ ]`) ile izlenir.
 
 - **Tarih:** 2026-11-27 · **Kaynak:** koda karşı inceleme, `origin/production` = `097020c`
-- **Durum:** PLAN. Ürün kodu yazılmadı, test çalıştırılmadı, hiçbir şey yayınlanmadı.
+- **Durum (2026-11-27):** Görev 1–5, 6A ve 7 yerelde uygulandı ve `claude/portal-update-features-plan-7a67da` dalında birleştirildi. Son birleşimde `npm test` 2.498 test (2.497 geçti, 1 atlandı), `build:production` ve `deploy:dry-run:production` geçti; gerçek Excel ile bellek içi uçtan uca deneme ve sentetik veriyle tarayıcı kontrolü yapıldı. Topi tarayıcıda denenmedi. Push, `production` birleştirmesi, migration uygulaması ve yayın **yapılmadı**. 6B şablon bekliyor. Aşağıdaki görev metinleri uygulama öncesi planı gösterir (Görev 4 tarih koruması için Görev 7 geçerlidir).
 
 **Goal:** Durum metinlerini açıklaştırmak, taramadan geçemeyen dosyayı tek tuşla yeniden istemek, gelen sorulara not eklemek, Topi'den belge çıktısını doğal cümleyle istemek, çalışma saatlerinden puantaj Excel'i indirmek ve günlük YÖKSİS Excel'indeki Göç durumunu onaylı biçimde portal kayıtlarına işlemek.
 
