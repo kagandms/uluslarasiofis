@@ -223,7 +223,8 @@ test('repository list returns newest first, honors status and limit, and countBy
     const dto = createInquiryDto(answeredItems[0]);
     assert.deepEqual(Object.keys(dto).sort(), [
         'created_at', 'email', 'first_name', 'handled_at', 'handled_by_name',
-        'id', 'language', 'last_name', 'message', 'phone', 'status'
+        'id', 'language', 'last_name', 'message', 'phone',
+        'staff_note', 'staff_note_updated_at', 'staff_note_updated_by_name', 'status'
     ]);
 });
 

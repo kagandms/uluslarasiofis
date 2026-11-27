@@ -511,3 +511,174 @@ test('copy phone button falls back to document.execCommand when Clipboard reject
     assert.equal(toasts.at(-1)?.type, 'error');
     assert.equal(toasts.at(-1)?.message, 'Numara kopyalanamadı.');
 });
+
+test('staff inquiry note UI renders on new and answered tabs, updates counter, saves, deletes, and cancels XSS-safely', async (context) => {
+    const { dom, root } = createStaffDom(context);
+    const requests = [];
+    let currentNewItem = {
+        ...NEW_ITEMS[0],
+        staff_note: null,
+        staff_note_updated_by_name: null,
+        staff_note_updated_at: null
+    };
+    const answeredWithNote = {
+        ...ANSWERED_ITEMS[0],
+        staff_note: 'Cevaplandı sekmesindeki not <script>alert(1)</script>',
+        staff_note_updated_by_name: 'Deniz Görevli',
+        staff_note_updated_at: '2026-11-27T08:30:00.000Z'
+    };
+
+    const controller = mountInquiryManager(root, {
+        fetcher: async (url, options = {}) => {
+            const method = options.method || 'GET';
+            const payloadBody = options.body ? JSON.parse(options.body) : null;
+            requests.push({ url: String(url), method, body: payloadBody });
+            if (method === 'GET' && String(url).includes('status=answered')) {
+                return createJsonResponse({ items: [answeredWithNote], counts: { new: 1, answered: 1 } });
+            }
+            if (method === 'GET') {
+                return createJsonResponse({ items: [currentNewItem], counts: { new: 1, answered: 1 } });
+            }
+            if (method === 'PUT' && String(url).endsWith('/inq-1/note')) {
+                const trimmed = payloadBody.note.trim();
+                currentNewItem = trimmed
+                    ? {
+                        ...currentNewItem,
+                        staff_note: trimmed,
+                        staff_note_updated_by_name: 'Mert Görevli',
+                        staff_note_updated_at: '2026-11-27T09:00:00.000Z'
+                    }
+                    : {
+                        ...currentNewItem,
+                        staff_note: null,
+                        staff_note_updated_by_name: null,
+                        staff_note_updated_at: null
+                    };
+                return createJsonResponse({ item: currentNewItem });
+            }
+            throw new Error(`Unexpected request: ${method} ${url}`);
+        }
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    // "Not ekle" button on new tab
+    const addButton = root.querySelector('[data-action="edit-inquiry-note"]');
+    assert.equal(addButton.textContent, 'Not ekle');
+    addButton.click();
+
+    const textarea = root.querySelector('[data-inquiry-note-input="inq-1"]');
+    const counter = root.querySelector('[data-inquiry-note-counter="inq-1"]');
+    assert.equal(counter.textContent, '0 / 1000');
+
+    // Over 1000 chars shows over-limit state and does not send PUT
+    textarea.value = 'a'.repeat(1001);
+    textarea.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(root.querySelector('[data-inquiry-note-counter="inq-1"]').textContent, '1001 / 1000');
+    assert.equal(root.querySelector('[data-inquiry-note-counter="inq-1"]').classList.contains('is-over-limit'), true);
+    root.querySelector('[data-action="save-inquiry-note"]').click();
+    await flushPromises();
+    assert.equal(requests.some((entry) => entry.method === 'PUT'), false);
+    assert.match(root.querySelector('.staff-inquiry-note-error').textContent, /1000/);
+
+    // Save valid note
+    const inputEl = root.querySelector('[data-inquiry-note-input="inq-1"]');
+    inputEl.value = 'Öğrenci ile görüşüldü';
+    inputEl.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    assert.equal(root.querySelector('[data-inquiry-note-counter="inq-1"]').textContent, '21 / 1000');
+    root.querySelector('[data-action="save-inquiry-note"]').click();
+    await flushPromises();
+
+    const putSave = requests.find((entry) => entry.method === 'PUT');
+    assert.deepEqual(putSave.body, { note: 'Öğrenci ile görüşüldü', expected_note_updated_at: null });
+    assert.equal(root.querySelector('.staff-inquiry-note-text').textContent, 'Öğrenci ile görüşüldü');
+    assert.match(root.querySelector('.staff-inquiry-note-meta').textContent, /Son düzenleyen: Mert Görevli/);
+    assert.equal(root.querySelector('[data-action="edit-inquiry-note"]').textContent, 'Notu düzenle');
+
+    // Cancel edit discards draft
+    root.querySelector('[data-action="edit-inquiry-note"]').click();
+    const cancelInput = root.querySelector('[data-inquiry-note-input="inq-1"]');
+    cancelInput.value = 'Kaydedilmeyecek taslak';
+    cancelInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    root.querySelector('[data-action="cancel-inquiry-note"]').click();
+    assert.equal(root.querySelector('.staff-inquiry-note-text').textContent, 'Öğrenci ile görüşüldü');
+
+    // Empty text deletes note
+    root.querySelector('[data-action="edit-inquiry-note"]').click();
+    const clearInput = root.querySelector('[data-inquiry-note-input="inq-1"]');
+    clearInput.value = '   ';
+    clearInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    root.querySelector('[data-action="save-inquiry-note"]').click();
+    await flushPromises();
+    assert.equal(root.querySelector('.staff-inquiry-note-box'), null);
+    assert.equal(root.querySelector('[data-action="edit-inquiry-note"]').textContent, 'Not ekle');
+
+    // Switch to Answered tab -> note is visible and XSS-safe
+    root.querySelector('[data-inquiry-tab="answered"]').click();
+    await flushPromises();
+    assert.equal(root.querySelector('script'), null);
+    assert.equal(
+        root.querySelector('.staff-inquiry-note-text').textContent,
+        'Cevaplandı sekmesindeki not <script>alert(1)</script>'
+    );
+    assert.match(root.querySelector('.staff-inquiry-note-meta').textContent, /Son düzenleyen: Deniz Görevli/);
+});
+
+test('unsaved note draft survives list refresh and 409 conflict keeps draft while showing latest note', async (context) => {
+    const { dom, root } = createStaffDom(context);
+    let serverItem = {
+        ...NEW_ITEMS[0],
+        staff_note: 'İlk sunucu notu',
+        staff_note_updated_by_name: 'Deniz Görevli',
+        staff_note_updated_at: '2026-11-27T08:00:00.000Z'
+    };
+
+    const controller = mountInquiryManager(root, {
+        fetcher: async (url, options = {}) => {
+            const method = options.method || 'GET';
+            if (method === 'GET') {
+                return createJsonResponse({ items: [serverItem], counts: { new: 1, answered: 0 } });
+            }
+            if (method === 'PUT' && String(url).endsWith('/inq-1/note')) {
+                // Simulate another staff member having updated the note before our save
+                serverItem = {
+                    ...serverItem,
+                    staff_note: 'Başka yetkilinin güncel notu',
+                    staff_note_updated_by_name: 'Mert Görevli',
+                    staff_note_updated_at: '2026-11-27T08:05:00.000Z'
+                };
+                return createJsonResponse({
+                    error: {
+                        code: 'INQUIRY_NOTE_CONFLICT',
+                        message: 'Not başka bir yetkili tarafından güncellendi. Güncel not yükleniyor.'
+                    }
+                }, 409);
+            }
+            throw new Error(`Unexpected request: ${method} ${url}`);
+        }
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    // Open editor and type an unsaved draft
+    root.querySelector('[data-action="edit-inquiry-note"]').click();
+    const input = root.querySelector('[data-inquiry-note-input="inq-1"]');
+    input.value = 'Benim kaydedilmemiş taslağım';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+
+    // Refresh list -> unsaved draft must survive
+    await controller.refresh();
+    await flushPromises();
+    const inputAfterRefresh = root.querySelector('[data-inquiry-note-input="inq-1"]');
+    assert.ok(inputAfterRefresh);
+    assert.equal(inputAfterRefresh.value, 'Benim kaydedilmemiş taslağım');
+
+    // Save triggers 409 -> draft stays in textarea AND latest server note is displayed
+    root.querySelector('[data-action="save-inquiry-note"]').click();
+    await flushPromises();
+
+    assert.equal(root.querySelector('[data-inquiry-note-input="inq-1"]').value, 'Benim kaydedilmemiş taslağım');
+    assert.equal(root.querySelector('.staff-inquiry-note-text').textContent, 'Başka yetkilinin güncel notu');
+    assert.match(root.querySelector('.staff-inquiry-note-meta').textContent, /Son düzenleyen: Mert Görevli/);
+    assert.match(root.querySelector('.staff-inquiry-note-error').textContent, /güncellendi/);
+});

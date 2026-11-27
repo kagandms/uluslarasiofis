@@ -3,7 +3,12 @@ import { buildInquiryDraft, buildWhatsAppHref } from './inquiryWhatsAppDraft.js'
 
 const STAFF_INQUIRIES_URL = '/api/staff/inquiries';
 const INQUIRIES_TITLE = 'Gelen Sorular';
+const INQUIRY_NOTE_MAX_LENGTH = 1000;
 const EMAIL_PATTERN = /^[^\s@?#&%\/\\:;,<>"'()\[\]]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+
+function countNoteCharacters(value) {
+    return [...String(value || '').replace(/\r\n/g, '\n').trim()].length;
+}
 
 function buildMailtoHref(email) {
     if (typeof email !== 'string') return '';
@@ -100,6 +105,15 @@ function findInquiryActionButton(rootElement, inquiryId, action) {
     return null;
 }
 
+function findInquiryNoteInput(rootElement, inquiryId) {
+    for (const card of rootElement.querySelectorAll('.staff-inquiry-card')) {
+        if (card.dataset.inquiryId === String(inquiryId)) {
+            return card.querySelector('.staff-inquiry-note-input');
+        }
+    }
+    return null;
+}
+
 /**
  * Mounts the staff "Gelen Sorular" inbox manager and fetches the initial "new" count once.
  * @param {HTMLElement} rootElement Container element (`#staff-inquiries-manager`).
@@ -118,6 +132,9 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
         errorMessage: '',
         statusMessage: '',
         confirmDeleteId: null,
+        editingNoteIds: new Set(),
+        noteDrafts: new Map(),
+        noteErrors: new Map(),
         pendingIds: new Set(),
         requestSeq: 0
     };
@@ -301,9 +318,121 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
             card.append(handled);
         }
 
+        const isPending = state.pendingIds.has(item.id);
+
+        if (item.staff_note) {
+            const noteBox = document.createElement('div');
+            noteBox.className = 'staff-inquiry-note-box';
+
+            const noteLabel = document.createElement('span');
+            noteLabel.className = 'staff-inquiry-note-label';
+            noteLabel.textContent = 'Personel Notu';
+
+            const noteText = document.createElement('p');
+            noteText.className = 'staff-inquiry-note-text';
+            noteText.textContent = String(item.staff_note);
+
+            noteBox.append(noteLabel, noteText);
+
+            if (item.staff_note_updated_by_name || item.staff_note_updated_at) {
+                const noteMeta = document.createElement('p');
+                noteMeta.className = 'staff-inquiry-note-meta';
+                const metaParts = [
+                    item.staff_note_updated_by_name ? String(item.staff_note_updated_by_name).trim() : '',
+                    formatApplicationTimestamp(item.staff_note_updated_at) || ''
+                ].filter(Boolean);
+                noteMeta.textContent = `Son düzenleyen: ${metaParts.join(' · ')}`;
+                noteBox.append(noteMeta);
+            }
+
+            card.append(noteBox);
+        }
+
+        if (state.editingNoteIds.has(item.id)) {
+            const noteEditor = document.createElement('div');
+            noteEditor.className = 'staff-inquiry-note-editor';
+
+            const noteInputId = `staff-inquiry-note-input-${String(item.id || '')}`;
+            const editorLabel = document.createElement('label');
+            editorLabel.className = 'staff-inquiry-note-editor-label';
+            editorLabel.setAttribute('for', noteInputId);
+            editorLabel.textContent = item.staff_note ? 'Notu düzenle' : 'Not ekle';
+
+            const noteInput = document.createElement('textarea');
+            noteInput.id = noteInputId;
+            noteInput.className = 'staff-inquiry-note-input';
+            noteInput.dataset.inquiryNoteInput = String(item.id || '');
+            noteInput.rows = 3;
+            noteInput.placeholder = 'Personel içi not yazın (silmek için boş bırakın)…';
+            noteInput.disabled = isPending;
+            noteInput.value = state.noteDrafts.has(item.id)
+                ? state.noteDrafts.get(item.id)
+                : String(item.staff_note || '');
+
+            const noteFooter = document.createElement('div');
+            noteFooter.className = 'staff-inquiry-note-footer';
+
+            const noteCounter = document.createElement('span');
+            noteCounter.className = 'staff-inquiry-note-counter';
+            noteCounter.dataset.inquiryNoteCounter = String(item.id || '');
+            const initialCount = countNoteCharacters(noteInput.value);
+            noteCounter.textContent = `${initialCount} / ${INQUIRY_NOTE_MAX_LENGTH}`;
+            noteCounter.classList.toggle('is-over-limit', initialCount > INQUIRY_NOTE_MAX_LENGTH);
+
+            noteInput.addEventListener('input', () => {
+                state.noteDrafts.set(item.id, noteInput.value);
+                const charCount = countNoteCharacters(noteInput.value);
+                noteCounter.textContent = `${charCount} / ${INQUIRY_NOTE_MAX_LENGTH}`;
+                noteCounter.classList.toggle('is-over-limit', charCount > INQUIRY_NOTE_MAX_LENGTH);
+            });
+
+            const editorActions = document.createElement('div');
+            editorActions.className = 'staff-inquiry-note-editor-actions';
+
+            const saveNoteButton = document.createElement('button');
+            saveNoteButton.type = 'button';
+            saveNoteButton.className = 'btn btn-primary';
+            saveNoteButton.dataset.action = 'save-inquiry-note';
+            saveNoteButton.dataset.inquiryId = String(item.id || '');
+            saveNoteButton.disabled = isPending;
+            saveNoteButton.textContent = isPending ? 'Kaydediliyor…' : 'Kaydet';
+            saveNoteButton.addEventListener('click', () => {
+                void handleSaveNote(item);
+            });
+
+            const cancelNoteButton = document.createElement('button');
+            cancelNoteButton.type = 'button';
+            cancelNoteButton.className = 'btn btn-outline';
+            cancelNoteButton.dataset.action = 'cancel-inquiry-note';
+            cancelNoteButton.dataset.inquiryId = String(item.id || '');
+            cancelNoteButton.disabled = isPending;
+            cancelNoteButton.textContent = 'Vazgeç';
+            cancelNoteButton.addEventListener('click', () => {
+                state.editingNoteIds.delete(item.id);
+                state.noteDrafts.delete(item.id);
+                state.noteErrors.delete(item.id);
+                render();
+                findInquiryActionButton(rootElement, item.id, 'edit-inquiry-note')?.focus();
+            });
+
+            editorActions.append(saveNoteButton, cancelNoteButton);
+            noteFooter.append(noteCounter, editorActions);
+            noteEditor.append(editorLabel, noteInput, noteFooter);
+
+            const noteError = state.noteErrors.get(item.id);
+            if (noteError) {
+                const noteErrorEl = document.createElement('p');
+                noteErrorEl.className = 'staff-inquiry-note-error';
+                noteErrorEl.setAttribute('role', 'alert');
+                noteErrorEl.textContent = noteError;
+                noteEditor.append(noteErrorEl);
+            }
+
+            card.append(noteEditor);
+        }
+
         const actions = document.createElement('div');
         actions.className = 'staff-inquiry-actions';
-        const isPending = state.pendingIds.has(item.id);
 
         const targetStatus = item.status === 'answered' ? 'new' : 'answered';
         const statusButton = document.createElement('button');
@@ -318,6 +447,26 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
             void handleStatusChange(item, targetStatus);
         });
         actions.append(statusButton);
+
+        if (!state.editingNoteIds.has(item.id)) {
+            const noteButton = document.createElement('button');
+            noteButton.type = 'button';
+            noteButton.className = 'btn btn-outline';
+            noteButton.dataset.action = 'edit-inquiry-note';
+            noteButton.dataset.inquiryId = String(item.id || '');
+            noteButton.disabled = isPending;
+            noteButton.textContent = item.staff_note ? 'Notu düzenle' : 'Not ekle';
+            noteButton.addEventListener('click', () => {
+                state.editingNoteIds.add(item.id);
+                if (!state.noteDrafts.has(item.id)) {
+                    state.noteDrafts.set(item.id, String(item.staff_note || ''));
+                }
+                state.noteErrors.delete(item.id);
+                render();
+                findInquiryNoteInput(rootElement, item.id)?.focus();
+            });
+            actions.append(noteButton);
+        }
 
         if (state.confirmDeleteId === item.id) {
             const confirmWrap = document.createElement('div');
@@ -539,6 +688,62 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
         } catch (error) {
             console.error('Staff inquiry status update failed.', { errorName: error?.name || 'Error' });
             state.errorMessage = error?.message || 'Durum güncellenemedi. Lütfen tekrar deneyin.';
+        } finally {
+            state.pendingIds.delete(item.id);
+            render();
+        }
+    }
+
+    async function handleSaveNote(item) {
+        if (!item?.id || state.pendingIds.has(item.id)) return;
+        const draftText = state.noteDrafts.has(item.id)
+            ? state.noteDrafts.get(item.id)
+            : String(item.staff_note || '');
+        if (countNoteCharacters(draftText) > INQUIRY_NOTE_MAX_LENGTH) {
+            state.noteErrors.set(item.id, `Not metni en fazla ${INQUIRY_NOTE_MAX_LENGTH} karakter olabilir.`);
+            render();
+            return;
+        }
+
+        state.pendingIds.add(item.id);
+        state.noteErrors.delete(item.id);
+        state.errorMessage = '';
+        state.statusMessage = '';
+        render();
+
+        try {
+            const payload = await requestJson(`${STAFF_INQUIRIES_URL}/${encodeURIComponent(item.id)}/note`, {
+                method: 'PUT',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    note: draftText,
+                    expected_note_updated_at: item.staff_note_updated_at ?? null
+                })
+            });
+            const updatedItem = payload?.item;
+            if (updatedItem) {
+                state.items = state.items.map((entry) => (entry.id === item.id ? updatedItem : entry));
+            }
+            state.editingNoteIds.delete(item.id);
+            state.noteDrafts.delete(item.id);
+            state.noteErrors.delete(item.id);
+            state.statusMessage = updatedItem?.staff_note ? 'Not kaydedildi.' : 'Not silindi.';
+        } catch (error) {
+            console.error('Staff inquiry note update failed.', { errorName: error?.name || 'Error' });
+            if (error?.status === 409 || error?.code === 'INQUIRY_NOTE_CONFLICT') {
+                state.editingNoteIds.add(item.id);
+                state.noteDrafts.set(item.id, draftText);
+                state.noteErrors.set(
+                    item.id,
+                    error?.message || 'Not başka bir yetkili tarafından güncellendi. Güncel not yukarıda gösteriliyor.'
+                );
+                await loadInquiries(state.activeTab, { silentError: true });
+            } else {
+                state.noteErrors.set(item.id, error?.message || 'Not kaydedilemedi. Lütfen tekrar deneyin.');
+            }
         } finally {
             state.pendingIds.delete(item.id);
             render();
