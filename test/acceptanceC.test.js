@@ -887,6 +887,168 @@ test('C07 student sees missing_documents warning and deadline without note or ap
     assert.equal(afterRevertCurrent.json.application.migration_missing_deadline, undefined);
 });
 
+test('C07 sent_to_migration with reviewing overlay shows no warning in owner tracking, public lookup, chatbot, or physical lookup', async () => {
+    const { database, environment } = createEnvironment();
+    const staffCookie = await seedStaff(environment, database);
+
+    // 1. Online application: missing_documents -> newer-query reviewing (still sent_to_migration)
+    const app = await seedApplication(database, {
+        id: 'app-c07-reviewing',
+        studentNumber: '2607000003',
+        firstName: 'Kerem',
+        lastName: 'Yılmaz',
+        referenceNumber: 'ITU-9M3P-6Z4R'
+    });
+    const studentCookie = await seedApplicationSession(database, app.id, 'student-session-c07-3-000000000000000000000');
+    const eIkametNo = '2026-00-7777779';
+    const secretNote = 'ÖZEL NOT PASAPORT';
+
+    const { importId: impMiss } = await importExcel(environment, staffCookie, {
+        importId: 'imp-c07-rev-1',
+        rows: [
+            makeExcelRow({
+                applicationNumber: eIkametNo,
+                studentNumber: app.studentNumber,
+                fullName: 'Kerem Yılmaz',
+                gocStatus: 'Eksik Belge İstendi',
+                missingNote: secretNote,
+                missingDeadline: '2026-12-19',
+                gocLastQueryAt: '2026-11-20'
+            })
+        ]
+    });
+    const previewMiss = await callApi(environment, '/api/staff/yoksis-document-audit/sync/preview', { method: 'POST', cookie: staffCookie, body: {} });
+    await callApi(environment, '/api/staff/yoksis-document-audit/sync/apply', {
+        method: 'POST',
+        cookie: staffCookie,
+        body: {
+            import_id: impMiss,
+            items: [{
+                record_kind: 'online',
+                record_id: app.id,
+                application_number: eIkametNo,
+                version: previewMiss.json.changes[0].version
+            }]
+        }
+    });
+
+    const chatWhileMissing = await callApi(environment, '/api/public/chat', {
+        method: 'POST',
+        body: {
+            messages: [{ role: 'user', content: `Başvurumun durumu nedir? ${app.referenceNumber}` }],
+            language: 'tr'
+        }
+    });
+    assert.equal(chatWhileMissing.response.status, 200);
+    assert.ok(chatWhileMissing.json.reply.includes('Göç İdaresi dosyanız için eksik evrak istiyor'));
+    assert.ok(chatWhileMissing.json.reply.includes('2026-12-19'));
+    assert.equal(chatWhileMissing.json.reply.includes(secretNote), false);
+    assert.equal(chatWhileMissing.json.reply.includes(eIkametNo), false);
+
+    // Clear missing_documents via newer-query "İşlem Bekliyor" -> status stays sent_to_migration, overlay becomes reviewing
+    const { importId: impClear } = await importExcel(environment, staffCookie, {
+        importId: 'imp-c07-rev-2',
+        rows: [
+            makeExcelRow({
+                applicationNumber: eIkametNo,
+                studentNumber: app.studentNumber,
+                fullName: 'Kerem Yılmaz',
+                gocStatus: 'İşlem Bekliyor',
+                gocLastQueryAt: '2026-11-25'
+            })
+        ]
+    });
+    const previewClear = await callApi(environment, '/api/staff/yoksis-document-audit/sync/preview', { method: 'POST', cookie: staffCookie, body: {} });
+    assert.equal(previewClear.json.changes.length, 1);
+    assert.equal(previewClear.json.changes[0].target_state, 'reviewing');
+    await callApi(environment, '/api/staff/yoksis-document-audit/sync/apply', {
+        method: 'POST',
+        cookie: staffCookie,
+        body: {
+            import_id: impClear,
+            items: [{
+                record_kind: 'online',
+                record_id: app.id,
+                application_number: eIkametNo,
+                version: previewClear.json.changes[0].version
+            }]
+        }
+    });
+
+    const ownerAfterClear = await callApi(environment, '/api/public/applications/current/tracking', { cookie: studentCookie });
+    assert.equal(ownerAfterClear.response.status, 200);
+    assert.equal(ownerAfterClear.json.application.status, 'sent_to_migration');
+    assert.equal(ownerAfterClear.json.application.migration_missing_documents, undefined);
+    assert.equal(ownerAfterClear.json.application.migration_missing_deadline, undefined);
+
+    const lookupAfterClear = await callApi(environment, '/api/public/applications/tracking-lookup', {
+        method: 'POST',
+        body: { reference_number: app.referenceNumber }
+    });
+    assert.equal(lookupAfterClear.response.status, 200);
+    assert.equal(lookupAfterClear.json.application.status, 'sent_to_migration');
+    assert.equal(lookupAfterClear.json.application.migration_missing_documents, undefined);
+    assert.equal(lookupAfterClear.json.application.migration_missing_deadline, undefined);
+
+    const chatAfterClear = await callApi(environment, '/api/public/chat', {
+        method: 'POST',
+        body: {
+            messages: [{ role: 'user', content: `Başvurumun durumu nedir? ${app.referenceNumber}` }],
+            language: 'tr'
+        }
+    });
+    assert.equal(chatAfterClear.response.status, 200);
+    assert.equal(chatAfterClear.json.reply.includes('eksik evrak'), false);
+    assert.equal(chatAfterClear.json.reply.includes('2026-12-19'), false);
+
+    // 2. Physical record: sent_to_migration with missing_documents vs reviewing overlay
+    const physicalId = 'phys-c07-reviewing';
+    const physicalRef = 'ITU-26-7K9M4X2';
+    const nowIso = new Date().toISOString();
+    await database.prepare(`
+        INSERT INTO physical_intakes (
+            id, student_number, first_name, last_name, passport_number,
+            application_type, application_route, linked_application_id,
+            tracking_reference, application_date, submitted_at, updated_at, created_by_staff_id, status
+        ) VALUES (?, '2607000099', 'Bora', 'Şahin', 'P7779991', 'initial', 'standard', NULL, ?, '2026-11-27', ?, ?, 'reviewer-1', 'sent_to_migration')
+    `).bind(physicalId, physicalRef, nowIso, nowIso).run();
+
+    await database.prepare(`
+        INSERT INTO migration_office_states (
+            record_kind, record_id, application_number, state, note, deadline,
+            goc_last_query_at, import_id, updated_by_staff_id, updated_at
+        ) VALUES ('physical', ?, '2026-00-7777780', 'missing_documents', 'Gizli fiziksel not', '2026-12-21', '2026-11-20', 'imp-phys-1', 'reviewer-1', ?)
+    `).bind(physicalId, nowIso).run();
+
+    const physMissing = await callApi(environment, '/api/public/physical-intakes/tracking-lookup', {
+        method: 'POST',
+        body: { tracking_reference: physicalRef }
+    });
+    assert.equal(physMissing.response.status, 200);
+    assert.equal(physMissing.json.found, true);
+    assert.equal(physMissing.json.office_status, 'sent_to_migration');
+    assert.equal(physMissing.json.migration_missing_documents, true);
+    assert.equal(physMissing.json.migration_missing_deadline, '2026-12-21');
+    assert.equal(JSON.stringify(physMissing.json).includes('Gizli fiziksel not'), false);
+    assert.equal(JSON.stringify(physMissing.json).includes('2026-00-7777780'), false);
+
+    await database.prepare(`
+        UPDATE migration_office_states
+        SET state = 'reviewing', note = '', deadline = NULL, goc_last_query_at = '2026-11-25', updated_at = ?
+        WHERE record_kind = 'physical' AND record_id = ?
+    `).bind(new Date().toISOString(), physicalId).run();
+
+    const physReviewing = await callApi(environment, '/api/public/physical-intakes/tracking-lookup', {
+        method: 'POST',
+        body: { tracking_reference: physicalRef }
+    });
+    assert.equal(physReviewing.response.status, 200);
+    assert.equal(physReviewing.json.found, true);
+    assert.equal(physReviewing.json.office_status, 'sent_to_migration');
+    assert.equal(physReviewing.json.migration_missing_documents, undefined);
+    assert.equal(physReviewing.json.migration_missing_deadline, undefined);
+});
+
 test('C08 filters (missing_documents, approved, stale query) return exact counts and pagination; permanent delete cleans up overlay', async () => {
     const { database, environment } = createEnvironment();
     const adminCookie = await seedStaff(environment, database, {
