@@ -4,6 +4,7 @@ import {
     createInquiryDto,
     validateInquiryId,
     validateInquiryListQuery,
+    validateInquiryNoteUpdateBody,
     validateInquiryStatusUpdateBody
 } from '../domain/officeInquiry.js';
 import { readJsonBody } from '../http/requestBody.js';
@@ -91,7 +92,44 @@ export async function deleteStaffInquiry(request, environment, inquiryId, reques
 }
 
 /**
- * `/api/staff/inquiries` ve `/api/staff/inquiries/<id>` uçlarını yönlendirir.
+ * Yetkili personel için bir soru kaydının personel notunu günceller veya boş metinle siler.
+ * @param {Request} request Worker isteği.
+ * @param {object} environment Worker bağlamları.
+ * @param {string} inquiryId Soru kimliği.
+ * @param {string} requestId İstek izleme kimliği.
+ * @returns {Promise<{item: object}>} Güncellenmiş soru DTO'su.
+ * @throws {ApiError} Köken, yetki, doğrulama, kayıt eksikliği veya sürüm çakışmasında hata fırlatır.
+ */
+export async function updateStaffInquiryNote(request, environment, inquiryId, requestId) {
+    requireMethod(request, 'PUT');
+    requireSameOrigin(request);
+    const staff = await requireStaff(request, environment, STAFF_ROLES);
+    const validatedId = validateInquiryId(inquiryId);
+    const { note, expectedNoteUpdatedAt } = validateInquiryNoteUpdateBody(await readJsonBody(request, 8192));
+    const result = await createRepositories(environment).officeInquiries.updateNote({
+        id: validatedId,
+        note,
+        expectedNoteUpdatedAt,
+        staffId: staff.id,
+        nowIso: new Date().toISOString(),
+        requestId,
+        auditId: crypto.randomUUID()
+    });
+    if (result.status === 'not_found') {
+        throw new ApiError(404, 'INQUIRY_NOT_FOUND', 'Soru kaydı bulunamadı.');
+    }
+    if (result.status === 'conflict') {
+        throw new ApiError(
+            409,
+            'INQUIRY_NOTE_CONFLICT',
+            'Not başka bir yetkili tarafından güncellendi. Güncel not yükleniyor.'
+        );
+    }
+    return { item: createInquiryDto(result.item) };
+}
+
+/**
+ * `/api/staff/inquiries`, `/api/staff/inquiries/<id>` ve `/api/staff/inquiries/<id>/note` uçlarını yönlendirir.
  * @param {Request} request Worker isteği.
  * @param {object} environment Worker bağlamları.
  * @param {string} requestId İstek izleme kimliği.
@@ -102,6 +140,19 @@ export async function handleStaffInquiries(request, environment, requestId) {
     const { pathname } = new URL(request.url);
     if (pathname === '/api/staff/inquiries') {
         return listStaffInquiries(request, environment);
+    }
+    const noteMatch = pathname.match(/^\/api\/staff\/inquiries\/([^/]+)\/note$/);
+    if (noteMatch) {
+        let inquiryId;
+        try {
+            inquiryId = decodeURIComponent(noteMatch[1]);
+        } catch {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Soru kimliği geçersiz.');
+        }
+        if (request.method === 'PUT') {
+            return updateStaffInquiryNote(request, environment, inquiryId, requestId);
+        }
+        throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Bu istek yöntemi desteklenmiyor.');
     }
     const match = pathname.match(/^\/api\/staff\/inquiries\/([^/]+)$/);
     if (!match) {

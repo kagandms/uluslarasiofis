@@ -96,6 +96,7 @@ test('staff inquiry endpoints require an authenticated reviewer or admin session
     for (const [path, method, body] of [
         ['/api/staff/inquiries', 'GET', undefined],
         ['/api/staff/inquiries/inq-auth-1', 'PATCH', { status: 'answered' }],
+        ['/api/staff/inquiries/inq-auth-1/note', 'PUT', { note: 'Test not', expected_note_updated_at: null }],
         ['/api/staff/inquiries/inq-auth-1', 'DELETE', undefined]
     ]) {
         const anonymousResponse = await worker.fetch(createRequest(path, { method, body }), environment);
@@ -147,7 +148,8 @@ test('GET /api/staff/inquiries lists inquiries with counts, filters by status, a
     assert.deepEqual(allPayload.items.map((item) => item.id), ['inq-3', 'inq-2', 'inq-1']);
     assert.deepEqual(Object.keys(allPayload.items[0]).sort(), [
         'created_at', 'email', 'first_name', 'handled_at', 'handled_by_name',
-        'id', 'language', 'last_name', 'message', 'phone', 'status'
+        'id', 'language', 'last_name', 'message', 'phone',
+        'staff_note', 'staff_note_updated_at', 'staff_note_updated_by_name', 'status'
     ]);
 
     const newOnly = await worker.fetch(createRequest('/api/staff/inquiries?status=new&limit=1', {
@@ -307,4 +309,173 @@ test('DELETE /api/staff/inquiries/:id enforces same-origin, 404 for unknown, rem
     assert.equal(Object.hasOwn(meta, 'phone'), false);
     assert.equal(Object.hasOwn(meta, 'email'), false);
     assert.doesNotMatch(audits[0].safe_metadata_json, /SILINECEK-OZEL-MESAJ|\+905557778899|silinecek@example\.edu/);
+});
+
+test('PUT /api/staff/inquiries/:id/note saves, updates, deletes by empty text, enforces 1000-char limit, 409 conflict, same-origin, and safe audit', async () => {
+    const { environment, database } = createEnvironment();
+    const reviewer1Cookie = await seedStaff(environment, database, {
+        id: 'reviewer-1',
+        username: 'reviewer-1',
+        token: 'reviewer-1-session-token-0000000000000000',
+        displayName: 'Deniz Görevli'
+    });
+    await seedInquiry(database, { id: 'inq-note-api-1' });
+
+    // Cross-origin rejection
+    for (const origin of ['https://attacker.test', null]) {
+        const crossOrigin = await worker.fetch(createRequest('/api/staff/inquiries/inq-note-api-1/note', {
+            method: 'PUT',
+            cookie: reviewer1Cookie,
+            origin,
+            body: { note: 'İlk not', expected_note_updated_at: null }
+        }), environment);
+        assert.equal(crossOrigin.status, 403);
+        assert.equal((await crossOrigin.json()).error.code, 'CROSS_ORIGIN_REQUEST');
+    }
+
+    // 404 for unknown inquiry
+    const notFound = await worker.fetch(createRequest('/api/staff/inquiries/unknown-inq/note', {
+        method: 'PUT',
+        cookie: reviewer1Cookie,
+        body: { note: 'İlk not', expected_note_updated_at: null }
+    }), environment);
+    assert.equal(notFound.status, 404);
+    assert.equal((await notFound.json()).error.code, 'INQUIRY_NOT_FOUND');
+
+    // 1001 characters rejected, 1000 characters accepted
+    const tooLong = await worker.fetch(createRequest('/api/staff/inquiries/inq-note-api-1/note', {
+        method: 'PUT',
+        cookie: reviewer1Cookie,
+        body: { note: 'ğ'.repeat(1001), expected_note_updated_at: null }
+    }), environment);
+    assert.equal(tooLong.status, 400);
+    assert.equal((await tooLong.json()).error.code, 'VALIDATION_ERROR');
+
+    const exactMax = await worker.fetch(createRequest('/api/staff/inquiries/inq-note-api-1/note', {
+        method: 'PUT',
+        cookie: reviewer1Cookie,
+        body: { note: 'ğ'.repeat(1000), expected_note_updated_at: null }
+    }), environment);
+    assert.equal(exactMax.status, 200);
+    const savedPayload = await exactMax.json();
+    assert.equal(savedPayload.item.staff_note, 'ğ'.repeat(1000));
+    assert.equal(savedPayload.item.staff_note_updated_by_name, 'Deniz Görevli');
+    assert.ok(savedPayload.item.staff_note_updated_at);
+
+    // Ensure distinct timestamp for the next update
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    // Seed second staff member and update with Turkish, Cyrillic, and Arabic text
+    const reviewer2Cookie = await seedStaff(environment, database, {
+        id: 'reviewer-2',
+        username: 'reviewer-2',
+        token: 'reviewer-2-session-token-0000000000000000',
+        displayName: 'Mert Görevli'
+    });
+    const multilingualNote = 'Öğrenci arandı · Студент позвонил · تم الاتصال بالطالب';
+    const updated = await worker.fetch(createRequest('/api/staff/inquiries/inq-note-api-1/note', {
+        method: 'PUT',
+        cookie: reviewer2Cookie,
+        body: {
+            note: `  ${multilingualNote}  `,
+            expected_note_updated_at: savedPayload.item.staff_note_updated_at
+        }
+    }), environment);
+    assert.equal(updated.status, 200);
+    const updatedPayload = await updated.json();
+    assert.equal(updatedPayload.item.staff_note, multilingualNote);
+    assert.equal(updatedPayload.item.staff_note_updated_by_name, 'Mert Görevli');
+    assert.ok(updatedPayload.item.staff_note_updated_at);
+    assert.notEqual(updatedPayload.item.staff_note_updated_at, savedPayload.item.staff_note_updated_at);
+
+    // Switch active shared staff username back to reviewer-1 for stale conflict and clear checks
+    environment.STAFF_SHARED_USERNAME = 'reviewer-1';
+
+    // Stale version -> 409 INQUIRY_NOTE_CONFLICT and existing note is preserved
+    for (const staleVersion of [null, savedPayload.item.staff_note_updated_at]) {
+        const conflict = await worker.fetch(createRequest('/api/staff/inquiries/inq-note-api-1/note', {
+            method: 'PUT',
+            cookie: reviewer1Cookie,
+            body: {
+                note: 'GIZLI-CAKISAN-NOT-METNI',
+                expected_note_updated_at: staleVersion
+            }
+        }), environment);
+        assert.equal(conflict.status, 409);
+        assert.equal((await conflict.json()).error.code, 'INQUIRY_NOTE_CONFLICT');
+    }
+
+    const afterConflict = await worker.fetch(createRequest('/api/staff/inquiries', {
+        cookie: reviewer1Cookie
+    }), environment);
+    assert.equal((await afterConflict.json()).items[0].staff_note, multilingualNote);
+
+    // Empty / whitespace-only text deletes the note
+    const cleared = await worker.fetch(createRequest('/api/staff/inquiries/inq-note-api-1/note', {
+        method: 'PUT',
+        cookie: reviewer1Cookie,
+        body: {
+            note: '   \n  ',
+            expected_note_updated_at: updatedPayload.item.staff_note_updated_at
+        }
+    }), environment);
+    assert.equal(cleared.status, 200);
+    const clearedPayload = await cleared.json();
+    assert.equal(clearedPayload.item.staff_note, null);
+    assert.equal(clearedPayload.item.staff_note_updated_by_name, null);
+    assert.equal(clearedPayload.item.staff_note_updated_at, null);
+
+    // Audit events must not contain note text or PII
+    const audits = database.prepare(`
+        SELECT event_type, actor_type, actor_staff_id, safe_metadata_json
+        FROM audit_events
+        WHERE event_type = 'staff.office_inquiry_note_saved'
+        ORDER BY rowid ASC
+    `).all().results;
+    assert.equal(audits.length, 3);
+    for (const audit of audits) {
+        assert.equal(audit.actor_type, 'staff');
+        const meta = JSON.parse(audit.safe_metadata_json);
+        assert.equal(meta.inquiryId, 'inq-note-api-1');
+        assert.equal(Object.hasOwn(meta, 'note'), false);
+        assert.equal(Object.hasOwn(meta, 'staff_note'), false);
+        assert.doesNotMatch(audit.safe_metadata_json, /Öğrenci arandı|Студент|تم الاتصال|ğ{10}/);
+    }
+});
+
+test('public POST /api/public/inquiries response has no note fields and rejects injected staff_note', async () => {
+    const { environment } = createEnvironment();
+    const validResponse = await worker.fetch(createRequest('/api/public/inquiries', {
+        method: 'POST',
+        body: {
+            first_name: 'Zeynep',
+            last_name: 'Kaya',
+            phone: '+905551112244',
+            email: 'zeynep@example.edu',
+            message: 'Kayıt belgeleri hakkında bilgi alabilir miyim?',
+            language: 'tr'
+        }
+    }), environment);
+    assert.equal(validResponse.status, 201);
+    const validPayload = await validResponse.json();
+    assert.equal(validPayload.received, true);
+    assert.deepEqual(Object.keys(validPayload).sort(), ['received', 'requestId']);
+    assert.equal(Object.hasOwn(validPayload, 'staff_note'), false);
+    assert.equal(Object.hasOwn(validPayload, 'staff_note_updated_by_name'), false);
+    assert.equal(Object.hasOwn(validPayload, 'staff_note_updated_at'), false);
+
+    const injectedResponse = await worker.fetch(createRequest('/api/public/inquiries', {
+        method: 'POST',
+        body: {
+            first_name: 'Zeynep',
+            last_name: 'Kaya',
+            phone: '+905551112255',
+            email: null,
+            message: 'Kayıt belgeleri hakkında bilgi alabilir miyim?',
+            language: 'tr',
+            staff_note: 'Injected'
+        }
+    }), environment);
+    assert.equal(injectedResponse.status, 400);
+    assert.equal((await injectedResponse.json()).error.code, 'VALIDATION_ERROR');
 });
