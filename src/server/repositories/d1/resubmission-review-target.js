@@ -14,7 +14,7 @@ export async function findCurrentResubmissionTarget(database, input) {
         JOIN document_records AS records ON records.application_id = applications.id
         JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
         JOIN document_revisions AS revisions ON revisions.document_record_id = records.id
-        JOIN document_revision_files AS files ON files.revision_id = revisions.id AND files.page_order = 0
+        JOIN document_revision_files AS files ON files.revision_id = revisions.id
         JOIN upload_intents AS intents ON intents.revision_file_id = files.id
         WHERE applications.id = ? AND applications.status IN ('under_review', 'resubmission_required')
           AND records.application_type = applications.application_type
@@ -24,6 +24,7 @@ export async function findCurrentResubmissionTarget(database, input) {
           AND revisions.status IN ('submitted', 'approved', 'resubmission_required')
           AND files.upload_status = 'finalized' AND files.scan_status IN ('clean', 'unsafe', 'failed')
           AND files.cleanup_status = 'none' AND intents.status = 'completed'
+        ORDER BY CASE files.scan_status WHEN 'unsafe' THEN 0 WHEN 'failed' THEN 1 ELSE 2 END, files.page_order ASC
         LIMIT 1
     `).bind(input.applicationId, input.code).first();
 }

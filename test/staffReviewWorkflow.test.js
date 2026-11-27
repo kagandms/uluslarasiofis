@@ -1236,3 +1236,42 @@ test('direct_transfer allowlist and legacy approved_for_processing transitions k
     assert.equal(toMigration.status, 200);
     assert.equal(database.prepare('SELECT status FROM applications WHERE id=?').bind(legacyToMigrationId).first().status, 'sent_to_migration');
 });
+
+test('request-resubmission works when the failed scan file is on a non-first page (page_order > 0) and detail exposes can_request_resubmission on submitted', async () => {
+    const { environment, database } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+
+    // 1. Multi-page revision: page_order=0 is clean, page_order=1 is failed
+    const multiAppId = await seedApplication(database, { studentNumber: 'MULTI-1', status: 'under_review' });
+    const { revisionId } = await seedReviewableDocument(database, multiAppId, 'passport', { scanStatus: 'clean' });
+    const page2FileId = crypto.randomUUID();
+    await database.prepare(`
+        INSERT INTO document_revision_files (
+            id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status
+        ) VALUES (?, ?, 1, ?, 'passport-p2.pdf', 'application/pdf', 20, 'finalized', 'failed')
+    `).bind(page2FileId, revisionId, `quarantine/${crypto.randomUUID()}`).run();
+    await database.prepare(`
+        INSERT INTO upload_intents (id, revision_file_id, idempotency_key, expires_at, status, completed_at)
+        VALUES (?, ?, ?, ?, 'completed', ?)
+    `).bind(crypto.randomUUID(), page2FileId, crypto.randomUUID(), new Date(Date.now() + 60_000).toISOString(), new Date().toISOString()).run();
+
+    const resubResponse = await worker.fetch(request(`/api/staff/applications/${multiAppId}/documents/passport/request-resubmission`, {
+        method: 'POST',
+        cookie,
+        body: { expected_revision_number: 1, reason: 'Sayfa 2 taramadan geçemedi.' }
+    }), environment);
+    assert.equal(resubResponse.status, 200);
+
+    // 2. Submitted application with failed document exposes can_request_resubmission: true; sent_to_migration exposes false
+    const submittedAppId = await seedApplication(database, { studentNumber: 'SUB-FAIL', status: 'submitted' });
+    await seedReviewableDocument(database, submittedAppId, 'passport', { scanStatus: 'failed' });
+    const submittedDetail = await readJson(await worker.fetch(request(`/api/staff/applications/${submittedAppId}`, { cookie }), environment));
+    const submittedPassport = submittedDetail.documents.find((doc) => doc.code === 'passport');
+    assert.equal(submittedPassport.can_request_resubmission, true);
+
+    const migAppId = await seedApplication(database, { studentNumber: 'MIG-FAIL', status: 'sent_to_migration' });
+    await seedReviewableDocument(database, migAppId, 'passport', { scanStatus: 'failed' });
+    const migDetail = await readJson(await worker.fetch(request(`/api/staff/applications/${migAppId}`, { cookie }), environment));
+    const migPassport = migDetail.documents.find((doc) => doc.code === 'passport');
+    assert.equal(migPassport.can_request_resubmission, false);
+});

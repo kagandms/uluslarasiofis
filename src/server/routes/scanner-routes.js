@@ -132,7 +132,7 @@ export async function handleScannerRequest(request,environment) {
     if (pathname==='/api/scanner/heartbeat') return heartbeat(request,repository,now);
     if (pathname==='/api/scanner/status') {
         requireMethod(request,'GET');
-        return repository.readStatus();
+        return repository.readStatus({ includeApplicantDetails: false });
     }
     const match = pathname.match(/^\/api\/scanner\/jobs\/([a-zA-Z0-9_-]{1,64})\/(content|result)$/);
     if (!match) throw new ApiError(404,'NOT_FOUND','İstenen kaynak bulunamadı.');

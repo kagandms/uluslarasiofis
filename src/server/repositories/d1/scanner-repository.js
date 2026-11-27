@@ -184,16 +184,90 @@ async function recordHeartbeat(database, input) {
         .bind(input.runner_id,input.health,input.engine_version,input.signature_version,input.signature_updated_at,input.now).run();
 }
 
-/** @param {D1Database} database Binding. @returns {Promise<object>} Counts and safe health metadata. */
-async function readStatus(database) {
-    const [counts, runners, latest, failures] = await Promise.all([
+const FAILED_JOBS_FROM = `
+    FROM document_revision_files AS files
+    JOIN document_revisions AS revisions ON revisions.id = files.revision_id
+    JOIN document_records AS records ON records.id = revisions.document_record_id
+    JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
+    JOIN applications ON applications.id = records.application_id
+    JOIN students ON students.id = applications.student_id
+`;
+const FAILED_JOBS_WHERE = `
+    WHERE revisions.is_current = 1
+      AND files.cleanup_status = 'none'
+      AND files.scan_status IN ('failed', 'unsafe')
+      AND NOT EXISTS (SELECT 1 FROM application_deletions AS deletions WHERE deletions.application_id = applications.id)
+`;
+
+/** @param {D1Database} database Binding. @param {{includeApplicantDetails?: boolean}} [options] Output options. @returns {Promise<object>} Counts and safe health metadata. */
+async function readStatus(database, { includeApplicantDetails = true } = {}) {
+    const [counts, runners, latest, failures, actionableTotal] = await Promise.all([
         database.prepare(`SELECT status,job_count AS count FROM document_scan_job_status_counts
             WHERE job_count > 0 ORDER BY status`).all(),
         database.prepare('SELECT * FROM scanner_heartbeats ORDER BY seen_at DESC LIMIT 10').all(),
         database.prepare("SELECT max(scanned_at) AS last_successful_scan FROM document_scan_jobs WHERE outcome='clean'").first(),
-        database.prepare("SELECT id,attempts,result_code,updated_at FROM document_scan_jobs WHERE status='failed' ORDER BY updated_at DESC LIMIT 5").all()
+        database.prepare(`
+            SELECT COALESCE(jobs.id, files.id) AS id,
+                   jobs.id AS job_id,
+                   COALESCE(jobs.attempts, 0) AS attempts,
+                   COALESCE(jobs.result_code, files.scan_status) AS result_code,
+                   COALESCE(jobs.updated_at, files.created_at, revisions.uploaded_at) AS updated_at,
+                   files.scan_status AS scan_status,
+                   applications.id AS application_id,
+                   students.student_number AS student_number,
+                   applications.first_name AS first_name,
+                   applications.last_name AS last_name,
+                   requirements.code AS document_code,
+                   revisions.revision_number AS revision_number,
+                   revisions.status AS revision_status,
+                   records.review_status AS review_status,
+                   applications.status AS application_status,
+                   applications.updated_at AS application_updated_at
+            ${FAILED_JOBS_FROM}
+            LEFT JOIN document_scan_jobs AS jobs ON jobs.id = (
+                SELECT latest_job.id FROM document_scan_jobs AS latest_job
+                WHERE latest_job.file_id = files.id
+                ORDER BY latest_job.updated_at DESC, latest_job.id DESC
+                LIMIT 1
+            )
+            ${FAILED_JOBS_WHERE}
+            ORDER BY COALESCE(jobs.updated_at, files.created_at, revisions.uploaded_at) DESC, files.id DESC
+            LIMIT 50
+        `).all(),
+        database.prepare(`SELECT COUNT(*) AS total ${FAILED_JOBS_FROM} ${FAILED_JOBS_WHERE}`).first()
     ]);
-    return { jobs: counts.results, runners: runners.results, ...latest, failed_jobs: failures.results };
+    const failedJobs = (failures.results || []).map((row) => {
+        const base = {
+            id: row.id,
+            has_scan_job: row.job_id !== null && row.job_id !== undefined,
+            attempts: row.attempts,
+            result_code: row.result_code,
+            updated_at: row.updated_at,
+            scan_status: row.scan_status
+        };
+        if (!includeApplicantDetails) return base;
+        return {
+            ...base,
+            application_id: row.application_id,
+            student_number: row.student_number,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            document_code: row.document_code,
+            revision_number: row.revision_number,
+            application_status: row.application_status,
+            application_updated_at: row.application_updated_at,
+            can_request_resubmission: ['submitted', 'under_review', 'resubmission_required'].includes(row.application_status)
+                && row.revision_status === 'submitted'
+                && ['pending', 'under_review'].includes(row.review_status)
+        };
+    });
+    return {
+        jobs: counts.results,
+        runners: runners.results,
+        ...latest,
+        failed_jobs: failedJobs,
+        actionable_failed_total: Number(actionableTotal?.total ?? failedJobs.length)
+    };
 }
 
 /** Creates durable scanner operations. @param {D1Database} database D1 binding. @returns {object} Scanner repository. */
@@ -209,6 +283,6 @@ export function createScannerRepository(database) {
             .bind(jobId, tokenHash, now).first(),
         bindContent: (input) => bindContent(database,input),
         heartbeat: (input) => recordHeartbeat(database,input),
-        readStatus: () => readStatus(database)
+        readStatus: (options) => readStatus(database, options)
     });
 }

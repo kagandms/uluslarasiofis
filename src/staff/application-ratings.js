@@ -6,8 +6,8 @@ const STATUS_LABELS = Object.freeze({
     under_review: 'İncelemede',
     resubmission_required: 'Belge güncellemesi',
     approved_for_processing: 'İşleme alındı',
-    sent_to_migration: 'Göç İdaresine gönderildi',
-    migration_approved: 'Göç onaylandı',
+    sent_to_migration: 'Göç İdaresi inceliyor',
+    migration_approved: 'Göç İdaresi tarafından onaylandı',
     completed: 'Tamamlandı',
     cancelled: 'İptal edildi',
     rejected: 'Reddedildi'

@@ -2,8 +2,8 @@ import { formatApplicationTimestamp } from './application-timestamps.js';
 
 const STATUS_LABELS = Object.freeze({
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
-    approved_for_processing: 'İşleme alınmak üzere onaylandı', sent_to_migration: 'Göç İdaresine aktarıldı',
-    migration_approved: 'Göç İdaresi onayladı', completed: 'Tamamlandı', cancelled: 'İptal edildi', rejected: 'Reddedildi'
+    approved_for_processing: 'İşleme alınmak üzere onaylandı', sent_to_migration: 'Göç İdaresi inceliyor',
+    migration_approved: 'Göç İdaresi tarafından onaylandı', completed: 'Tamamlandı', cancelled: 'İptal edildi', rejected: 'Reddedildi'
 });
 const ADDRESS_LABELS = Object.freeze({
     rental_contract: 'Kira sözleşmesi', residence_certificate: 'Adres kaydı',

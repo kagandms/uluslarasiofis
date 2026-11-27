@@ -10,8 +10,8 @@ export const APPLICATION_STATUS_LABELS = Object.freeze({
         under_review: 'İncelemede',
         resubmission_required: 'Belge yeniden gönderilmeli',
         approved_for_processing: 'İşleme alınmak üzere onaylandı',
-        sent_to_migration: 'Göç İdaresine gönderildi',
-        migration_approved: 'Göç İdaresi onayladı',
+        sent_to_migration: 'Göç İdaresi dosyanızı inceliyor',
+        migration_approved: 'Göç İdaresi tarafından onaylandı',
         completed: 'Tamamlandı',
         cancelled: 'İptal edildi',
         rejected: 'Reddedildi'
@@ -22,7 +22,7 @@ export const APPLICATION_STATUS_LABELS = Object.freeze({
         under_review: 'Under review',
         resubmission_required: 'Document resubmission required',
         approved_for_processing: 'Approved for processing',
-        sent_to_migration: 'Sent to Migration Authority',
+        sent_to_migration: 'The Migration Authority is reviewing your file',
         migration_approved: 'Approved by Migration Authority',
         completed: 'Completed',
         cancelled: 'Cancelled',
@@ -34,8 +34,8 @@ export const APPLICATION_STATUS_LABELS = Object.freeze({
         under_review: 'На рассмотрении',
         resubmission_required: 'Требуется повторно отправить документ',
         approved_for_processing: 'Одобрена для обработки',
-        sent_to_migration: 'Передана в Миграционное управление',
-        migration_approved: 'Одобрена Миграционным управлением',
+        sent_to_migration: 'Миграционное управление рассматривает ваше дело',
+        migration_approved: 'Одобрено Миграционным управлением',
         completed: 'Завершена',
         cancelled: 'Отменена',
         rejected: 'Отклонена'
@@ -46,7 +46,7 @@ export const APPLICATION_STATUS_LABELS = Object.freeze({
         under_review: 'Gözden geçirilýär',
         resubmission_required: 'Resminama täzeden iberilmeli',
         approved_for_processing: 'Işlemek üçin tassyklandy',
-        sent_to_migration: 'Migrasiýa edarasyna iberildi',
+        sent_to_migration: 'Migrasiýa edarasy faýlyňyzy gözden geçirýär',
         migration_approved: 'Migrasiýa edarasy tarapyndan tassyklandy',
         completed: 'Tamamlandy',
         cancelled: 'Ýatyryldy',
@@ -58,8 +58,8 @@ export const APPLICATION_STATUS_LABELS = Object.freeze({
         under_review: 'قيد المراجعة',
         resubmission_required: 'يلزم إعادة إرسال المستند',
         approved_for_processing: 'تمت الموافقة للمعالجة',
-        sent_to_migration: 'أُرسل إلى إدارة الهجرة',
-        migration_approved: 'وافقت إدارة الهجرة',
+        sent_to_migration: 'تقوم إدارة الهجرة بمراجعة ملفك',
+        migration_approved: 'تمت الموافقة من قِبل إدارة الهجرة',
         completed: 'مكتمل',
         cancelled: 'ملغى',
         rejected: 'مرفوض'
@@ -300,9 +300,32 @@ export function renderStatusSummary(result, language = 'tr') {
     return STATUS_SUMMARY_TEMPLATES[resolvedLanguage](statusLabel, counts);
 }
 
+const LEGACY_STATUS_LABELS = Object.freeze({
+    tr: Object.freeze({
+        sent_to_migration: ['Göç İdaresine gönderildi'],
+        migration_approved: ['Göç İdaresi onayladı']
+    }),
+    en: Object.freeze({
+        sent_to_migration: ['Sent to Migration Authority'],
+        migration_approved: []
+    }),
+    ru: Object.freeze({
+        sent_to_migration: ['Передана в Миграционное управление'],
+        migration_approved: ['Одобрена Миграционным управлением']
+    }),
+    tk: Object.freeze({
+        sent_to_migration: ['Migrasiýa edarasyna iberildi'],
+        migration_approved: []
+    }),
+    ar: Object.freeze({
+        sent_to_migration: ['أُرسل إلى إدارة الهجرة'],
+        migration_approved: ['وافقت إدارة الهجرة']
+    })
+});
+
 /**
  * Extracts the canonical application status key from a fixed status-summary assistant message
- * by matching the exact localized label in `APPLICATION_STATUS_LABELS[language]`.
+ * by matching the exact localized label in `APPLICATION_STATUS_LABELS[language]` (or previous wording).
  * @param {string} replyText Assistant message text.
  * @param {string} [language='tr'] Portal language (`tr`, `en`, `ru`, `tk`, `ar`).
  * @returns {string|null} Canonical status key or `null` when not a recognized status summary.
@@ -318,6 +341,12 @@ export function extractStatusFromSummaryReply(replyText, language = 'tr') {
     const labels = APPLICATION_STATUS_LABELS[resolvedLanguage];
     for (const [status, label] of Object.entries(labels)) {
         if (trimmed.startsWith(`${prefix}${label}.`)) {
+            return status;
+        }
+    }
+    const legacyLabels = LEGACY_STATUS_LABELS[resolvedLanguage] || {};
+    for (const [status, candidates] of Object.entries(legacyLabels)) {
+        if (candidates.some((label) => trimmed.startsWith(`${prefix}${label}.`))) {
             return status;
         }
     }

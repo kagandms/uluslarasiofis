@@ -2,8 +2,8 @@
 export const PHYSICAL_STATUS_LABELS = Object.freeze({
     under_review: 'İncelemede',
     approved_for_processing: 'Onaylandı',
-    sent_to_migration: 'Göçe Gönderildi',
-    migration_approved: 'Göç Onayladı',
+    sent_to_migration: 'Göç İdaresi inceliyor',
+    migration_approved: 'Göç İdaresi tarafından onaylandı',
     completed: 'Tamamlandı',
     rejected: 'Reddedildi'
 });
