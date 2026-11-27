@@ -566,6 +566,7 @@ async function previewMigrationSync(request, environment, requestId) {
             exported_at: null,
             changes: [],
             needsAttention: [],
+            nameCheck: [],
             manual: [],
             unchangedCount: 0,
             staleUnfinishedCount: 0
@@ -629,7 +630,7 @@ async function applyMigrationSync(request, environment, requestId, staff) {
         includePhysicalInOutput: hasPhysicalItems
     });
     const actionableByKey = new Map(
-        [...plan.changes, ...plan.needsAttention].map((entry) => [`${entry.record_kind}:${entry.record_id}`, entry])
+        [...plan.changes, ...plan.needsAttention, ...plan.nameCheck].map((entry) => [`${entry.record_kind}:${entry.record_id}`, entry])
     );
     const portalByKey = new Map(
         portalRecords.map((record) => [`${record.record_kind}:${record.record_id}`, record])
