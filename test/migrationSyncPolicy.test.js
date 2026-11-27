@@ -90,6 +90,9 @@ test('date guard blocks old-year completed rows from approving a new application
     assert.equal(plan.manual.length, 1);
     assert.equal(plan.manual[0].reason, 'older_application');
     assert.equal(plan.manual[0].note, '');
+    assert.equal(plan.manual[0].student_number, '26000000001');
+    assert.equal(plan.manual[0].first_name, 'Ayşe');
+    assert.equal(plan.manual[0].last_name, 'Yılmaz');
 });
 
 test('name matching is Turkish-tolerant and order-tolerant, and sends mismatches to manual', () => {

@@ -9,7 +9,10 @@ const INTAKE_COLUMNS = `id,student_number,first_name,last_name,passport_number,
     (SELECT state FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_state,
     (SELECT metadata_version FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_metadata_version,
     (SELECT template_version FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_template_version,
-    (SELECT status FROM physical_receipt_print_attempts WHERE intake_id=physical_intakes.id ORDER BY created_at DESC,id DESC LIMIT 1) AS receipt_print_status`;
+    (SELECT status FROM physical_receipt_print_attempts WHERE intake_id=physical_intakes.id ORDER BY created_at DESC,id DESC LIMIT 1) AS receipt_print_status,
+    (SELECT state FROM migration_office_states WHERE record_kind='physical' AND record_id=physical_intakes.id) AS migration_office_state,
+    (SELECT note FROM migration_office_states WHERE record_kind='physical' AND record_id=physical_intakes.id) AS migration_office_note,
+    (SELECT deadline FROM migration_office_states WHERE record_kind='physical' AND record_id=physical_intakes.id) AS migration_office_deadline`;
 
 function buildWhere(query) {
     const clauses = ['deleted_at IS NULL'];
@@ -17,6 +20,15 @@ function buildWhere(query) {
     if (query.statuses) {
         clauses.push(`status IN (${query.statuses.map(() => '?').join(',')})`);
         bindings.push(...query.statuses);
+    }
+    if (query.migrationMissingDocuments) {
+        clauses.push("status = 'sent_to_migration'");
+        clauses.push(`EXISTS (
+            SELECT 1 FROM migration_office_states AS mos
+            WHERE mos.record_kind = 'physical'
+              AND mos.record_id = physical_intakes.id
+              AND mos.state = 'missing_documents'
+        )`);
     }
     if (query.q) {
         const term = escapeLikeTerm(query.q);

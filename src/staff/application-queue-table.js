@@ -1,5 +1,6 @@
 import { formatApplicationTimestamp } from '../shared/application-timestamps.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
+import { formatDeadlineWithRemaining } from './yoksisExcelImport.js';
 
 const HEADERS = ['Öğrenci No', 'Ad Soyad', 'Başvuru Türü', 'Durum', 'Gönderim Tarihi', 'Son Güncelleme', ''];
 /* Sütun başlıklarına göre masaüstü genişlik ve kaydırma CSS sınıflarını eşler. */
@@ -22,6 +23,47 @@ function resolveColumnClass(label) {
 /** Formats a queue timestamp. @param {string} value ISO timestamp. @returns {string} Turkish date or placeholder. */
 export function formatQueueDate(value) {
     return formatApplicationTimestamp(value) || '—';
+}
+
+/**
+ * Renders a status label with an optional Göç İdaresi missing-documents badge, deadline, and note.
+ * @param {Document} document Owner document.
+ * @param {string} statusLabel Human-readable status text.
+ * @param {{ state?: string, deadline?: string|null, note?: string }|null|undefined} migrationOffice Overlay info.
+ * @returns {string|HTMLElement} Plain label or wrapper element.
+ */
+export function createStatusWithMigrationBadge(document, statusLabel, migrationOffice) {
+    if (!migrationOffice || migrationOffice.state !== 'missing_documents') {
+        return statusLabel;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'staff-migration-status-wrap';
+
+    const statusEl = document.createElement('span');
+    statusEl.textContent = statusLabel;
+    wrap.append(statusEl);
+
+    const badge = document.createElement('span');
+    badge.className = 'staff-migration-missing-badge';
+    badge.textContent = 'Göç: Eksik evrak';
+    wrap.append(badge);
+
+    if (migrationOffice.deadline) {
+        const deadlineText = formatDeadlineWithRemaining(migrationOffice.deadline) || migrationOffice.deadline;
+        const deadlineEl = document.createElement('span');
+        deadlineEl.className = 'staff-migration-missing-deadline';
+        deadlineEl.textContent = `Son tarih: ${deadlineText}`;
+        wrap.append(deadlineEl);
+    }
+
+    if (migrationOffice.note) {
+        const noteEl = document.createElement('span');
+        noteEl.className = 'staff-migration-missing-note';
+        noteEl.textContent = migrationOffice.note;
+        wrap.append(noteEl);
+    }
+
+    return wrap;
 }
 
 function resolveHeaders(options) {

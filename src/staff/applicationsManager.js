@@ -12,6 +12,7 @@ import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloa
 import { openTebligatDialog } from '../ui/tebligatDialog.js';
 import { canPrintTebligat } from '../shared/tebligatPage.js';
 import { createApplicationQueueFilters, splitNoteStatus } from './application-queue-filters.js';
+import { createStatusWithMigrationBadge } from './application-queue-table.js';
 import { describeGocnetPreparationError, prepareGocnetTransfer, readRegistrationNumberFromForm } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
@@ -38,6 +39,8 @@ const STATUS_FILTERS = Object.freeze([
     ['all', 'Tüm durumlar'], ['draft', 'Taslaklar'], ['under_review', 'İncelemede'],
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
     ['migration', 'Göç İdaresi İnceliyor'],
+    ['migration_missing_documents', 'Göç: Eksik evrak'],
+    ['migration_approved', 'Göç İdaresi tarafından onayladı'],
     ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
@@ -256,12 +259,18 @@ function createQueueTable(document, items, onOpenDetail, onDownloadPdf, onDelete
         const values = [
             item.passport_number,
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
-            readStatusLabel(item.status),
+            createStatusWithMigrationBadge(
+                document,
+                readStatusLabel(item.status),
+                item.status === 'sent_to_migration' ? item.migration_office : null
+            ),
             formatDate(item.submitted_at || item.created_at),
             formatDate(item.updated_at)
         ];
         values.forEach((value, index) => {
-            const cell = createText(document, 'td', '', displayValue(value));
+            const cell = document.createElement('td');
+            if (value?.nodeType) cell.append(value);
+            else cell.textContent = displayValue(value);
             cell.dataset.label = headers[index + 1];
             row.append(cell);
         });

@@ -240,6 +240,8 @@ test('queue translates ready A4 state and preserves stale document warning', () 
         ['under_review', 'İncelemede'],
         ['approved', 'Onaylandı'],
         ['sent_to_migration', 'Göç İdaresi İnceliyor'],
+        ['migration_missing_documents', 'Göç: Eksik evrak'],
+        ['migration_approved', 'Göç İdaresi tarafından onayladı'],
         ['noted', 'Notu olanlar'],
         ['not_noted', 'Notu olmayanlar']
     ]);
