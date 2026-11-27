@@ -27,7 +27,8 @@ export function createMigrationSyncRepository(database) {
         async listFinalizedExcelAuditRows(importId) {
             const result = await database.prepare(`
                 SELECT application_number, student_number, first_name, last_name,
-                       application_status, documents_json, missing_deadline, source
+                       application_status, documents_json, missing_deadline, source,
+                       record_date, goc_last_query_at
                 FROM yoksis_document_audit_records
                 WHERE source = 'excel' AND last_seen_import_id = ?
             `).bind(importId).all();
@@ -59,6 +60,7 @@ export function createMigrationSyncRepository(database) {
                            states.state AS overlay_state,
                            states.note AS overlay_note,
                            states.deadline AS overlay_deadline,
+                           states.goc_last_query_at AS overlay_goc_last_query_at,
                            states.application_number AS overlay_application_number,
                            states.import_id AS overlay_import_id
                     FROM applications
@@ -93,6 +95,7 @@ export function createMigrationSyncRepository(database) {
                            states.state AS overlay_state,
                            states.note AS overlay_note,
                            states.deadline AS overlay_deadline,
+                           states.goc_last_query_at AS overlay_goc_last_query_at,
                            states.application_number AS overlay_application_number,
                            states.import_id AS overlay_import_id
                     FROM physical_intakes
@@ -117,6 +120,7 @@ export function createMigrationSyncRepository(database) {
             applicationNumber,
             note,
             deadline,
+            gocLastQueryAt = null,
             importId,
             staffId,
             now,
@@ -199,9 +203,9 @@ export function createMigrationSyncRepository(database) {
                     database.prepare(`
                         INSERT INTO migration_office_states (
                             record_kind, record_id, application_number, state, note, deadline,
-                            import_id, updated_by_staff_id, updated_at
+                            goc_last_query_at, import_id, updated_by_staff_id, updated_at
                         )
-                        SELECT 'online', id, ?, ?, ?, ?, ?, ?, ?
+                        SELECT 'online', id, ?, ?, ?, ?, ?, ?, ?, ?
                         FROM applications
                         WHERE id = ? AND status = ? AND updated_at = ?
                         ON CONFLICT(record_kind, record_id) DO UPDATE SET
@@ -209,11 +213,12 @@ export function createMigrationSyncRepository(database) {
                             state = excluded.state,
                             note = excluded.note,
                             deadline = excluded.deadline,
+                            goc_last_query_at = excluded.goc_last_query_at,
                             import_id = excluded.import_id,
                             updated_by_staff_id = excluded.updated_by_staff_id,
                             updated_at = excluded.updated_at
                     `).bind(
-                        applicationNumber, targetState, note, deadline, importId, staffId, now,
+                        applicationNumber, targetState, note, deadline, gocLastQueryAt, importId, staffId, now,
                         recordId, finalStatus, now
                     )
                 );
@@ -222,9 +227,9 @@ export function createMigrationSyncRepository(database) {
                     database.prepare(`
                         INSERT INTO migration_office_states (
                             record_kind, record_id, application_number, state, note, deadline,
-                            import_id, updated_by_staff_id, updated_at
+                            goc_last_query_at, import_id, updated_by_staff_id, updated_at
                         )
-                        SELECT 'online', id, ?, ?, ?, ?, ?, ?, ?
+                        SELECT 'online', id, ?, ?, ?, ?, ?, ?, ?, ?
                         FROM applications
                         WHERE id = ? AND status = 'sent_to_migration' AND updated_at = ?
                           AND NOT EXISTS (SELECT 1 FROM application_deletions WHERE application_id = applications.id)
@@ -233,11 +238,12 @@ export function createMigrationSyncRepository(database) {
                             state = excluded.state,
                             note = excluded.note,
                             deadline = excluded.deadline,
+                            goc_last_query_at = excluded.goc_last_query_at,
                             import_id = excluded.import_id,
                             updated_by_staff_id = excluded.updated_by_staff_id,
                             updated_at = excluded.updated_at
                     `).bind(
-                        applicationNumber, targetState, note, deadline, importId, staffId, now,
+                        applicationNumber, targetState, note, deadline, gocLastQueryAt, importId, staffId, now,
                         recordId, expectedUpdatedAt
                     )
                 );
@@ -282,6 +288,7 @@ export function createMigrationSyncRepository(database) {
             applicationNumber,
             note,
             deadline,
+            gocLastQueryAt = null,
             importId,
             staffId,
             now,
@@ -307,9 +314,9 @@ export function createMigrationSyncRepository(database) {
                     database.prepare(`
                         INSERT INTO migration_office_states (
                             record_kind, record_id, application_number, state, note, deadline,
-                            import_id, updated_by_staff_id, updated_at
+                            goc_last_query_at, import_id, updated_by_staff_id, updated_at
                         )
-                        SELECT 'physical', id, ?, ?, ?, ?, ?, ?, ?
+                        SELECT 'physical', id, ?, ?, ?, ?, ?, ?, ?, ?
                         FROM physical_intakes
                         WHERE id = ? AND status = ? AND lock_version = ?
                           AND processing_closed_at IS NULL
@@ -320,11 +327,12 @@ export function createMigrationSyncRepository(database) {
                             state = excluded.state,
                             note = excluded.note,
                             deadline = excluded.deadline,
+                            goc_last_query_at = excluded.goc_last_query_at,
                             import_id = excluded.import_id,
                             updated_by_staff_id = excluded.updated_by_staff_id,
                             updated_at = excluded.updated_at
                     `).bind(
-                        applicationNumber, targetState, note, deadline, importId, staffId, now,
+                        applicationNumber, targetState, note, deadline, gocLastQueryAt, importId, staffId, now,
                         recordId, finalStatus, nextLockVersion
                     )
                 );
@@ -333,9 +341,9 @@ export function createMigrationSyncRepository(database) {
                     database.prepare(`
                         INSERT INTO migration_office_states (
                             record_kind, record_id, application_number, state, note, deadline,
-                            import_id, updated_by_staff_id, updated_at
+                            goc_last_query_at, import_id, updated_by_staff_id, updated_at
                         )
-                        SELECT 'physical', id, ?, ?, ?, ?, ?, ?, ?
+                        SELECT 'physical', id, ?, ?, ?, ?, ?, ?, ?, ?
                         FROM physical_intakes
                         WHERE id = ? AND status = 'sent_to_migration' AND lock_version = ?
                           AND processing_closed_at IS NULL
@@ -346,11 +354,12 @@ export function createMigrationSyncRepository(database) {
                             state = excluded.state,
                             note = excluded.note,
                             deadline = excluded.deadline,
+                            goc_last_query_at = excluded.goc_last_query_at,
                             import_id = excluded.import_id,
                             updated_by_staff_id = excluded.updated_by_staff_id,
                             updated_at = excluded.updated_at
                     `).bind(
-                        applicationNumber, targetState, note, deadline, importId, staffId, now,
+                        applicationNumber, targetState, note, deadline, gocLastQueryAt, importId, staffId, now,
                         recordId, expectedLockVersion
                     )
                 );

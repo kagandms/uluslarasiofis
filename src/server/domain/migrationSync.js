@@ -1,9 +1,19 @@
 import { searchTokens } from '../../shared/searchFold.js';
-import { COMPLETED_GOC_STATUS_TARGET, normalizeSearch } from './yoksisAuditPolicy.js';
+import {
+    COMPLETED_GOC_STATUS_TARGET,
+    classifyGocStatus,
+    diffIsoCalendarDays,
+    getIstanbulTodayIso,
+    isValidIsoCalendarDate,
+    normalizeSearch,
+    toIstanbulCalendarDate
+} from './yoksisAuditPolicy.js';
 
 /** Maximum number of items accepted by `/api/staff/yoksis-document-audit/sync/apply`. */
 export const MAX_MIGRATION_SYNC_APPLY_ITEMS = 20;
 
+const DATE_GUARD_MAX_OLDER_DAYS = 30;
+const STALE_QUERY_THRESHOLD_DAYS = 7;
 const PROTECTED_RECORD_STATUSES = new Set(['cancelled', 'rejected', 'completed', 'migration_approved']);
 
 /**
@@ -57,52 +67,64 @@ export function extractAuditMissingDetails(row) {
 
 /**
  * Checks whether an Excel row's full name is compatible with a portal record's first/last name.
+ * Compatible when token sets match in any order, or when the shorter name has >= 2 tokens
+ * and every token is contained in the longer name (each token used once).
  * @param {object} auditRow Excel audit row.
  * @param {object} portalRecord Online application or physical intake record.
- * @returns {boolean} True when normalized name tokens match (exact or reordered).
+ * @returns {boolean} True when normalized name tokens are compatible.
  */
 export function areNamesCompatible(auditRow, portalRecord) {
     const auditTokens = searchTokens(`${auditRow?.first_name || ''} ${auditRow?.last_name || ''}`);
     const portalTokens = searchTokens(`${portalRecord?.first_name || ''} ${portalRecord?.last_name || ''}`);
     if (auditTokens.length === 0 || portalTokens.length === 0) return false;
-    if (auditTokens.length !== portalTokens.length) return false;
-    if (auditTokens.join(' ') === portalTokens.join(' ')) return true;
-    const sortedAudit = [...auditTokens].sort().join(' ');
-    const sortedPortal = [...portalTokens].sort().join(' ');
-    return sortedAudit === sortedPortal;
+
+    const shorter = auditTokens.length <= portalTokens.length ? auditTokens : portalTokens;
+    const longer = auditTokens.length <= portalTokens.length ? portalTokens : auditTokens;
+
+    if (shorter.length === longer.length) {
+        const sortedShorter = [...shorter].sort();
+        const sortedLonger = [...longer].sort();
+        return sortedShorter.every((token, index) => token === sortedLonger[index]);
+    }
+
+    if (shorter.length < 2) return false;
+
+    const remaining = new Map();
+    for (const token of longer) {
+        remaining.set(token, (remaining.get(token) || 0) + 1);
+    }
+    for (const token of shorter) {
+        const count = remaining.get(token) || 0;
+        if (count === 0) return false;
+        remaining.set(token, count - 1);
+    }
+    return true;
 }
 
-function parseYearMonth(yearText, monthText) {
-    const year = Number(yearText);
-    const monthRaw = Number(monthText);
-    if (!Number.isSafeInteger(year) || !Number.isSafeInteger(monthRaw)) return null;
-    const month = monthRaw === 0 ? 1 : monthRaw;
-    if (month < 1 || month > 12) return null;
-    return year * 12 + (month - 1);
-}
-
-/**
- * Enforces the date guard: the E-İkamet YYYY-MM prefix must not be more than 1 month older
- * than the portal record's month (online `created_at`; physical `application_date` or `submitted_at`).
- * @param {string} applicationNumber E-İkamet number (`YYYY-MM-NNNNNNN`).
- * @param {object} portalRecord Portal record.
- * @returns {boolean} True when the Excel row is within the allowed date window.
- */
-export function isWithinDateGuard(applicationNumber, portalRecord) {
-    const appMatch = String(applicationNumber || '').match(/^(\d{4})-(\d{2})-\d{7}$/);
-    if (!appMatch) return false;
-    const eikametYM = parseYearMonth(appMatch[1], appMatch[2]);
-    if (eikametYM === null) return false;
-
+function resolvePortalCalendarDate(portalRecord) {
     const rawPortalDate = portalRecord?.record_kind === 'physical'
         ? (portalRecord.application_date || portalRecord.submitted_at)
         : portalRecord?.created_at;
-    const portalMatch = String(rawPortalDate || '').slice(0, 7).match(/^(\d{4})-(\d{2})$/);
-    if (!portalMatch) return false;
-    const portalYM = parseYearMonth(portalMatch[1], portalMatch[2]);
-    if (portalYM === null) return false;
+    return toIstanbulCalendarDate(rawPortalDate);
+}
 
-    return eikametYM >= portalYM - 1;
+/**
+ * Enforces the date guard: the Excel row's `record_date` must be >= the portal record's
+ * Europe/Istanbul calendar date (`created_at`; physical `application_date` or `submitted_at`) minus 30 days.
+ * Never parses the E-İkamet application number.
+ * @param {object|string|null|undefined} auditRowOrDate Excel audit row or ISO `record_date`.
+ * @param {object} portalRecord Portal record.
+ * @returns {boolean} True when `record_date` is present and within the allowed 30-day window.
+ */
+export function isWithinDateGuard(auditRowOrDate, portalRecord) {
+    const rawRecordDate = typeof auditRowOrDate === 'string'
+        ? auditRowOrDate
+        : auditRowOrDate?.record_date;
+    if (!isValidIsoCalendarDate(rawRecordDate)) return false;
+    const portalDate = resolvePortalCalendarDate(portalRecord);
+    if (!portalDate) return false;
+    const olderByDays = diffIsoCalendarDays(rawRecordDate, portalDate);
+    return olderByDays !== null && olderByDays <= DATE_GUARD_MAX_OLDER_DAYS;
 }
 
 function isProtectedRecord(record) {
@@ -118,9 +140,26 @@ function readRecordVersion(record) {
     return record.record_kind === 'online' ? record.updated_at : record.lock_version;
 }
 
-function pickHighestApplicationRow(rows) {
+function compareAuditRows(left, right) {
+    const leftRecordDate = isValidIsoCalendarDate(left?.record_date) ? left.record_date : '';
+    const rightRecordDate = isValidIsoCalendarDate(right?.record_date) ? right.record_date : '';
+    if (leftRecordDate !== rightRecordDate) {
+        return leftRecordDate > rightRecordDate ? 1 : -1;
+    }
+    const leftQueryAt = isValidIsoCalendarDate(left?.goc_last_query_at) ? left.goc_last_query_at : '';
+    const rightQueryAt = isValidIsoCalendarDate(right?.goc_last_query_at) ? right.goc_last_query_at : '';
+    if (leftQueryAt !== rightQueryAt) {
+        return leftQueryAt > rightQueryAt ? 1 : -1;
+    }
+    const leftApp = String(left?.application_number || '');
+    const rightApp = String(right?.application_number || '');
+    if (leftApp === rightApp) return 0;
+    return leftApp > rightApp ? 1 : -1;
+}
+
+function pickBestAuditRow(rows) {
     return rows.reduce((best, current) =>
-        (!best || current.application_number > best.application_number ? current : best), null);
+        (!best || compareAuditRows(current, best) > 0 ? current : best), null);
 }
 
 function buildPlanItem(record, auditRow, targetState, reason, details = { note: '', deadline: null }) {
@@ -136,24 +175,37 @@ function buildPlanItem(record, auditRow, targetState, reason, details = { note: 
         version: readRecordVersion(record),
         reason,
         note: details.note,
-        deadline: details.deadline
+        deadline: details.deadline,
+        goc_last_query_at: auditRow?.goc_last_query_at ?? null
     };
+}
+
+function isStaleUnfinishedAuditRow(row, todayIso) {
+    if (classifyGocStatus(row?.application_status) === 'successful') return false;
+    if (!isValidIsoCalendarDate(row?.goc_last_query_at)) return true;
+    const ageDays = diffIsoCalendarDays(row.goc_last_query_at, todayIso);
+    return ageDays !== null && ageDays > STALE_QUERY_THRESHOLD_DAYS;
 }
 
 /**
  * Computes the deterministic sync plan between finalized Excel audit rows and portal records.
- * @param {{ auditRows: Array<object>, portalRecords: Array<object> }} input Loaded audit and portal rows.
- * @returns {{ changes: Array<object>, needsAttention: Array<object>, manual: Array<object>, unchangedCount: number }} Sync plan.
+ * @param {{ auditRows: Array<object>, portalRecords: Array<object>, nowMs?: number }} input Loaded audit and portal rows.
+ * @returns {{ changes: Array<object>, needsAttention: Array<object>, manual: Array<object>, unchangedCount: number, staleUnfinishedCount: number }} Sync plan.
  */
-export function buildMigrationSyncPlan({ auditRows, portalRecords }) {
+export function buildMigrationSyncPlan({ auditRows, portalRecords, nowMs = Date.now() }) {
     const changes = [];
     const needsAttention = [];
     const manual = [];
     let unchangedCount = 0;
+    let staleUnfinishedCount = 0;
+    const todayIso = getIstanbulTodayIso(nowMs);
 
     const excelRowsByStudent = new Map();
     for (const row of auditRows || []) {
         if (row?.source !== 'excel') continue;
+        if (isStaleUnfinishedAuditRow(row, todayIso)) {
+            staleUnfinishedCount += 1;
+        }
         const targetState = mapExcelStatusToTargetState(row.application_status);
         if (!targetState) continue;
         const studentNumber = String(row.student_number || '').trim().toUpperCase();
@@ -195,8 +247,8 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords }) {
             );
             if (unlinkedOpenRecords.length > 1) {
                 for (const record of openRecords) {
-                    const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row.application_number, record));
-                    const bestRow = pickHighestApplicationRow(dateEligible);
+                    const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row, record));
+                    const bestRow = pickBestAuditRow(dateEligible);
                     if (!bestRow) continue;
                     manual.push(buildPlanItem(record, bestRow, bestRow.targetState, 'multiple_open_records'));
                 }
@@ -204,21 +256,24 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords }) {
             }
 
             for (const record of openRecords) {
-                const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row.application_number, record));
+                const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row, record));
                 if (dateEligible.length === 0) {
-                    const bestOlderRow = pickHighestApplicationRow(studentExcelRows);
-                    manual.push(buildPlanItem(record, bestOlderRow, bestOlderRow.targetState, 'older_application'));
+                    const bestOlderRow = pickBestAuditRow(studentExcelRows);
+                    const reason = isValidIsoCalendarDate(bestOlderRow?.record_date)
+                        ? 'older_application'
+                        : 'missing_record_date';
+                    manual.push(buildPlanItem(record, bestOlderRow, bestOlderRow.targetState, reason));
                     continue;
                 }
 
                 const nameMatched = dateEligible.filter((row) => areNamesCompatible(row, record));
                 if (nameMatched.length === 0) {
-                    const bestDateRow = pickHighestApplicationRow(dateEligible);
+                    const bestDateRow = pickBestAuditRow(dateEligible);
                     manual.push(buildPlanItem(record, bestDateRow, bestDateRow.targetState, 'name_mismatch'));
                     continue;
                 }
 
-                const bestRow = pickHighestApplicationRow(nameMatched);
+                const bestRow = pickBestAuditRow(nameMatched);
                 const targetState = bestRow.targetState;
                 const details = targetState === 'missing_documents'
                     ? extractAuditMissingDetails(bestRow)
@@ -228,19 +283,32 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords }) {
                     const currentOverlayState = record.overlay_state || null;
                     const currentOverlayNote = record.overlay_note || '';
                     const currentOverlayDeadline = record.overlay_deadline ?? null;
+                    const currentOverlayQueryAt = isValidIsoCalendarDate(record.overlay_goc_last_query_at)
+                        ? record.overlay_goc_last_query_at
+                        : null;
+                    const incomingQueryAt = isValidIsoCalendarDate(bestRow.goc_last_query_at)
+                        ? bestRow.goc_last_query_at
+                        : null;
+                    const isOlderOrMissingAgainstMissingDocs = currentOverlayState === 'missing_documents'
+                        && Boolean(currentOverlayQueryAt)
+                        && (!incomingQueryAt || incomingQueryAt < currentOverlayQueryAt);
 
-                    if (targetState === 'approved') {
-                        changes.push(buildPlanItem(record, bestRow, 'approved', 'status_approved'));
-                    } else if (targetState === 'missing_documents') {
+                    if (targetState === 'missing_documents') {
                         if (
                             currentOverlayState === 'missing_documents'
                             && currentOverlayNote === details.note
                             && currentOverlayDeadline === details.deadline
                         ) {
                             unchangedCount += 1;
+                        } else if (isOlderOrMissingAgainstMissingDocs) {
+                            manual.push(buildPlanItem(record, bestRow, targetState, 'stale_query_conflict', details));
                         } else {
                             changes.push(buildPlanItem(record, bestRow, 'missing_documents', 'missing_documents', details));
                         }
+                    } else if (isOlderOrMissingAgainstMissingDocs) {
+                        manual.push(buildPlanItem(record, bestRow, targetState, 'stale_query_conflict', details));
+                    } else if (targetState === 'approved') {
+                        changes.push(buildPlanItem(record, bestRow, 'approved', 'status_approved'));
                     } else if (currentOverlayState === 'missing_documents') {
                         changes.push(buildPlanItem(record, bestRow, 'reviewing', 'missing_documents_cleared'));
                     } else {
@@ -254,15 +322,15 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords }) {
         }
 
         for (const record of protectedRecords) {
-            const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row.application_number, record));
+            const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row, record));
             if (dateEligible.length === 0) continue;
             const nameMatched = dateEligible.filter((row) => areNamesCompatible(row, record));
             if (nameMatched.length === 0) {
-                const bestDateRow = pickHighestApplicationRow(dateEligible);
+                const bestDateRow = pickBestAuditRow(dateEligible);
                 manual.push(buildPlanItem(record, bestDateRow, bestDateRow.targetState, 'name_mismatch'));
                 continue;
             }
-            const bestRow = pickHighestApplicationRow(nameMatched);
+            const bestRow = pickBestAuditRow(nameMatched);
             if (record.status === 'migration_approved' && bestRow.targetState === 'approved') {
                 unchangedCount += 1;
             } else {
@@ -271,5 +339,5 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords }) {
         }
     }
 
-    return { changes, needsAttention, manual, unchangedCount };
+    return { changes, needsAttention, manual, unchangedCount, staleUnfinishedCount };
 }

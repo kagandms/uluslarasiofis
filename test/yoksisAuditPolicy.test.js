@@ -96,7 +96,8 @@ test('validateImportRow accepts minimal valid Excel row without phone or passpor
         resultStatus: 'verified',
         missingDeadline: null,
         missingNote: '',
-        gocLastQueryAt: null
+        gocLastQueryAt: null,
+        recordDate: null
     });
 });
 
@@ -141,6 +142,10 @@ test('validateImportRow rejects invalid fields with Turkish messages', () => {
         () => validateImportRow(createValidRow({ gocLastQueryAt: '23.11.2026' })),
         /Göç son sorgu tarihi/
     );
+    assert.throws(
+        () => validateImportRow(createValidRow({ recordDate: '23.11.2026' })),
+        /Kayıt tarihi/
+    );
 });
 
 test('validateImportRow accepts boundary lengths and valid ISO dates', () => {
@@ -148,12 +153,14 @@ test('validateImportRow accepts boundary lengths and valid ISO dates', () => {
         fullName: 'A'.repeat(240),
         missingDeadline: '2026-12-06',
         missingNote: 'M'.repeat(1000),
-        gocLastQueryAt: '2026-11-23'
+        gocLastQueryAt: '2026-11-23',
+        recordDate: '2026-11-20'
     }));
     assert.equal(row.fullName.length, 240);
     assert.equal(row.missingDeadline, '2026-12-06');
     assert.equal(row.missingNote.length, 1000);
     assert.equal(row.gocLastQueryAt, '2026-11-23');
+    assert.equal(row.recordDate, '2026-11-20');
 });
 
 test('buildImportDocuments formats multiline notes and deadline into documents array', () => {

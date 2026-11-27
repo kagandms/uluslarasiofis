@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import { createD1Repositories } from '../src/server/repositories/d1/index.js';
 import { createPhysicalIntakeRepository } from '../src/server/repositories/d1/physical-intake-repository.js';
+import { getIstanbulTodayIso, shiftIsoCalendarDate } from '../src/server/domain/yoksisAuditPolicy.js';
 import { purgeApplicationById } from '../src/server/routes/staffApplicationDeletionRoutes.js';
 import { purgePhysicalIntakeById } from '../src/server/services/physicalIntakePurge.js';
 import worker from '../src/server/worker.js';
@@ -74,6 +75,8 @@ async function seedAuditRow(database, {
     source = 'excel',
     lastSeenImportId = 'imp-1',
     missingDeadline = null,
+    recordDate = '2026-11-05',
+    gocLastQueryAt = '2026-11-25',
     documents = [],
     staffId = 'reviewer-1'
 } = {}) {
@@ -81,8 +84,9 @@ async function seedAuditRow(database, {
         INSERT INTO yoksis_document_audit_records (
             application_number, student_number, first_name, last_name, passport_number, phone,
             application_status, status_category, result_status, documents_json, search_text,
-            scanned_at, updated_by_staff_id, source, last_seen_import_id, missing_deadline
-        ) VALUES (?, ?, ?, ?, '', '', ?, ?, 'verified', ?, 'search', '2026-11-27T09:00:00.000Z', ?, ?, ?, ?)
+            scanned_at, updated_by_staff_id, source, last_seen_import_id, missing_deadline,
+            record_date, goc_last_query_at
+        ) VALUES (?, ?, ?, ?, '', '', ?, ?, 'verified', ?, 'search', '2026-11-27T09:00:00.000Z', ?, ?, ?, ?, ?, ?)
     `).bind(
         applicationNumber,
         studentNumber,
@@ -94,7 +98,9 @@ async function seedAuditRow(database, {
         staffId,
         source,
         lastSeenImportId,
-        missingDeadline
+        missingDeadline,
+        recordDate,
+        gocLastQueryAt
     ).run();
 }
 
@@ -577,4 +583,201 @@ test('needsAttention online record approves only clean finalized documents and w
 
     const auditTypes = database.prepare('SELECT event_type FROM audit_events WHERE application_id = ? ORDER BY event_type').bind(appId).all().results.map((r) => r.event_type);
     assert.deepEqual(auditTypes, ['staff.application_documents_approved_on_migration', 'staff.yoksis_sync_applied']);
+});
+
+test('import accepts old client payload without recordDate and new payload with recordDate', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+
+    const res = await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/import', {
+        cookie,
+        body: {
+            importId: 'imp-compat-1',
+            exportedAt: '2026-11-27 09:00',
+            final: true,
+            rows: [
+                {
+                    applicationNumber: '2026-13-1046943',
+                    studentNumber: '26000000001',
+                    fullName: 'ESKİ İSTEMCİ',
+                    processType: 'İlk Başvuru',
+                    transactionCount: 1,
+                    gocStatus: 'İşlem Bekliyor'
+                },
+                {
+                    applicationNumber: '2026-00-1046944',
+                    studentNumber: '26000000002',
+                    fullName: 'YENİ İSTEMCİ',
+                    processType: 'İlk Başvuru',
+                    transactionCount: 1,
+                    gocStatus: 'İşlem Bekliyor',
+                    recordDate: '2026-11-20',
+                    gocLastQueryAt: '2026-11-25'
+                }
+            ]
+        }
+    }), environment);
+
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.storedCount, 2);
+    assert.equal(data.rejected.length, 0);
+
+    const oldRow = database.prepare('SELECT record_date FROM yoksis_document_audit_records WHERE application_number = ?')
+        .bind('2026-13-1046943').first();
+    const newRow = database.prepare('SELECT record_date, goc_last_query_at FROM yoksis_document_audit_records WHERE application_number = ?')
+        .bind('2026-00-1046944').first();
+    assert.equal(oldRow.record_date, null);
+    assert.equal(newRow.record_date, '2026-11-20');
+    assert.equal(newRow.goc_last_query_at, '2026-11-25');
+});
+
+test('sync apply stores goc_last_query_at and subsequent older query cannot clear missing_documents overlay', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-1', finalizedAt: '2026-11-25T09:00:00.000Z' });
+    const appId = await seedOnlineApplication(database, { id: 'app-q', studentNumber: '26000000001' });
+
+    await seedAuditRow(database, {
+        applicationNumber: '2026-13-0000001',
+        studentNumber: '26000000001',
+        applicationStatus: 'Eksik Belge İstendi (son: 10.12.2026)',
+        statusCategory: 'missing_documents',
+        missingDeadline: '2026-12-10',
+        documents: [{ name: 'Sağlık sigortası', required: true }],
+        recordDate: '2026-11-05',
+        gocLastQueryAt: '2026-11-20',
+        lastSeenImportId: 'imp-1'
+    });
+
+    const preview1 = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/preview', { cookie }), environment)).json();
+    const item = preview1.changes[0];
+    assert.equal(item.goc_last_query_at, '2026-11-20');
+
+    await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+        cookie,
+        body: {
+            import_id: 'imp-1',
+            items: [{
+                record_kind: item.record_kind,
+                record_id: item.record_id,
+                application_number: item.application_number,
+                version: item.version
+            }]
+        }
+    }), environment);
+
+    const overlay = database.prepare("SELECT state, goc_last_query_at FROM migration_office_states WHERE record_kind = 'online' AND record_id = ?")
+        .bind(appId).first();
+    assert.equal(overlay.state, 'missing_documents');
+    assert.equal(overlay.goc_last_query_at, '2026-11-20');
+
+    await seedImport(database, { importId: 'imp-2', finalizedAt: '2026-11-27T09:00:00.000Z' });
+    await database.prepare(`
+        UPDATE yoksis_document_audit_records
+        SET application_status = 'İşlem Bekliyor', status_category = 'pending',
+            documents_json = '[]', missing_deadline = NULL,
+            goc_last_query_at = '2026-11-15', last_seen_import_id = 'imp-2'
+        WHERE application_number = '2026-13-0000001'
+    `).run();
+
+    const preview2 = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/preview', { cookie }), environment)).json();
+    assert.equal(preview2.changes.length, 0);
+    assert.equal(preview2.manual.length, 1);
+    assert.equal(preview2.manual[0].reason, 'stale_query_conflict');
+});
+
+test('query staleQueryOnly filter runs in SQL with pagination and combines with status and match filters', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-1' });
+
+    const todayIso = getIstanbulTodayIso();
+    const sevenDaysAgo = shiftIsoCalendarDate(todayIso, -7);
+    const eightDaysAgo = shiftIsoCalendarDate(todayIso, -8);
+    const fifteenDaysAgo = shiftIsoCalendarDate(todayIso, -15);
+
+    await seedOnlineApplication(database, { id: 'app-match', studentNumber: '26000000001', firstName: 'Ayşe', lastName: 'Yılmaz' });
+
+    // Eligible for staleQueryOnly (unfinished + >7 days or missing)
+    await seedAuditRow(database, {
+        applicationNumber: '2026-13-0000001',
+        studentNumber: '26000000001',
+        firstName: 'AYŞE YILMAZ',
+        applicationStatus: 'İşlem Bekliyor',
+        statusCategory: 'pending',
+        gocLastQueryAt: eightDaysAgo
+    });
+    await seedAuditRow(database, {
+        applicationNumber: '2026-13-0000002',
+        studentNumber: '26000000002',
+        firstName: 'ALİ DEMİR',
+        applicationStatus: 'Eksik Belge İstendi',
+        statusCategory: 'missing_documents',
+        gocLastQueryAt: null
+    });
+    await seedAuditRow(database, {
+        applicationNumber: '2026-13-0000003',
+        studentNumber: '26000000003',
+        firstName: 'VELİ KAYA',
+        applicationStatus: 'İşlem Bekliyor',
+        statusCategory: 'pending',
+        gocLastQueryAt: fifteenDaysAgo
+    });
+    // Excluded: 7 days ago (not > 7)
+    await seedAuditRow(database, {
+        applicationNumber: '2026-13-0000004',
+        studentNumber: '26000000004',
+        firstName: 'YEDİ GÜN',
+        applicationStatus: 'İşlem Bekliyor',
+        statusCategory: 'pending',
+        gocLastQueryAt: sevenDaysAgo
+    });
+    // Excluded: completed even though old
+    await seedAuditRow(database, {
+        applicationNumber: '2026-13-0000005',
+        studentNumber: '26000000005',
+        firstName: 'TAMAMLANDI ESKİ',
+        applicationStatus: 'İşlem Tamamlandı',
+        statusCategory: 'successful',
+        gocLastQueryAt: fifteenDaysAgo
+    });
+    // Excluded: scan row
+    await seedAuditRow(database, {
+        applicationNumber: '2026-13-0000006',
+        studentNumber: '26000000006',
+        firstName: 'TARAMA SATIRI',
+        applicationStatus: 'İşlem Bekliyor',
+        statusCategory: 'pending',
+        source: 'scan',
+        gocLastQueryAt: null
+    });
+
+    const page1 = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/query', {
+        cookie,
+        body: { staleQueryOnly: true, page: 1, pageSize: 2 }
+    }), environment)).json();
+    assert.equal(page1.total, 3);
+    assert.equal(page1.records.length, 2);
+
+    const page2 = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/query', {
+        cookie,
+        body: { staleQueryOnly: true, page: 2, pageSize: 2 }
+    }), environment)).json();
+    assert.equal(page2.total, 3);
+    assert.equal(page2.records.length, 1);
+
+    const combinedStatus = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/query', {
+        cookie,
+        body: { staleQueryOnly: true, status: 'missing_documents', page: 1, pageSize: 10 }
+    }), environment)).json();
+    assert.equal(combinedStatus.total, 1);
+    assert.equal(combinedStatus.records[0].application_number, '2026-13-0000002');
+
+    const combinedMatch = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/query', {
+        cookie,
+        body: { staleQueryOnly: true, match: 'matched', page: 1, pageSize: 10 }
+    }), environment)).json();
+    assert.equal(combinedMatch.total, 1);
+    assert.equal(combinedMatch.records[0].application_number, '2026-13-0000001');
 });
