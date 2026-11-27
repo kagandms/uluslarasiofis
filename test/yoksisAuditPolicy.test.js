@@ -7,7 +7,9 @@ import {
     buildImportDocuments,
     classifyGocStatus,
     classifyStatus,
+    getIstanbulTodayIso,
     normalizeSearch,
+    toIstanbulCalendarDate,
     validateDocuments,
     validateImportRow
 } from '../src/server/domain/yoksisAuditPolicy.js';
@@ -181,4 +183,24 @@ test('buildImportDocuments formats multiline notes and deadline into documents a
     assert.deepEqual(noDeadlineDocs, [
         { name: 'Sağlık sigortası eksik', required: true, note: '', uploadStatus: '' }
     ]);
+});
+
+test('Istanbul date formatting caches Intl.DateTimeFormat instance across repeated calls', () => {
+    const OriginalDateTimeFormat = Intl.DateTimeFormat;
+    let constructorCalls = 0;
+    Intl.DateTimeFormat = function WrappedDateTimeFormat(...args) {
+        constructorCalls += 1;
+        return new OriginalDateTimeFormat(...args);
+    };
+    try {
+        const d1 = getIstanbulTodayIso(Date.parse('2026-11-27T09:00:00Z'));
+        const d2 = toIstanbulCalendarDate('2026-11-26T22:30:00Z');
+        const d3 = toIstanbulCalendarDate('2026-11-25T12:00:00Z');
+        assert.equal(d1, '2026-11-27');
+        assert.equal(d2, '2026-11-27');
+        assert.equal(d3, '2026-11-25');
+        assert.ok(constructorCalls <= 1, `Expected cached Intl.DateTimeFormat, got ${constructorCalls} calls`);
+    } finally {
+        Intl.DateTimeFormat = OriginalDateTimeFormat;
+    }
 });

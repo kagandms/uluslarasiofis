@@ -162,21 +162,37 @@ export function isValidIsoCalendarDate(value) {
         && date.getUTCDate() === day;
 }
 
+let istanbulDateFormatter;
+
+function getIstanbulDateFormatter() {
+    if (istanbulDateFormatter === undefined) {
+        try {
+            istanbulDateFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Europe/Istanbul',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+        } catch {
+            istanbulDateFormatter = null;
+        }
+    }
+    return istanbulDateFormatter;
+}
+
 function formatIstanbulDate(date) {
-    try {
-        const parts = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'Europe/Istanbul',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        }).formatToParts(date);
-        const get = (type) => parts.find((part) => part.type === type)?.value || '';
-        const year = get('year');
-        const month = get('month');
-        const day = get('day');
-        if (year && month && day) return `${year}-${month}-${day}`;
-    } catch {
-        // Fallback below when Intl timeZone is unavailable.
+    const formatter = getIstanbulDateFormatter();
+    if (formatter) {
+        try {
+            const parts = formatter.formatToParts(date);
+            const get = (type) => parts.find((part) => part.type === type)?.value || '';
+            const year = get('year');
+            const month = get('month');
+            const day = get('day');
+            if (year && month && day) return `${year}-${month}-${day}`;
+        } catch {
+            // Fallback below when Intl formatting fails.
+        }
     }
     const y = date.getUTCFullYear();
     const m = String(date.getUTCMonth() + 1).padStart(2, '0');

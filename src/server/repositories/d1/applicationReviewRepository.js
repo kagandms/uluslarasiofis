@@ -143,6 +143,17 @@ export function createApplicationReviewRepository(database, notes) {
                         JSON.stringify({ applicationStatus: 'sent_to_migration', result: 'success' }))
                 );
             }
+            if (currentStatus === 'migration_approved' && targetStatus === 'sent_to_migration') {
+                statements.push(database.prepare(`
+                    DELETE FROM migration_office_states
+                    WHERE record_kind = 'online' AND record_id = ?
+                      AND state = 'approved'
+                      AND EXISTS (
+                        SELECT 1 FROM applications
+                        WHERE id = ? AND status = 'sent_to_migration' AND updated_at = ?
+                      )
+                `).bind(applicationId, applicationId, now));
+            }
             if (currentStatus === 'sent_to_migration' && targetStatus !== 'sent_to_migration') {
                 if (targetStatus === 'migration_approved') {
                     statements.push(database.prepare(`

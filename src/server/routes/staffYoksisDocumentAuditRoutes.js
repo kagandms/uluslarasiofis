@@ -572,11 +572,21 @@ async function previewMigrationSync(request, environment, requestId) {
         }, 200, requestId);
     }
     const includePhysical = await canAccessPhysicalRecords(request, environment);
-    const [auditRows, portalRecords] = await Promise.all([
+    const [auditRows, allPortalRecords] = await Promise.all([
         repository.listFinalizedExcelAuditRows(latestImport.id),
-        repository.listPortalRecordsForSync({ includePhysical })
+        repository.listPortalRecordsForSync({ includePhysical: true })
     ]);
-    const plan = buildMigrationSyncPlan({ auditRows, portalRecords });
+    const importStudentNumbers = new Set(
+        auditRows.map((row) => String(row.student_number || '').trim().toUpperCase()).filter(Boolean)
+    );
+    const portalRecords = importStudentNumbers.size > 0
+        ? allPortalRecords.filter((record) => importStudentNumbers.has(String(record.student_number || '').trim().toUpperCase()))
+        : [];
+    const plan = buildMigrationSyncPlan({
+        auditRows,
+        portalRecords,
+        includePhysicalInOutput: includePhysical
+    });
     return jsonResponse({
         import_id: latestImport.id,
         exported_at: latestImport.exported_at ?? null,
@@ -606,11 +616,18 @@ async function applyMigrationSync(request, environment, requestId, staff) {
         }, 200, requestId);
     }
 
-    const [auditRows, portalRecords] = await Promise.all([
-        repository.listFinalizedExcelAuditRows(latestImport.id),
-        repository.listPortalRecordsForSync({ includePhysical: hasPhysicalItems })
-    ]);
-    const plan = buildMigrationSyncPlan({ auditRows, portalRecords });
+    const studentNumbers = await repository.listStudentNumbersForItems(items);
+    const [auditRows, portalRecords] = studentNumbers.length > 0
+        ? await Promise.all([
+            repository.listFinalizedExcelAuditRows(latestImport.id, { studentNumbers }),
+            repository.listPortalRecordsForSync({ includePhysical: true, studentNumbers })
+        ])
+        : [[], []];
+    const plan = buildMigrationSyncPlan({
+        auditRows,
+        portalRecords,
+        includePhysicalInOutput: hasPhysicalItems
+    });
     const actionableByKey = new Map(
         [...plan.changes, ...plan.needsAttention].map((entry) => [`${entry.record_kind}:${entry.record_id}`, entry])
     );
@@ -630,8 +647,18 @@ async function applyMigrationSync(request, environment, requestId, staff) {
             const currentVersion = existing
                 ? (existing.record_kind === 'online' ? existing.updated_at : existing.lock_version)
                 : null;
+            const expectedStatusForOverlay = existing?.overlay_state === 'approved'
+                ? 'migration_approved'
+                : (existing?.overlay_state === 'missing_documents' || existing?.overlay_state === 'reviewing')
+                    ? 'sent_to_migration'
+                    : null;
+            const isPhysicalClosed = existing?.record_kind === 'physical'
+                && (Boolean(existing.processing_closed_at) || existing.legacy_status === 'completed');
             const alreadyAppliedForImport = Boolean(
                 existing
+                && !isPhysicalClosed
+                && expectedStatusForOverlay !== null
+                && existing.status === expectedStatusForOverlay
                 && existing.overlay_import_id === importId
                 && existing.overlay_application_number === item.application_number
                 && (existing.overlay_state === 'approved' || currentVersion === item.version)
