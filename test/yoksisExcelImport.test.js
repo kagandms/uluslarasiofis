@@ -5,9 +5,12 @@ import * as yoksisExcelImport from '../src/staff/yoksisExcelImport.js';
 
 const {
     chunkImportRows,
+    countStaleUnfinishedImportRows,
     formatDeadlineWithRemaining,
+    formatGocLastQueryWithAge,
     formatLatestImportLine,
     isExportedAtStale,
+    isGocQueryStale,
     normalizeYoksisRows,
     parseExportedAtFromFileName,
     parseYoksisExcel,
@@ -145,6 +148,7 @@ test('duplicate merging picks latest Kayıt Tarihi, then larger GöçNet Kayıt 
     assert.equal(result.rows[0].gocStatus, 'İşlem Tamamlandı');
     assert.equal(result.rows[0].missingNote, '');
     assert.equal(result.rows[0].missingDeadline, null);
+    assert.equal(result.rows[0].recordDate, '2026-11-20');
 });
 
 test('parseYoksisExcel enforces extension, file size (10 MB) and row count (5000) limits', () => {
@@ -306,4 +310,23 @@ test('exportedAt, staleness, deadline and latest-import formatting helpers work 
         rowCount: 1944
     });
     assert.match(latestLine, /^Son yükleme: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2} · Kağan Samet · 1944 satır$/);
+});
+
+test('Göç query age, 7 vs 8 days staleness, and stale unfinished row counting use Europe/Istanbul calendar days', () => {
+    const nowMs = Date.parse('2026-11-27T09:00:00+03:00');
+    assert.equal(isGocQueryStale('2026-11-20', nowMs), false);
+    assert.equal(isGocQueryStale('2026-11-19', nowMs), true);
+    assert.equal(isGocQueryStale(null, nowMs), true);
+
+    assert.equal(formatGocLastQueryWithAge('2026-11-20', nowMs), 'Göç son sorgu: 20.11.2026 (7 gün önce)');
+    assert.equal(formatGocLastQueryWithAge('2026-11-19', nowMs), 'Göç son sorgu: 19.11.2026 (8 gün önce)');
+    assert.equal(formatGocLastQueryWithAge(null, nowMs), 'Göç son sorgu: Bilinmiyor');
+
+    assert.equal(countStaleUnfinishedImportRows([
+        { gocStatus: 'İşlem Bekliyor', gocLastQueryAt: '2026-11-20' },
+        { gocStatus: 'İşlem Bekliyor', gocLastQueryAt: '2026-11-19' },
+        { gocStatus: 'Eksik Belge İstendi', gocLastQueryAt: null },
+        { gocStatus: 'İşlem Tamamlandı', gocLastQueryAt: '2026-11-01' },
+        { gocStatus: 'İşlem Tamamlandı', gocLastQueryAt: null }
+    ], nowMs), 2);
 });

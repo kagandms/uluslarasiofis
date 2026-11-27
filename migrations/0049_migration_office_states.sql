@@ -12,6 +12,7 @@ CREATE TABLE migration_office_states (
     state TEXT NOT NULL CHECK (state IN ('reviewing', 'missing_documents', 'approved')),
     note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 1000),
     deadline TEXT,
+    goc_last_query_at TEXT,
     import_id TEXT NOT NULL,
     updated_by_staff_id TEXT NOT NULL REFERENCES staff_users(id) ON DELETE RESTRICT,
     updated_at TEXT NOT NULL,
@@ -22,3 +23,5 @@ CREATE INDEX idx_migration_office_states_state
     ON migration_office_states(state, record_kind);
 CREATE INDEX idx_migration_office_states_import
     ON migration_office_states(import_id);
+
+ALTER TABLE yoksis_document_audit_records ADD COLUMN record_date TEXT;

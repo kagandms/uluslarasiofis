@@ -8,6 +8,7 @@ import {
     summarizeSyncPlan
 } from '../src/staff/migrationSyncDialog.js';
 import { initializeYoksisDocumentAuditManager } from '../src/managers/yoksisDocumentAuditManager.js';
+import { getIstanbulTodayIso, shiftIsoCalendarDate } from '../src/server/domain/yoksisAuditPolicy.js';
 
 function createDom() {
     return new JSDOM('<!doctype html><html><body><button id="trigger" type="button">Durumları portala işle</button></body></html>', {
@@ -387,4 +388,172 @@ test('yoksisDocumentAuditManager reveals "Durumları portala işle" after latest
     const syncBtn = root.querySelector('#audit-sync-portal');
     assert.equal(syncBtn.hidden, false);
     assert.equal(syncBtn.disabled, false);
+});
+
+test('preview dialog shows staleUnfinishedCount banner and per-row Göç query date', async () => {
+    const dom = createDom();
+    const { document } = dom.window;
+
+    const fetcher = async (url) => {
+        if (url.endsWith('/sync/preview')) {
+            return jsonResponse({
+                import_id: 'imp-stale-q',
+                exported_at: '2026-11-27 08:30',
+                staleUnfinishedCount: 3,
+                changes: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-1',
+                        application_number: '2026-13-0000001',
+                        current_status: 'sent_to_migration',
+                        target_state: 'missing_documents',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'missing_documents',
+                        note: 'Sigorta',
+                        deadline: '2026-12-10',
+                        goc_last_query_at: '2026-11-12',
+                        student_number: '26000000001',
+                        full_name: 'Ayşe Yılmaz'
+                    },
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-2',
+                        application_number: '2026-13-0000002',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'status_approved',
+                        note: '',
+                        deadline: null,
+                        goc_last_query_at: '2026-11-01',
+                        student_number: '26000000002',
+                        full_name: 'Mehmet Demir'
+                    }
+                ],
+                needsAttention: [],
+                manual: [],
+                unchangedCount: 0
+            });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const handle = openMigrationSyncDialog(document, {
+        fetcher,
+        nowMs: Date.parse('2026-11-27T09:00:00+03:00')
+    });
+    await handle.ready;
+
+    const banner = handle.dialog.querySelector('[data-sync-stale-queries="true"]');
+    assert.ok(banner);
+    assert.match(banner.textContent, /3 tamamlanmamış kaydın/);
+    assert.match(banner.textContent, /Kesin sonuç için kaydı YÖKSİS'te yeniden sorgulayıp Excel'i tekrar indirin\./);
+    assert.match(handle.dialog.textContent, /Göç son sorgu: 12\.11\.2026 \(15 gün önce\)/);
+    assert.match(handle.dialog.textContent, /Göç son sorgu: 01\.11\.2026 \(26 gün önce\)/);
+    const warnings = handle.dialog.querySelectorAll('.migration-sync-tag--warning');
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].textContent, 'güncel olmayabilir');
+});
+
+test('yoksisDocumentAuditManager renders Göç query age, stale warning only on unfinished rows, Excel empty doc text, and stale filter', async () => {
+    const todayIso = getIstanbulTodayIso();
+    const eightDaysAgo = shiftIsoCalendarDate(todayIso, -8);
+    const sevenDaysAgo = shiftIsoCalendarDate(todayIso, -7);
+    const twentyDaysAgo = shiftIsoCalendarDate(todayIso, -20);
+
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <div id="staff-yoksis-audit">
+            <p id="audit-import-latest"></p>
+            <input id="audit-excel-file" type="file">
+            <button id="audit-excel-upload" type="button"></button>
+            <button id="audit-sync-portal" type="button" hidden></button>
+            <input id="audit-confirm" type="checkbox">
+            <button id="audit-start" type="button"></button>
+            <button id="audit-stop" type="button" hidden></button>
+            <input id="audit-stale-only" type="checkbox">
+            <p id="audit-shared-count"></p>
+            <span id="audit-page"></span>
+            <table><tbody id="audit-results"></tbody></table>
+        </div>
+    </body></html>`, { url: 'https://portal.test/yetkili/' });
+
+    const queryBodies = [];
+    dom.window.fetch = async (url, init) => {
+        if (url.endsWith('/import/latest')) {
+            return jsonResponse(null);
+        }
+        if (url.endsWith('/query')) {
+            queryBodies.push(JSON.parse(init.body));
+            return jsonResponse({
+                records: [
+                    {
+                        application_number: '2026-13-0000001',
+                        student_number: '26000000001',
+                        first_name: 'AYŞE YILMAZ',
+                        last_name: '',
+                        passport_number: '',
+                        phone: '',
+                        application_status: 'İşlem Bekliyor',
+                        status_category: 'pending',
+                        result_status: 'verified',
+                        documents: [],
+                        import: { gocLastQueryAt: eightDaysAgo, isStale: false }
+                    },
+                    {
+                        application_number: '2026-13-0000002',
+                        student_number: '26000000002',
+                        first_name: 'MEHMET DEMİR',
+                        last_name: '',
+                        passport_number: '',
+                        phone: '',
+                        application_status: 'İşlem Bekliyor',
+                        status_category: 'pending',
+                        result_status: 'verified',
+                        documents: [],
+                        import: { gocLastQueryAt: sevenDaysAgo, isStale: false }
+                    },
+                    {
+                        application_number: '2026-13-0000003',
+                        student_number: '26000000003',
+                        first_name: 'FATMA KAYA',
+                        last_name: '',
+                        passport_number: '',
+                        phone: '',
+                        application_status: 'İşlem Tamamlandı',
+                        status_category: 'successful',
+                        result_status: 'verified',
+                        documents: [],
+                        import: { gocLastQueryAt: twentyDaysAgo, isStale: false }
+                    }
+                ],
+                total: 3,
+                page: 1,
+                pageSize: 50
+            });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const root = dom.window.document.getElementById('staff-yoksis-audit');
+    initializeYoksisDocumentAuditManager(root);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const rows = [...root.querySelectorAll('#audit-results tr')];
+    assert.equal(rows.length, 3);
+    assert.match(rows[0].cells[5].textContent, /Göç son sorgu: \d{2}\.\d{2}\.\d{4} \(8 gün önce\)/);
+    assert.match(rows[0].cells[5].textContent, /güncel olmayabilir/);
+    assert.equal(rows[0].cells[6].textContent, 'Son sorguda eksik evrak yoktu');
+
+    assert.match(rows[1].cells[5].textContent, /Göç son sorgu: \d{2}\.\d{2}\.\d{4} \(7 gün önce\)/);
+    assert.doesNotMatch(rows[1].cells[5].textContent, /güncel olmayabilir/);
+
+    assert.match(rows[2].cells[5].textContent, /Göç son sorgu: \d{2}\.\d{2}\.\d{4} \(20 gün önce\)/);
+    assert.doesNotMatch(rows[2].cells[5].textContent, /güncel olmayabilir/);
+
+    const staleCheckbox = root.querySelector('#audit-stale-only');
+    staleCheckbox.checked = true;
+    staleCheckbox.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(queryBodies[queryBodies.length - 1].staleQueryOnly, true);
 });

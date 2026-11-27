@@ -110,6 +110,7 @@ function createNullProtoRow(fields) {
     row.missingDeadline = fields.missingDeadline;
     row.missingNote = fields.missingNote;
     row.gocLastQueryAt = fields.gocLastQueryAt;
+    row.recordDate = fields.recordDateIso || null;
     return row;
 }
 
@@ -157,6 +158,97 @@ export function isExportedAtStale(exportedAt, nowMs = Date.now()) {
     return Number.isFinite(exportedMs) && (nowMs - exportedMs) > STALE_EXPORT_THRESHOLD_MS;
 }
 
+function parseIsoCalendarDateUtcMs(isoDate) {
+    if (typeof isoDate !== 'string') return null;
+    const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (!isValidCalendarDate(year, month, day)) return null;
+    return {
+        yearText: match[1],
+        monthText: match[2],
+        dayText: match[3],
+        utcMs: Date.UTC(year, month - 1, day)
+    };
+}
+
+/**
+ * Returns today's calendar date (`YYYY-MM-DD`) in `Europe/Istanbul`.
+ * @param {number} [nowMs=Date.now()] Reference timestamp in milliseconds.
+ * @returns {string} ISO calendar date in `Europe/Istanbul`.
+ */
+export function getIstanbulTodayIso(nowMs = Date.now()) {
+    const date = new Date(nowMs);
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Europe/Istanbul',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(date);
+        const get = (type) => parts.find((part) => part.type === type)?.value || '';
+        const year = get('year');
+        const month = get('month');
+        const day = get('day');
+        if (year && month && day) return `${year}-${month}-${day}`;
+    } catch {
+        // Fallback below when Intl timeZone is unavailable.
+    }
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+/**
+ * Returns true when a Göç query date (`YYYY-MM-DD`) is missing or more than 7 Istanbul calendar days old.
+ * @param {string|null|undefined} isoDate Query date string.
+ * @param {number} [nowMs=Date.now()] Reference timestamp in milliseconds.
+ * @returns {boolean} True when missing or older than 7 days (8+ days).
+ */
+export function isGocQueryStale(isoDate, nowMs = Date.now()) {
+    const parsed = parseIsoCalendarDateUtcMs(isoDate);
+    if (!parsed) return true;
+    const today = parseIsoCalendarDateUtcMs(getIstanbulTodayIso(nowMs));
+    if (!today) return true;
+    const diffDays = Math.round((today.utcMs - parsed.utcMs) / (24 * 60 * 60 * 1000));
+    return diffDays > 7;
+}
+
+/**
+ * Formats a Göç last-query ISO date as `Göç son sorgu: GG.AA.YYYY (N gün önce)` using Istanbul calendar days.
+ * @param {string|null|undefined} isoDate Query date string.
+ * @param {number} [nowMs=Date.now()] Reference timestamp in milliseconds.
+ * @returns {string} Formatted Turkish query-age label.
+ */
+export function formatGocLastQueryWithAge(isoDate, nowMs = Date.now()) {
+    const parsed = parseIsoCalendarDateUtcMs(isoDate);
+    if (!parsed) return 'Göç son sorgu: Bilinmiyor';
+    const today = parseIsoCalendarDateUtcMs(getIstanbulTodayIso(nowMs));
+    const diffDays = today ? Math.round((today.utcMs - parsed.utcMs) / (24 * 60 * 60 * 1000)) : 0;
+    const age = diffDays >= 0 ? diffDays : 0;
+    return `Göç son sorgu: ${parsed.dayText}.${parsed.monthText}.${parsed.yearText} (${age} gün önce)`;
+}
+
+/**
+ * Counts normalized Excel rows whose Göç status is unfinished and whose Göç query is missing or >7 days old.
+ * @param {Array<object>} rows Normalized Excel import rows.
+ * @param {number} [nowMs=Date.now()] Reference timestamp in milliseconds.
+ * @returns {number} Count of stale unfinished rows.
+ */
+export function countStaleUnfinishedImportRows(rows, nowMs = Date.now()) {
+    if (!Array.isArray(rows)) return 0;
+    let count = 0;
+    for (const row of rows) {
+        if (!row) continue;
+        if (normalizeHeader(row.gocStatus) === 'islem tamamlandi') continue;
+        if (isGocQueryStale(row.gocLastQueryAt, nowMs)) count += 1;
+    }
+    return count;
+}
+
 /**
  * Formats an ISO calendar date (`YYYY-MM-DD`) as `GG.AA.YYYY` with remaining days in Turkish.
  * @param {string|null|undefined} isoDate ISO date string.
@@ -164,18 +256,12 @@ export function isExportedAtStale(exportedAt, nowMs = Date.now()) {
  * @returns {string} Formatted deadline text or empty string when invalid.
  */
 export function formatDeadlineWithRemaining(isoDate, nowMs = Date.now()) {
-    if (typeof isoDate !== 'string') return '';
-    const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return '';
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    if (!isValidCalendarDate(year, month, day)) return '';
-    const nowDate = new Date(nowMs);
-    const todayUtc = Date.UTC(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
-    const targetUtc = Date.UTC(year, month - 1, day);
-    const diffDays = Math.round((targetUtc - todayUtc) / (24 * 60 * 60 * 1000));
-    const display = `${match[3]}.${match[2]}.${match[1]}`;
+    const parsed = parseIsoCalendarDateUtcMs(isoDate);
+    if (!parsed) return '';
+    const today = parseIsoCalendarDateUtcMs(getIstanbulTodayIso(nowMs));
+    const todayUtc = today ? today.utcMs : Date.UTC(new Date(nowMs).getFullYear(), new Date(nowMs).getMonth(), new Date(nowMs).getDate());
+    const diffDays = Math.round((parsed.utcMs - todayUtc) / (24 * 60 * 60 * 1000));
+    const display = `${parsed.dayText}.${parsed.monthText}.${parsed.yearText}`;
     if (diffDays > 0) return `${display} (${diffDays} gün kaldı)`;
     if (diffDays === 0) return `${display} (bugün son gün)`;
     return `${display} (süresi geçti)`;

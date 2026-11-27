@@ -23,10 +23,14 @@ test('migration 0049 creates migration_office_states with expected columns, cons
         'state',
         'note',
         'deadline',
+        'goc_last_query_at',
         'import_id',
         'updated_by_staff_id',
         'updated_at'
     ]);
+
+    const auditColumns = database.prepare('PRAGMA table_info(yoksis_document_audit_records)').all().map((row) => row.name);
+    assert.ok(auditColumns.includes('record_date'));
 
     const tableSql = database.prepare(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'migration_office_states'"

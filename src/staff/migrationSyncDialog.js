@@ -1,4 +1,9 @@
-import { formatDeadlineWithRemaining, isExportedAtStale } from './yoksisExcelImport.js';
+import {
+    formatDeadlineWithRemaining,
+    formatGocLastQueryWithAge,
+    isExportedAtStale,
+    isGocQueryStale
+} from './yoksisExcelImport.js';
 
 export const MIGRATION_SYNC_BATCH_SIZE = 20;
 
@@ -14,6 +19,8 @@ export const TARGET_STATE_LABELS = Object.freeze({
 export const MANUAL_REASON_LABELS = Object.freeze({
     multiple_open_records: 'Aynı öğrencinin birden fazla açık kaydı var',
     older_application: 'E-İkamet başvuru tarihi portal kaydından eski (tarih koruması)',
+    missing_record_date: 'Excel satırında Kayıt Tarihi bulunamadı (tarih koruması)',
+    stale_query_conflict: 'Yeni Göç sorgusuna dayalı eksik evrak işareti, daha eski veya tarihsiz bir satırla değiştirilemez',
     name_mismatch: 'Excel ve portaldaki ad soyad uyuşmuyor',
     terminal_status_conflict: 'Portal kaydı kapalı veya sonuçlanmış durumda, Excel ile çelişiyor'
 });
@@ -235,11 +242,15 @@ export function openMigrationSyncDialog(document, options = {}) {
                 createEl(document, 'span', 'migration-sync-tag', item.record_kind === 'physical' ? 'Fiziksel' : 'Online'),
                 createEl(document, 'span', 'migration-sync-tag', TARGET_STATE_LABELS[item.target_state] || item.target_state)
             );
+            if (item.target_state !== 'approved' && isGocQueryStale(item.goc_last_query_at, nowMs)) {
+                top.append(createEl(document, 'span', 'migration-sync-tag migration-sync-tag--warning', 'güncel olmayabilir'));
+            }
+            const queryText = formatGocLastQueryWithAge(item.goc_last_query_at, nowMs);
             const meta = createEl(
                 document,
                 'div',
                 'migration-sync-item-meta',
-                `Öğrenci No: ${identity.studentNumber} · Başvuru No: ${item.application_number}`
+                `Öğrenci No: ${identity.studentNumber} · Başvuru No: ${item.application_number} · ${queryText}`
             );
             main.append(top, meta);
             if (item.target_state === 'missing_documents') {
@@ -269,11 +280,12 @@ export function openMigrationSyncDialog(document, options = {}) {
                 createEl(document, 'span', '', identity.fullName),
                 createEl(document, 'span', 'migration-sync-tag', item.record_kind === 'physical' ? 'Fiziksel' : 'Online')
             );
+            const queryText = formatGocLastQueryWithAge(item.goc_last_query_at, nowMs);
             const meta = createEl(
                 document,
                 'div',
                 'migration-sync-item-meta',
-                `Öğrenci No: ${identity.studentNumber} · Başvuru No: ${item.application_number}`
+                `Öğrenci No: ${identity.studentNumber} · Başvuru No: ${item.application_number} · ${queryText}`
             );
             const reasonText = MANUAL_REASON_LABELS[item.reason] || item.reason || 'Elle kontrol gerekiyor';
             const reasonEl = createEl(document, 'div', 'migration-sync-item-note', `Neden: ${reasonText}`);
@@ -376,6 +388,19 @@ export function openMigrationSyncDialog(document, options = {}) {
 
         const counts = summarizeSyncPlan(preview);
         body.append(renderCounts(counts));
+
+        const staleUnfinishedCount = Number(preview.staleUnfinishedCount || 0);
+        if (staleUnfinishedCount > 0) {
+            const staleQueryBox = createEl(
+                document,
+                'div',
+                'migration-sync-banner migration-sync-banner--warning',
+                `${staleUnfinishedCount} tamamlanmamış kaydın Göç son sorgu tarihi 7 günden eski veya eksik. Kesin sonuç için kaydı YÖKSİS'te yeniden sorgulayıp Excel'i tekrar indirin.`
+            );
+            staleQueryBox.setAttribute('role', 'status');
+            staleQueryBox.dataset.syncStaleQueries = 'true';
+            body.append(staleQueryBox);
+        }
 
         if (isStaleExport()) {
             const staleBox = createEl(document, 'div', 'migration-sync-banner migration-sync-banner--warning');

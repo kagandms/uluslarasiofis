@@ -11,8 +11,10 @@ import {
     STATUS_CATEGORIES,
     buildImportDocuments,
     classifyStatus,
+    getIstanbulTodayIso,
     normalizeSearch,
     readAuditText,
+    shiftIsoCalendarDate,
     validateDocuments,
     validateExportedAt,
     validateImportRow
@@ -252,8 +254,8 @@ async function importExcelRows(request, environment, requestId, staff) {
                 application_status, status_category, result_status, documents_json, search_text,
                 scanned_at, updated_by_staff_id,
                 source, last_seen_import_id, unit, program, missing_deadline, goc_last_query_at,
-                last_transaction_type, transaction_count
-            ) VALUES (?, ?, ?, ?, '', '', ?, ?, 'verified', ?, ?, ?, ?, 'excel', ?, ?, ?, ?, ?, ?, ?)
+                record_date, last_transaction_type, transaction_count
+            ) VALUES (?, ?, ?, ?, '', '', ?, ?, 'verified', ?, ?, ?, ?, 'excel', ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(application_number) DO UPDATE SET
                 student_number = excluded.student_number,
                 first_name = CASE WHEN yoksis_document_audit_records.first_name <> '' THEN yoksis_document_audit_records.first_name ELSE excluded.first_name END,
@@ -279,13 +281,14 @@ async function importExcelRows(request, environment, requestId, staff) {
                 program = excluded.program,
                 missing_deadline = excluded.missing_deadline,
                 goc_last_query_at = excluded.goc_last_query_at,
+                record_date = excluded.record_date,
                 last_transaction_type = excluded.last_transaction_type,
                 transaction_count = excluded.transaction_count
         `).bind(
             row.applicationNumber, row.studentNumber, firstName, lastName,
             row.gocStatus, row.statusCategory, JSON.stringify(documents), searchText,
             nowIso, staff.id, importId, row.unit, row.program, row.missingDeadline,
-            row.gocLastQueryAt, row.processType, row.transactionCount
+            row.gocLastQueryAt, row.recordDate, row.processType, row.transactionCount
         ));
     }
 
@@ -353,21 +356,23 @@ async function readLatestImport(request, environment, requestId) {
 }
 
 function readQuery(body) {
-    if (!body || Object.keys(body).some((key) => !['q', 'status', 'match', 'page', 'pageSize'].includes(key))) {
+    if (!body || Object.keys(body).some((key) => !['q', 'status', 'match', 'staleQueryOnly', 'page', 'pageSize'].includes(key))) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve filtre bilgilerini kontrol edin.');
     }
     const query = body.q === undefined ? '' : readAuditText(body.q, 'Arama metni', MAX_SEARCH_LENGTH, { optional: true });
     const status = body.status === undefined ? 'all' : body.status;
     const match = body.match === undefined ? 'all' : body.match;
+    const staleQueryOnly = body.staleQueryOnly === undefined ? false : body.staleQueryOnly;
     const page = body.page === undefined ? 1 : body.page;
     const pageSize = body.pageSize === undefined ? 50 : body.pageSize;
     if (typeof status !== 'string' || !STATUS_CATEGORIES.has(status)
         || typeof match !== 'string' || !MATCH_FILTERS.has(match)
+        || typeof staleQueryOnly !== 'boolean'
         || !Number.isSafeInteger(page) || page < 1 || page > 1_000_000
         || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
         throw new ApiError(400, 'VALIDATION_ERROR', 'Arama ve filtre bilgilerini kontrol edin.');
     }
-    return { normalizedQuery: normalizeSearch(query), status, match, page, pageSize };
+    return { normalizedQuery: normalizeSearch(query), status, match, staleQueryOnly, page, pageSize };
 }
 
 /**
@@ -432,13 +437,18 @@ function formatAuditRecord(row, latestImportId) {
 async function readRecords(request, environment, requestId) {
     requireMethod(request, 'POST');
     requireSameOrigin(request);
-    const { normalizedQuery, status, match, page, pageSize } = readQuery(await readJsonBody(request));
+    const { normalizedQuery, status, match, staleQueryOnly, page, pageSize } = readQuery(await readJsonBody(request));
     const escapedQuery = normalizedQuery.replace(/[!%_]/g, '!$&');
     const pattern = `%${escapedQuery}%`;
     const statusClause = status === 'all' ? '' : 'AND status_category = ?';
+    const staleCutoffIso = staleQueryOnly ? shiftIsoCalendarDate(getIstanbulTodayIso(), -7) : null;
+    const staleClause = staleQueryOnly
+        ? "AND source = 'excel' AND status_category <> 'successful' AND (goc_last_query_at IS NULL OR goc_last_query_at = '' OR goc_last_query_at < ?)"
+        : '';
     const searchClause = normalizedQuery ? "AND search_text LIKE ? ESCAPE '!'" : '';
     const bindings = [
         ...(status === 'all' ? [] : [status]),
+        ...(staleQueryOnly ? [staleCutoffIso] : []),
         ...(normalizedQuery ? [pattern] : [])
     ];
     const latestImport = await environment.DB.prepare(`
@@ -457,7 +467,7 @@ async function readRecords(request, environment, requestId) {
                    source, last_seen_import_id, unit, program, missing_deadline, goc_last_query_at,
                    last_transaction_type, transaction_count
             FROM yoksis_document_audit_records
-            WHERE 1 = 1 ${statusClause} ${searchClause}
+            WHERE 1 = 1 ${statusClause} ${staleClause} ${searchClause}
             ORDER BY scanned_at DESC, application_number
         `).bind(...bindings).all()).results || [];
         const keys = await loadOnlineApplicationKeys(environment);
@@ -472,7 +482,7 @@ async function readRecords(request, environment, requestId) {
     }
     const count = await environment.DB.prepare(`
         SELECT COUNT(*) AS total FROM yoksis_document_audit_records
-        WHERE 1 = 1 ${statusClause} ${searchClause}
+        WHERE 1 = 1 ${statusClause} ${staleClause} ${searchClause}
     `).bind(...bindings).first();
     const result = await environment.DB.prepare(`
         SELECT application_number, student_number, first_name, last_name, passport_number,
@@ -480,7 +490,7 @@ async function readRecords(request, environment, requestId) {
                source, last_seen_import_id, unit, program, missing_deadline, goc_last_query_at,
                last_transaction_type, transaction_count
         FROM yoksis_document_audit_records
-        WHERE 1 = 1 ${statusClause} ${searchClause}
+        WHERE 1 = 1 ${statusClause} ${staleClause} ${searchClause}
         ORDER BY scanned_at DESC, application_number
         LIMIT ? OFFSET ?
     `).bind(...bindings, pageSize, (page - 1) * pageSize).all();
@@ -557,7 +567,8 @@ async function previewMigrationSync(request, environment, requestId) {
             changes: [],
             needsAttention: [],
             manual: [],
-            unchangedCount: 0
+            unchangedCount: 0,
+            staleUnfinishedCount: 0
         }, 200, requestId);
     }
     const includePhysical = await canAccessPhysicalRecords(request, environment);
@@ -665,6 +676,7 @@ async function applyMigrationSync(request, environment, requestId, staff) {
                     applicationNumber: planned.application_number,
                     note: planned.note,
                     deadline: planned.deadline,
+                    gocLastQueryAt: planned.goc_last_query_at ?? null,
                     importId,
                     staffId: staff.id,
                     now,
@@ -678,6 +690,7 @@ async function applyMigrationSync(request, environment, requestId, staff) {
                     applicationNumber: planned.application_number,
                     note: planned.note,
                     deadline: planned.deadline,
+                    gocLastQueryAt: planned.goc_last_query_at ?? null,
                     importId,
                     staffId: staff.id,
                     now,

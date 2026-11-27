@@ -232,6 +232,18 @@ body.dark-mode .migration-sync-banner--success {
     color: var(--text-primary);
 }
 
+.migration-sync-tag--warning {
+    background: #fff4df;
+    color: #8a5a00;
+    border: 1px solid #f2cf8d;
+}
+
+body.dark-mode .migration-sync-tag--warning {
+    background: rgb(245 158 11 / 18%);
+    color: #fde68a;
+    border-color: rgb(245 158 11 / 42%);
+}
+
 .migration-sync-progress-wrap {
     display: grid;
     gap: 0.4rem;
