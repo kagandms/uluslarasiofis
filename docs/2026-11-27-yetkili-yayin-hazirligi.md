@@ -1,6 +1,6 @@
 # Yayın hazırlığı — yetkili günlük iş akışı sürümü (27 Kasım 2026)
 
-**Durum:** HAZIRLIK. Push, `production` birleştirmesi, migration uygulaması, workflow tetikleme ve yayın **yapılmadı**. Her adım ayrı onay ister. Bu belge tarihlidir; adımlardan önce değerler yeniden doğrulanır.
+**Durum:** Onay 1 (migration) uygulandı. Push, `production` birleştirmesi, workflow tetikleme ve yayın **yapılmadı**. Her adım ayrı onay ister. Bu belge tarihlidir; adımlardan önce değerler yeniden doğrulanır.
 
 ## Aday ve canlı durum
 
@@ -39,6 +39,12 @@ Yerelde **çalıştırılmayan** CI adımları: actionlint ve tarayıcı/yazıc�
 4. **Onay 4 — yayın.** Aynı SHA için `operation=publish`; ortam onayı. Aktif sürüm açıklaması ve sağlık kontrolleri doğrulanır.
 
 Adım 1 ile 4 arasında canlıda eski kod yeni şemayla çalışır. Bu arada `production`'dan migration dosyalarını içermeyen başka bir yayın yapılamaz (ledger kontrolü durdurur); aralık kısa tutulur. Yayın sırasında Dashboard, doğrudan wrangler ve diğer oturumlardan yayın yapılmaz.
+
+## Onay 1 kanıtı — migration uygulandı (27 Kasım 2026)
+
+Kaynak: kullanıcı oturum konuşmasında onayladı. Uygulama öncesi: aday temiz (`3ddb823`), `origin/production` ve canlı sürüm değişmemiş, SHA-256 değerleri yukarıdakiyle aynı, bekleyen liste yalnız 0048 ve 0049. Time Travel bookmark (08:07:05Z): `0000071f-00000e12-00005130-ae09804b1e0a2a2b7bed2066beb9e59a`. Komut: `npm run db:migrate:production`; ikisi de başarılı.
+
+Sonraki salt okunur kontrol: bekleyen migration yok; `office_inquiries` 3 not sütunu, `record_date` sütunu, yeni tablo ve iki indeks mevcut; yeni tablo 0 satır, yeni sütunlar boş; satır sayıları öncekiyle aynı (`office_inquiries` 10, `yoksis_document_audit_records` 2.194, `applications` 1.544, `physical_intakes` 714); `PRAGMA foreign_key_check` boş. Canlı sürüm `49234922-c428-464b-ba68-4a0feef66bf7` (`release:097020c…`); altı sabit sayfa HTTP 200. HTTP 200 işlev kanıtı değildir.
 
 ## Geri dönüş
 
