@@ -23,6 +23,7 @@
 
 ## Plans, evidence, and drafts
 
+- [Staff daily workflow plan (2026-11-27)](plans/2026-11-27-yetkili-gunluk-is-akisi-plani.md) — status wording, re-requesting files that fail the security scan, inquiry notes, more forgiving Topi document-print requests, timesheet Excel export and YÖKSİS Excel status sync. Plan only, checked against `097020c`; not implemented or validated.
 - [Topi staff assistant, YKN automatic chain and YÖKSİS Excel import plan (2026-11-23)](2026-11-23-topi-yetkili-ykn-otomasyon-excel-plani.md) — implemented on task branches and merged into the local test branch `test/combined-2026-11-23` (not merged to `production`, not released); sections 13–15 record extra owner requests, decisions (self-hosted MediaPipe face detection, re-request on approved documents) and the current state. Phase 5 (chat log) and section 12 stage 0 are in progress on their own task branches. YKN chain trial waits for YÖKSİS access.
 - [Topi public chatbot evaluation evidence (2026-11-23)](2026-11-23-chatbot-eval-evidence.md) records the real Workers AI gate run (two rounds) for the public chatbot; historical evidence, not a release approval.
 - [Home page question form and AI chatbot plan (2026-11-18)](2026-11-18-home-question-form-and-chatbot-plan.md) is an unimplemented, unvalidated plan against `fdcb930`; re-verify it before executing.
