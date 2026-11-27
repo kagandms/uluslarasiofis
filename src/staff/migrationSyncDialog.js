@@ -39,8 +39,14 @@ export function chunkSyncItems(items, size = MIGRATION_SYNC_BATCH_SIZE) {
     return packets;
 }
 
+const NOT_SENT_WARNING_TEXT = 'Bu gruptaki kayıtlar portalda henüz Göç İdaresine iletilmemiş görünüyor. Seçilenler önce Göç İdaresine iletildi olarak işaretlenir; online kayıtlarda belgeler de toplu olarak onaylanır.';
+
 export function summarizeSyncPlan(plan) {
-    const actionable = [...(plan?.changes || []), ...(plan?.needsAttention || [])];
+    const actionable = [
+        ...(plan?.changes || []),
+        ...(plan?.needsAttention || []),
+        ...(plan?.nameCheck || [])
+    ];
     let approved = 0;
     let missingDocuments = 0;
     let reviewing = 0;
@@ -146,17 +152,14 @@ export function openMigrationSyncDialog(document, options = {}) {
     desc.id = 'migration-sync-desc';
     titleWrap.append(title, desc);
 
-    const headerClose = createEl(document, 'button', 'btn btn-outline', 'Kapat');
-    headerClose.type = 'button';
-    headerClose.dataset.action = 'close-sync';
-    headerClose.setAttribute('aria-label', 'Pencereyi kapat');
-    header.append(titleWrap, headerClose);
+    header.append(titleWrap);
 
     const body = createEl(document, 'div', 'migration-sync-body');
     const footer = createEl(document, 'div', 'migration-sync-footer');
     const closeBtn = createEl(document, 'button', 'btn btn-outline', 'Kapat');
     closeBtn.type = 'button';
     closeBtn.dataset.action = 'close-sync';
+    closeBtn.setAttribute('aria-label', 'Pencereyi kapat');
     const applyBtn = createEl(document, 'button', 'btn btn-primary', 'Seçilenleri uygula');
     applyBtn.type = 'button';
     applyBtn.dataset.action = 'apply-sync';
@@ -196,7 +199,6 @@ export function openMigrationSyncDialog(document, options = {}) {
             || count === 0
             || (isStaleExport() && !state.staleConfirmed);
         closeBtn.disabled = state.applying;
-        headerClose.disabled = state.applying;
     }
 
     function renderCounts(counts) {
@@ -255,7 +257,17 @@ export function openMigrationSyncDialog(document, options = {}) {
                 'migration-sync-item-meta',
                 `Öğrenci No: ${identity.studentNumber} · Başvuru No: ${item.application_number} · ${queryText}`
             );
-            main.append(top, meta);
+            main.append(top);
+            if (groupName === 'nameCheck') {
+                const excelName = String(item.excel_name || '').trim() || '—';
+                main.append(createEl(
+                    document,
+                    'div',
+                    'migration-sync-item-names',
+                    `Excel: ${excelName} · Portal: ${identity.fullName}`
+                ));
+            }
+            main.append(meta);
             if (item.target_state === 'missing_documents') {
                 const deadlineText = formatDeadlineWithRemaining(item.deadline, nowMs);
                 if (deadlineText || item.note) {
@@ -264,6 +276,15 @@ export function openMigrationSyncDialog(document, options = {}) {
                         .join(' · ');
                     main.append(createEl(document, 'div', 'migration-sync-item-note', detail));
                 }
+            }
+            if (groupName === 'nameCheck' && (item.needs_attention || item.reason === 'not_sent_to_migration')) {
+                const warningEl = createEl(
+                    document,
+                    'div',
+                    'migration-sync-banner migration-sync-banner--warning migration-sync-item-warning',
+                    NOT_SENT_WARNING_TEXT
+                );
+                main.append(warningEl);
             }
             li.append(checkbox, main);
             list.append(li);
@@ -292,7 +313,16 @@ export function openMigrationSyncDialog(document, options = {}) {
             );
             const reasonText = MANUAL_REASON_LABELS[item.reason] || item.reason || 'Elle kontrol gerekiyor';
             const reasonEl = createEl(document, 'div', 'migration-sync-item-note', `Neden: ${reasonText}`);
-            main.append(top, meta, reasonEl);
+            main.append(top);
+            if (item.reason === 'name_mismatch' && typeof item.excel_name === 'string' && item.excel_name.trim()) {
+                main.append(createEl(
+                    document,
+                    'div',
+                    'migration-sync-item-names',
+                    `Excel: ${item.excel_name.trim()} · Portal: ${identity.fullName}`
+                ));
+            }
+            main.append(meta, reasonEl);
             li.append(main);
             list.append(li);
         }
@@ -426,9 +456,10 @@ export function openMigrationSyncDialog(document, options = {}) {
 
         const changes = preview.changes || [];
         const needsAttention = preview.needsAttention || [];
+        const nameCheck = preview.nameCheck || [];
         const manual = preview.manual || [];
 
-        if (changes.length === 0 && needsAttention.length === 0 && manual.length === 0) {
+        if (changes.length === 0 && needsAttention.length === 0 && nameCheck.length === 0 && manual.length === 0) {
             body.append(createEl(document, 'p', '', 'İşlenecek değişiklik bulunamadı.'));
             updateApplyButtonState();
             return;
@@ -452,9 +483,18 @@ export function openMigrationSyncDialog(document, options = {}) {
                 document,
                 'div',
                 'migration-sync-banner migration-sync-banner--warning',
-                'Bu gruptaki kayıtlar portalda henüz Göç İdaresine iletilmemiş görünüyor. Seçilenler önce Göç İdaresine iletildi olarak işaretlenir; online kayıtlarda belgeler de toplu olarak onaylanır.'
+                NOT_SENT_WARNING_TEXT
             );
             section.append(head, warning, renderSelectableList(needsAttention, 'needsAttention'));
+            body.append(section);
+        }
+
+        if (nameCheck.length > 0) {
+            const section = createEl(document, 'section', 'migration-sync-section');
+            section.dataset.syncGroup = 'nameCheck';
+            const head = createEl(document, 'div', 'migration-sync-section-head');
+            head.append(createEl(document, 'h4', 'migration-sync-section-title', `Ad yazımı farklı — kontrol edip işaretleyin (${nameCheck.length})`));
+            section.append(head, renderSelectableList(nameCheck, 'nameCheck'));
             body.append(section);
         }
 
@@ -496,7 +536,8 @@ export function openMigrationSyncDialog(document, options = {}) {
         if (state.applying || !state.preview?.import_id) return;
         const allActionable = [
             ...(state.preview.changes || []),
-            ...(state.preview.needsAttention || [])
+            ...(state.preview.needsAttention || []),
+            ...(state.preview.nameCheck || [])
         ];
         const selected = allActionable.filter((item) => state.selectedKeys.has(itemKey(item)));
         if (selected.length === 0) return;
@@ -608,7 +649,6 @@ export function openMigrationSyncDialog(document, options = {}) {
         }
     }
 
-    headerClose.addEventListener('click', close);
     closeBtn.addEventListener('click', close);
     applyBtn.addEventListener('click', () => { void applySelected(); });
     dialog.addEventListener('cancel', onCancel);
@@ -620,7 +660,7 @@ export function openMigrationSyncDialog(document, options = {}) {
     } else {
         dialog.setAttribute('open', '');
     }
-    headerClose.focus();
+    closeBtn.focus();
 
     const ready = loadPreview();
     return { dialog, ready, close };

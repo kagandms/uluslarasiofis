@@ -33,11 +33,14 @@ test('summarizeSyncPlan and chunkSyncItems compute counts and 20-item packets', 
             { target_state: 'reviewing' },
             { target_state: 'approved' }
         ],
+        nameCheck: [
+            { target_state: 'approved' }
+        ],
         manual: [{ reason: 'name_mismatch' }],
         unchangedCount: 7
     });
     assert.deepEqual(counts, {
-        approved: 2,
+        approved: 3,
         missing_documents: 1,
         reviewing: 1,
         manual: 1,
@@ -627,4 +630,219 @@ test('apply button is disabled and hidden after a successful apply instead of st
     assert.equal(applyBtn.disabled, true);
     assert.equal(applyBtn.hidden, true);
     assert.notEqual(applyBtn.textContent, 'Seçilenleri uygula (2)');
+});
+
+test('dialog renders exactly one footer Kapat button in preview and result states and focuses it on open', async () => {
+    const dom = createDom();
+    const { document } = dom.window;
+    const trigger = document.getElementById('trigger');
+    trigger.focus();
+
+    const fetcher = async (url, init) => {
+        if (url.endsWith('/sync/preview')) {
+            return jsonResponse({
+                import_id: 'imp-one-close',
+                exported_at: '2026-11-27 08:30',
+                changes: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-1',
+                        application_number: '2026-11-0000001',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'status_approved',
+                        note: '',
+                        deadline: null,
+                        student_number: '26000000001',
+                        full_name: 'Ayşe Yılmaz'
+                    }
+                ],
+                needsAttention: [],
+                nameCheck: [],
+                manual: [],
+                unchangedCount: 0
+            });
+        }
+        if (url.endsWith('/sync/apply')) {
+            const body = JSON.parse(init.body);
+            return jsonResponse({
+                applied: body.items.map((item) => ({ ...item, target_state: 'approved' })),
+                conflicts: []
+            });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const handle = openMigrationSyncDialog(document, {
+        trigger,
+        fetcher,
+        nowMs: Date.parse('2026-11-27T09:00:00+03:00')
+    });
+
+    // On open (loading state): focus is on the single footer close button
+    const initialCloseButtons = [...handle.dialog.querySelectorAll('[data-action="close-sync"]')];
+    assert.equal(initialCloseButtons.length, 1);
+    assert.equal(initialCloseButtons[0].closest('.migration-sync-footer') !== null, true);
+    assert.equal(document.activeElement, initialCloseButtons[0]);
+
+    await handle.ready;
+
+    // Preview state: still exactly one close button in footer
+    const previewCloseButtons = [...handle.dialog.querySelectorAll('[data-action="close-sync"]')];
+    assert.equal(previewCloseButtons.length, 1);
+    assert.equal(previewCloseButtons[0].textContent, 'Kapat');
+    assert.equal(previewCloseButtons[0].disabled, false);
+
+    // Apply -> Result state: still exactly one close button in footer
+    handle.dialog.querySelector('[data-action="apply-sync"]').click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const resultCloseButtons = [...handle.dialog.querySelectorAll('[data-action="close-sync"]')];
+    assert.equal(resultCloseButtons.length, 1);
+    assert.equal(resultCloseButtons[0].closest('.migration-sync-footer') !== null, true);
+    assert.equal(resultCloseButtons[0].disabled, false);
+
+    // Escape closes dialog and returns focus to trigger
+    handle.dialog.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(document.querySelector('.migration-sync-dialog'), null);
+    assert.equal(document.activeElement, trigger);
+});
+
+test('preview dialog renders nameCheck section between selectable and manual, not preselected, with Excel/Portal names, warning, and apply support', async () => {
+    const dom = createDom();
+    const { document } = dom.window;
+
+    const appliedBodies = [];
+    const fetcher = async (url, init) => {
+        if (url.endsWith('/sync/preview')) {
+            return jsonResponse({
+                import_id: 'imp-nc',
+                exported_at: '2026-11-27 08:30',
+                changes: [],
+                needsAttention: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-att',
+                        application_number: '2026-11-0000010',
+                        student_number: '26000000010',
+                        first_name: 'Deniz',
+                        last_name: 'Arslan',
+                        current_status: 'under_review',
+                        target_state: 'reviewing',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'not_sent_to_migration',
+                        note: '',
+                        deadline: null
+                    }
+                ],
+                nameCheck: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-nc-1',
+                        application_number: '2026-11-0000011',
+                        student_number: '26000000011',
+                        first_name: 'Rashad',
+                        last_name: 'Ibragimov',
+                        excel_name: 'Resad Ibragimov',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'status_approved',
+                        needs_attention: false,
+                        note: '',
+                        deadline: null
+                    },
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-nc-2',
+                        application_number: '2026-11-0000012',
+                        student_number: '26000000012',
+                        first_name: 'Guvanch',
+                        last_name: 'Jumayev',
+                        excel_name: 'Guwanc Jumayew',
+                        current_status: 'under_review',
+                        target_state: 'reviewing',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'not_sent_to_migration',
+                        needs_attention: true,
+                        note: '',
+                        deadline: null
+                    }
+                ],
+                manual: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-man',
+                        application_number: '2026-11-0000013',
+                        student_number: '26000000013',
+                        first_name: 'Omar',
+                        last_name: 'Karimov',
+                        excel_name: 'Ali Karimov',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'name_mismatch',
+                        note: '',
+                        deadline: null
+                    }
+                ],
+                unchangedCount: 2
+            });
+        }
+        if (url.endsWith('/sync/apply')) {
+            const body = JSON.parse(init.body);
+            appliedBodies.push(body);
+            return jsonResponse({
+                applied: body.items.map((item) => ({ ...item, target_state: 'approved' })),
+                conflicts: []
+            });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const handle = openMigrationSyncDialog(document, {
+        fetcher,
+        nowMs: Date.parse('2026-11-27T09:00:00+03:00')
+    });
+    await handle.ready;
+
+    const dialog = handle.dialog;
+    assert.equal(dialog.querySelector('[data-sync-count="approved"]').textContent, '1');
+    assert.equal(dialog.querySelector('[data-sync-count="reviewing"]').textContent, '2');
+    assert.equal(dialog.querySelector('[data-sync-count="manual"]').textContent, '1');
+
+    const sections = [...dialog.querySelectorAll('[data-sync-group]')].map((el) => el.dataset.syncGroup);
+    assert.deepEqual(sections, ['needsAttention', 'nameCheck', 'manual']);
+
+    const nameCheckSection = dialog.querySelector('[data-sync-group="nameCheck"]');
+    assert.match(nameCheckSection.textContent, /Ad yazımı farklı — kontrol edip işaretleyin \(2\)/);
+    assert.match(nameCheckSection.textContent, /Excel: Resad Ibragimov/);
+    assert.match(nameCheckSection.textContent, /Portal: Rashad Ibragimov/);
+    assert.match(nameCheckSection.textContent, /Excel: Guwanc Jumayew/);
+    assert.match(nameCheckSection.textContent, /Portal: Guvanch Jumayev/);
+
+    const nameCheckBoxes = [...dialog.querySelectorAll('input[data-sync-select="nameCheck"]')];
+    assert.equal(nameCheckBoxes.length, 2);
+    assert.equal(nameCheckBoxes.every((cb) => cb.checked === false), true);
+
+    const nameCheckItems = [...nameCheckSection.querySelectorAll('.migration-sync-item')];
+    assert.doesNotMatch(nameCheckItems[0].textContent, /belgeler de toplu olarak onaylanır/i);
+    assert.match(nameCheckItems[1].textContent, /belgeler de toplu olarak onaylanır/i);
+
+    const manualSection = dialog.querySelector('[data-sync-group="manual"]');
+    assert.match(manualSection.textContent, /Excel: Ali Karimov/);
+
+    const applyBtn = dialog.querySelector('[data-action="apply-sync"]');
+    assert.equal(applyBtn.disabled, true);
+
+    nameCheckBoxes[0].checked = true;
+    nameCheckBoxes[0].dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    assert.equal(applyBtn.disabled, false);
+
+    applyBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(appliedBodies.length, 1);
+    assert.deepEqual(appliedBodies[0].items.map((item) => item.record_id), ['app-nc-1']);
 });
