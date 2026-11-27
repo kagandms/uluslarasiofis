@@ -7,7 +7,9 @@ import {
     buildImportDocuments,
     classifyGocStatus,
     classifyStatus,
+    getIstanbulTodayIso,
     normalizeSearch,
+    toIstanbulCalendarDate,
     validateDocuments,
     validateImportRow
 } from '../src/server/domain/yoksisAuditPolicy.js';
@@ -96,7 +98,8 @@ test('validateImportRow accepts minimal valid Excel row without phone or passpor
         resultStatus: 'verified',
         missingDeadline: null,
         missingNote: '',
-        gocLastQueryAt: null
+        gocLastQueryAt: null,
+        recordDate: null
     });
 });
 
@@ -141,6 +144,10 @@ test('validateImportRow rejects invalid fields with Turkish messages', () => {
         () => validateImportRow(createValidRow({ gocLastQueryAt: '23.11.2026' })),
         /Göç son sorgu tarihi/
     );
+    assert.throws(
+        () => validateImportRow(createValidRow({ recordDate: '23.11.2026' })),
+        /Kayıt tarihi/
+    );
 });
 
 test('validateImportRow accepts boundary lengths and valid ISO dates', () => {
@@ -148,12 +155,14 @@ test('validateImportRow accepts boundary lengths and valid ISO dates', () => {
         fullName: 'A'.repeat(240),
         missingDeadline: '2026-12-06',
         missingNote: 'M'.repeat(1000),
-        gocLastQueryAt: '2026-11-23'
+        gocLastQueryAt: '2026-11-23',
+        recordDate: '2026-11-20'
     }));
     assert.equal(row.fullName.length, 240);
     assert.equal(row.missingDeadline, '2026-12-06');
     assert.equal(row.missingNote.length, 1000);
     assert.equal(row.gocLastQueryAt, '2026-11-23');
+    assert.equal(row.recordDate, '2026-11-20');
 });
 
 test('buildImportDocuments formats multiline notes and deadline into documents array', () => {
@@ -174,4 +183,24 @@ test('buildImportDocuments formats multiline notes and deadline into documents a
     assert.deepEqual(noDeadlineDocs, [
         { name: 'Sağlık sigortası eksik', required: true, note: '', uploadStatus: '' }
     ]);
+});
+
+test('Istanbul date formatting caches Intl.DateTimeFormat instance across repeated calls', () => {
+    const OriginalDateTimeFormat = Intl.DateTimeFormat;
+    let constructorCalls = 0;
+    Intl.DateTimeFormat = function WrappedDateTimeFormat(...args) {
+        constructorCalls += 1;
+        return new OriginalDateTimeFormat(...args);
+    };
+    try {
+        const d1 = getIstanbulTodayIso(Date.parse('2026-11-27T09:00:00Z'));
+        const d2 = toIstanbulCalendarDate('2026-11-26T22:30:00Z');
+        const d3 = toIstanbulCalendarDate('2026-11-25T12:00:00Z');
+        assert.equal(d1, '2026-11-27');
+        assert.equal(d2, '2026-11-27');
+        assert.equal(d3, '2026-11-25');
+        assert.ok(constructorCalls <= 1, `Expected cached Intl.DateTimeFormat, got ${constructorCalls} calls`);
+    } finally {
+        Intl.DateTimeFormat = OriginalDateTimeFormat;
+    }
 });

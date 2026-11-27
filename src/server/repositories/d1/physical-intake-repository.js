@@ -9,7 +9,10 @@ const INTAKE_COLUMNS = `id,student_number,first_name,last_name,passport_number,
     (SELECT state FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_state,
     (SELECT metadata_version FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_metadata_version,
     (SELECT template_version FROM physical_intake_receipts WHERE intake_id=physical_intakes.id ORDER BY document_version DESC LIMIT 1) AS receipt_template_version,
-    (SELECT status FROM physical_receipt_print_attempts WHERE intake_id=physical_intakes.id ORDER BY created_at DESC,id DESC LIMIT 1) AS receipt_print_status`;
+    (SELECT status FROM physical_receipt_print_attempts WHERE intake_id=physical_intakes.id ORDER BY created_at DESC,id DESC LIMIT 1) AS receipt_print_status,
+    (SELECT state FROM migration_office_states WHERE record_kind='physical' AND record_id=physical_intakes.id) AS migration_office_state,
+    (SELECT note FROM migration_office_states WHERE record_kind='physical' AND record_id=physical_intakes.id) AS migration_office_note,
+    (SELECT deadline FROM migration_office_states WHERE record_kind='physical' AND record_id=physical_intakes.id) AS migration_office_deadline`;
 
 function buildWhere(query) {
     const clauses = ['deleted_at IS NULL'];
@@ -17,6 +20,15 @@ function buildWhere(query) {
     if (query.statuses) {
         clauses.push(`status IN (${query.statuses.map(() => '?').join(',')})`);
         bindings.push(...query.statuses);
+    }
+    if (query.migrationMissingDocuments) {
+        clauses.push("status = 'sent_to_migration'");
+        clauses.push(`EXISTS (
+            SELECT 1 FROM migration_office_states AS mos
+            WHERE mos.record_kind = 'physical'
+              AND mos.record_id = physical_intakes.id
+              AND mos.state = 'missing_documents'
+        )`);
     }
     if (query.q) {
         const term = escapeLikeTerm(query.q);
@@ -78,7 +90,7 @@ async function listIntakes(database, query) {
 }
 
 async function updateStatus(database, input) {
-    const result = await database.batch([
+    const statements = [
         database.prepare(`UPDATE physical_intakes SET status=?,rejection_reason=?,legacy_status=NULL,lock_version=lock_version+1,updated_at=?
             WHERE id=? AND lock_version=? AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed' AND deleted_at IS NULL`)
             .bind(input.status, input.reason || '', input.now, input.id, input.version),
@@ -86,7 +98,49 @@ async function updateStatus(database, input) {
             SELECT ?,'physical_intake.status','staff',?,?,?,? WHERE changes()=1`)
             .bind(crypto.randomUUID(), input.staffId, input.requestId,
                 JSON.stringify({ physicalIntakeId: input.id, status: input.status }), input.now)
-    ]);
+    ];
+    if (input.status !== 'sent_to_migration') {
+        const nextVersion = input.version + 1;
+        if (input.status === 'migration_approved') {
+            statements.push(
+                database.prepare(`
+                    UPDATE migration_office_states
+                    SET state = 'approved', note = '', deadline = NULL,
+                        updated_by_staff_id = ?, updated_at = ?
+                    WHERE record_kind = 'physical' AND record_id = ?
+                      AND EXISTS (
+                        SELECT 1 FROM physical_intakes
+                        WHERE id = ? AND status = 'migration_approved' AND lock_version = ?
+                      )
+                `).bind(input.staffId, input.now, input.id, input.id, nextVersion)
+            );
+        } else {
+            statements.push(
+                database.prepare(`
+                    DELETE FROM migration_office_states
+                    WHERE record_kind = 'physical' AND record_id = ?
+                      AND EXISTS (
+                        SELECT 1 FROM physical_intakes
+                        WHERE id = ? AND status = ? AND lock_version = ?
+                      )
+                `).bind(input.id, input.id, input.status, nextVersion)
+            );
+        }
+    } else {
+        const nextVersion = input.version + 1;
+        statements.push(
+            database.prepare(`
+                DELETE FROM migration_office_states
+                WHERE record_kind = 'physical' AND record_id = ?
+                  AND state = 'approved'
+                  AND EXISTS (
+                    SELECT 1 FROM physical_intakes
+                    WHERE id = ? AND status = 'sent_to_migration' AND lock_version = ?
+                  )
+            `).bind(input.id, input.id, nextVersion)
+        );
+    }
+    const result = await database.batch(statements);
     return result[0].meta.changes === 1;
 }
 

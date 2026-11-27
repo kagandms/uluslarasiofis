@@ -948,7 +948,7 @@ test('staff application workflow renders rollback action in the bordeaux row wit
     assert.equal(revertButton.classList.contains('btn-primary'), true);
     assert.equal(revertButton.disabled, false);
     assert.equal(revertButton.dataset.isRevert, 'true');
-    assert.equal(revertButton.textContent, 'Göç İdaresine Gönderildi');
+    assert.equal(revertButton.textContent, 'Göç İdaresi İnceliyor');
 });
 
 test('staff application workflow renders rollback action when application is completed', async (context) => {
@@ -985,7 +985,7 @@ test('staff application workflow renders rollback action when application is com
     assert.equal(revertButton.classList.contains('btn-primary'), true);
     assert.equal(revertButton.disabled, false);
     assert.equal(revertButton.dataset.isRevert, 'true');
-    assert.equal(revertButton.textContent, 'Göç İdaresi Onayladı');
+    assert.equal(revertButton.textContent, 'Göç İdaresi Tarafından Onaylandı');
 });
 
 test('staff sees available status actions directly and rejection reason only after choosing reject', async (context) => {
@@ -1398,7 +1398,7 @@ test('online queue searches while typing and changes status immediately without 
     assert.equal(status.querySelector('[value="new"]'), null);
     assert.equal(status.querySelector('[value="completed"]'), null);
     assert.equal(status.querySelector('[value="terminal"]'), null);
-    assert.equal(status.querySelector('[value="migration"]').textContent, 'Göç İdaresine Gönderildi');
+    assert.equal(status.querySelector('[value="migration"]').textContent, 'Göç İdaresi İnceliyor');
     assert.equal(root.querySelector('[name="has_note"]'), null);
     assert.deepEqual(
         [...status.options].map((option) => [option.value, option.textContent]),
@@ -1408,7 +1408,9 @@ test('online queue searches while typing and changes status immediately without 
             ['under_review', 'İncelemede'],
             ['resubmission_required', 'Yeniden yükleme gerekli'],
             ['approved', 'Onaylandı'],
-            ['migration', 'Göç İdaresine Gönderildi'],
+            ['migration', 'Göç İdaresi İnceliyor'],
+            ['migration_missing_documents', 'Göç: Eksik evrak'],
+            ['migration_approved', 'Göç İdaresi tarafından onayladı'],
             ['noted', 'Notu olanlar'],
             ['not_noted', 'Notu olmayanlar']
         ]
@@ -1593,7 +1595,7 @@ test('status workflow disables all five buttons and shows pending label while tr
     const updatedCurrent = root.querySelector('[data-target-status="sent_to_migration"]');
     assert.equal(updatedCurrent.getAttribute('aria-pressed'), 'true');
     assert.equal(updatedCurrent.disabled, true);
-    assert.equal(updatedCurrent.textContent, '✓ Göç İdaresine Gönderildi');
+    assert.equal(updatedCurrent.textContent, '✓ Göç İdaresi İnceliyor');
 });
 
 test('resubmission_required keeps waiting message and marks none of the five status buttons as current', async (context) => {
@@ -1896,4 +1898,201 @@ test('pdfMergerModal uses downloadFilename when provided and keeps dated fallbac
         resolveMergedPdfFilename({ downloadFilename: null }, fixedDate),
         'Birlestirilmis_Belgeler_2026-11-24.pdf'
     );
+});
+
+test('detail view supports submitted application two-step resubmission with retry on second-call failure and blocks sent_to_migration', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    const transitions = [];
+    const resubmissions = [];
+    let failResubmissionOnce = true;
+
+    const submittedApp = { ...QUEUE_ITEM, id: 'app-sub-1', status: 'submitted', updated_at: '2026-11-27T08:00:00.000Z' };
+    const api = {
+        async queryApplications() { return createQueuePayload([submittedApp]); },
+        async readApplicationDetail(id) {
+            if (id === 'app-mig-1') {
+                return {
+                    application: { ...QUEUE_ITEM, id: 'app-mig-1', status: 'sent_to_migration' },
+                    documents: [{
+                        code: 'passport', label_key: 'documentPassport', revision_number: 1,
+                        revision_status: 'submitted', upload_status: 'finalized', scan_status: 'failed',
+                        access_available: false, can_approve: false, can_request_resubmission: false
+                    }]
+                };
+            }
+            return {
+                application: { ...submittedApp },
+                allowed_status_transitions: ['completed'],
+                documents: [{
+                    code: 'passport', label_key: 'documentPassport', revision_number: 1,
+                    revision_status: 'submitted', upload_status: 'finalized', scan_status: 'unsafe',
+                    access_available: false, can_approve: false, can_request_resubmission: true
+                }]
+            };
+        },
+        async transitionApplication(appId, targetStatus, updatedAt) {
+            transitions.push({ appId, targetStatus, updatedAt });
+            if (targetStatus === 'completed') {
+                throw new Error('Not ready');
+            }
+            submittedApp.status = targetStatus;
+            submittedApp.updated_at = '2026-11-27T08:01:00.000Z';
+            return { application_status: targetStatus, updated_at: submittedApp.updated_at };
+        },
+        async requestDocumentResubmission(appId, code, rev, reason) {
+            resubmissions.push({ appId, code, rev, reason });
+            if (failResubmissionOnce) {
+                failResubmissionOnce = false;
+                throw new Error('Temporary failure');
+            }
+            return { ok: true };
+        }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const reqBtn = root.querySelector('[data-action="request-document-resubmission"]');
+    assert.equal(reqBtn.textContent, 'İncelemeye al ve tekrar iste');
+    reqBtn.click();
+
+    const textarea = root.querySelector('[data-action="resubmission-reason"]');
+    assert.match(textarea.value, /Güvenlik taraması.*Security scan/);
+
+    // First submit: transition succeeds, requestDocumentResubmission fails -> stays under_review, error shown
+    root.querySelector('.staff-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(transitions.length, 1);
+    assert.equal(resubmissions.length, 1);
+    assert.match(root.querySelector('.staff-resubmission-form [role="alert"]').textContent, /İşlem tamamlanamadı/);
+
+    // Subsequent status transition before retry must use the fresh updated_at from the first transition
+    root.querySelector('[data-action="application-status-transition"][data-target-status="completed"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(transitions.length, 2);
+    assert.equal(transitions[1].updatedAt, '2026-11-27T08:01:00.000Z');
+
+    // Second submit: only requestDocumentResubmission is called
+    root.querySelector('.staff-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(transitions.length, 2);
+    assert.equal(resubmissions.length, 2);
+
+    // sent_to_migration: open via scanner event, no button, shows "Önce Göç'ten geri alın"
+    document.dispatchEvent(new document.defaultView.CustomEvent('staff-scanner:open-application', {
+        detail: { applicationId: 'app-mig-1' }
+    }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(root.querySelector('[data-action="request-document-resubmission"]'), null);
+    assert.match(root.textContent, /Önce Göç'ten geri alın/);
+});
+
+test('two-step resubmission reloads detail and queue on step 2 failure while preserving error and typed reason, and scanner event reloads open views', async (context) => {
+    const { document, root } = createStaffDom();
+    installDocument(context, document);
+    let serverStatus = 'submitted';
+    let serverUpdatedAt = '2026-11-27T08:00:00.000Z';
+    let detailReads = 0;
+    let queueQueries = 0;
+    let failStep2Once = true;
+    const resubmissions = [];
+
+    const api = {
+        async queryApplications() {
+            queueQueries += 1;
+            return createQueuePayload([{ ...QUEUE_ITEM, id: 'app-two-step', status: serverStatus, updated_at: serverUpdatedAt }]);
+        },
+        async readApplicationDetail(id) {
+            detailReads += 1;
+            return {
+                application: { ...QUEUE_ITEM, id, status: serverStatus, updated_at: serverUpdatedAt },
+                allowed_status_transitions: serverStatus === 'submitted' ? ['under_review'] : ['completed'],
+                documents: [{
+                    code: 'passport',
+                    label_key: 'documentPassport',
+                    revision_number: 1,
+                    revision_status: 'submitted',
+                    upload_status: 'finalized',
+                    scan_status: 'failed',
+                    access_available: false,
+                    can_approve: false,
+                    can_request_resubmission: true
+                }]
+            };
+        },
+        async transitionApplication(_id, targetStatus) {
+            serverStatus = targetStatus;
+            serverUpdatedAt = '2026-11-27T08:01:00.000Z';
+            return { application_status: targetStatus, updated_at: serverUpdatedAt };
+        },
+        async requestDocumentResubmission(id, code, rev, reason) {
+            resubmissions.push({ id, code, rev, reason });
+            if (failStep2Once) {
+                failStep2Once = false;
+                throw new Error('Geçici sunucu hatası');
+            }
+            return { ok: true };
+        }
+    };
+
+    initWorkspaceNavigation();
+    initializeStaffApplicationsManager(root, api);
+    document.querySelector('.home-actions [data-workspace-view="applications"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+    root.querySelector('[data-action="open-detail"]').click();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const detailReadsBefore = detailReads;
+    const queueQueriesBefore = queueQueries;
+
+    root.querySelector('[data-action="request-document-resubmission"]').click();
+    const textarea = root.querySelector('[data-action="resubmission-reason"]');
+    textarea.value = 'Özel yeniden yükleme nedeni.';
+    textarea.dispatchEvent(new document.defaultView.Event('input', { bubbles: true }));
+    root.querySelector('.staff-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Step 1 succeeded and step 2 failed -> detail & queue reloaded, form/reason/error preserved
+    assert.equal(detailReads, detailReadsBefore + 1);
+    assert.equal(queueQueries, queueQueriesBefore + 1);
+    assert.equal(root.querySelector('[data-action="resubmission-reason"]')?.value, 'Özel yeniden yükleme nedeni.');
+    assert.match(root.querySelector('.staff-resubmission-form [role="alert"]').textContent, /İşlem tamamlanamadı/);
+
+    // Retry submits step 2 with the preserved typed reason and succeeds
+    root.querySelector('.staff-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(resubmissions.length, 2);
+    assert.equal(resubmissions[1].reason, 'Özel yeniden yükleme nedeni.');
+    assert.equal(root.querySelector('.staff-resubmission-form'), null);
+
+    // Scanner DOM event reloads open detail + queue snapshot
+    const detailReadsBeforeEvent = detailReads;
+    const queueQueriesBeforeEvent = queueQueries;
+    document.dispatchEvent(new document.defaultView.CustomEvent('staff-scanner:resubmission-requested', {
+        detail: { applicationId: 'app-two-step', documentCode: 'passport' }
+    }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(detailReads, detailReadsBeforeEvent + 1);
+    assert.equal(queueQueries, queueQueriesBeforeEvent + 1);
+
+    // Scanner DOM event also reloads open queue view
+    root.querySelector('[data-action="back-to-queue"]').click();
+    const queueQueriesInQueue = queueQueries;
+    document.dispatchEvent(new document.defaultView.CustomEvent('staff-scanner:resubmission-requested', {
+        detail: { applicationId: 'app-two-step', documentCode: 'passport' }
+    }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(queueQueries, queueQueriesInQueue + 1);
 });

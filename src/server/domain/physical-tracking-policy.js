@@ -74,6 +74,27 @@ export function readPhysicalTrackingStatus(intake) {
     return visibleStatuses.includes(intake.status) ? intake.status : 'contact_office';
 }
 
+/**
+ * Picks only the public-safe migration missing-documents flag and ISO deadline when the physical record is
+ * currently in `sent_to_migration` and the overlay indicates `missing_documents`.
+ * @param {string} officeStatus Public office status from `readPhysicalTrackingStatus`.
+ * @param {{ migration_missing_documents?: boolean, migration_missing_deadline?: string }|null|undefined} migrationMissing Overlay summary.
+ * @returns {object} Public-safe fields to spread into the physical tracking DTO.
+ */
+export function pickPhysicalMigrationMissingFields(officeStatus, migrationMissing) {
+    if (officeStatus !== 'sent_to_migration' || migrationMissing?.migration_missing_documents !== true) {
+        return {};
+    }
+    const deadline = typeof migrationMissing.migration_missing_deadline === 'string'
+        && /^\d{4}-\d{2}-\d{2}$/.test(migrationMissing.migration_missing_deadline)
+        ? migrationMissing.migration_missing_deadline
+        : null;
+    return {
+        migration_missing_documents: true,
+        ...(deadline ? { migration_missing_deadline: deadline } : {})
+    };
+}
+
 /** Builds a versioned, staff-only document snapshot. @param {object} intake Record. @param {string|null} portalOrigin Trusted origin. @param {string} createdAt Receipt UTC time. @returns {object} Snapshot. */
 export function buildReceiptSnapshot(intake, portalOrigin, createdAt) {
     return { student_number: intake.student_number, first_name: intake.first_name, last_name: intake.last_name, passport_number: intake.passport_number,

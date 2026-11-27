@@ -44,6 +44,7 @@ function readQuery(body) {
     }
     return {
         q: q.trim(), statuses: PHYSICAL_STATUS_FILTERS[status],
+        migrationMissingDocuments: status === 'migration_missing_documents',
         hasNote: hasNote === 'all' ? null : hasNote, fromDate, toDate, page, pageSize
     };
 }

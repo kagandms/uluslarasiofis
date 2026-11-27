@@ -47,7 +47,8 @@ test('office_inquiries migration 0045 exists without version collision and creat
     assert.ok(tables.includes('office_inquiries'));
     assert.deepEqual(columns, [
         'id', 'first_name', 'last_name', 'phone', 'email', 'message',
-        'language', 'status', 'handled_by_staff_id', 'handled_at', 'created_at', 'updated_at'
+        'language', 'status', 'handled_by_staff_id', 'handled_at', 'created_at', 'updated_at',
+        'staff_note', 'staff_note_updated_by_staff_id', 'staff_note_updated_at'
     ]);
     assert.ok(indexes.includes('idx_office_inquiries_status_created'));
 });
@@ -113,6 +114,62 @@ test('office_inquiries migration enforces defaults, nullable email, and CHECK co
                 id, first_name, last_name, phone, email, message, language, handled_by_staff_id
             ) VALUES ('inq-bad-staff', 'Ali', 'Kaya', '+905551112233', NULL, 'Geçerli mesaj', 'tr', 'missing-staff')
         `).run(),
+        /FOREIGN KEY constraint failed/
+    );
+    assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);
+});
+
+test('office_inquiries migration 0048 adds staff_note columns with length, multilingual, and foreign key constraints', () => {
+    const migrationFiles = readdirSync(new URL('../migrations/', import.meta.url))
+        .filter((file) => file.endsWith('.sql'))
+        .sort();
+    const version48Files = migrationFiles.filter((file) => file.startsWith('0048_'));
+    assert.deepEqual(version48Files, ['0048_office_inquiry_notes.sql']);
+
+    const database = createDatabase();
+    insertInquiry(database, { id: 'inq-note-1' });
+
+    const initial = database.prepare(`
+        SELECT staff_note, staff_note_updated_by_staff_id, staff_note_updated_at
+        FROM office_inquiries WHERE id = 'inq-note-1'
+    `).get();
+    assert.equal(initial.staff_note, null);
+    assert.equal(initial.staff_note_updated_by_staff_id, null);
+    assert.equal(initial.staff_note_updated_at, null);
+
+    // 1000-character and multilingual notes (Turkish, Cyrillic, Arabic) succeed.
+    database.prepare(`
+        INSERT INTO staff_users (id, username, normalized_username, password_hash, display_name, role)
+        VALUES ('staff-note-1', 'staff1', 'staff1', 'hash', 'Deniz Görevli', 'reviewer')
+    `).run();
+    database.prepare(`
+        UPDATE office_inquiries
+        SET staff_note = ?, staff_note_updated_by_staff_id = 'staff-note-1', staff_note_updated_at = '2026-11-27T08:00:00.000Z'
+        WHERE id = 'inq-note-1'
+    `).run('ğ'.repeat(1000));
+    assert.equal(
+        database.prepare("SELECT length(staff_note) AS len FROM office_inquiries WHERE id = 'inq-note-1'").get().len,
+        1000
+    );
+
+    const multilingualNote = 'Öğrenci arandı · Студент позвонил · تم الاتصال بالطالب';
+    database.prepare("UPDATE office_inquiries SET staff_note = ? WHERE id = 'inq-note-1'").run(multilingualNote);
+    assert.equal(
+        database.prepare("SELECT staff_note FROM office_inquiries WHERE id = 'inq-note-1'").get().staff_note,
+        multilingualNote
+    );
+
+    // Blank / whitespace-only and 1001-character notes fail CHECK constraint.
+    assert.throws(
+        () => database.prepare("UPDATE office_inquiries SET staff_note = '   ' WHERE id = 'inq-note-1'").run(),
+        /CHECK constraint failed/
+    );
+    assert.throws(
+        () => database.prepare("UPDATE office_inquiries SET staff_note = ? WHERE id = 'inq-note-1'").run('a'.repeat(1001)),
+        /CHECK constraint failed/
+    );
+    assert.throws(
+        () => database.prepare("UPDATE office_inquiries SET staff_note_updated_by_staff_id = 'missing-staff' WHERE id = 'inq-note-1'").run(),
         /FOREIGN KEY constraint failed/
     );
     assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);

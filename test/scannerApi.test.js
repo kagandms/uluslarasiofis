@@ -368,3 +368,130 @@ test('replacement scan resumes review only after all current documents are clean
             condition === 'ready' ? 'under_review' : 'resubmission_required', condition);
     }
 });
+
+test('readStatus returns current non-deleted failed and unsafe jobs with applicant metadata and caps at 50', async () => {
+    const { environment, database } = fixture();
+    const repository = createScannerRepository(database);
+
+    // Seed 1 superseded (is_current=0) failed revision: must NOT be listed
+    database.exec(`
+        INSERT INTO students(id, student_number, normalized_student_number) VALUES ('s-sup', 'SUP-1', 'SUP-1');
+        INSERT INTO applications(id, student_id, application_type, status, first_name, last_name)
+          VALUES ('app-sup', 's-sup', 'initial', 'under_review', 'Eski', 'Revizyon');
+        INSERT INTO document_records(id, application_id, requirement_id, application_type)
+          VALUES ('d-sup', 'app-sup', 'req-initial-passport', 'initial');
+        INSERT INTO document_revisions(id, document_record_id, revision_number, status, is_current, submitted_by_type)
+          VALUES ('r-sup-old', 'd-sup', 1, 'submitted', 0, 'student'),
+                 ('r-sup-new', 'd-sup', 2, 'submitted', 1, 'student');
+        INSERT INTO document_revision_files(id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status)
+          VALUES ('f-sup-old', 'r-sup-old', 0, 'quarantine/sup-old', 'old.pdf', 'application/pdf', 20, 'finalized', 'failed'),
+                 ('f-sup-new', 'r-sup-new', 0, 'quarantine/sup-new', 'new.pdf', 'application/pdf', 20, 'finalized', 'clean');
+    `);
+
+    // Seed 1 deleted application with failed file: must NOT be listed
+    database.exec(`
+        INSERT INTO staff_users(id, username, normalized_username, password_hash, display_name, role)
+          VALUES ('staff-del', 'staffdel', 'staffdel', 'hash', 'Staff Del', 'admin');
+        INSERT INTO students(id, student_number, normalized_student_number) VALUES ('s-del', 'DEL-1', 'DEL-1');
+        INSERT INTO applications(id, student_id, application_type, status, first_name, last_name)
+          VALUES ('app-del', 's-del', 'initial', 'under_review', 'Silinen', 'Basvuru');
+        INSERT INTO application_deletions(application_id, previous_status, state, deleted_by_staff_id, deleted_at, purge_started_at)
+          VALUES ('app-del', 'under_review', 'soft_deleted', 'staff-del', '2026-11-27T00:00:00.000Z', NULL);
+        INSERT INTO document_records(id, application_id, requirement_id, application_type)
+          VALUES ('d-del', 'app-del', 'req-initial-passport', 'initial');
+        INSERT INTO document_revisions(id, document_record_id, revision_number, status, is_current, submitted_by_type)
+          VALUES ('r-del', 'd-del', 1, 'submitted', 1, 'student');
+        INSERT INTO document_revision_files(id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status)
+          VALUES ('f-del', 'r-del', 0, 'quarantine/del', 'del.pdf', 'application/pdf', 20, 'finalized', 'failed');
+    `);
+
+    // Seed 51 current non-deleted failed/unsafe files (i=0 and i=1 are newest; i=50 is oldest and capped out)
+    for (let i = 0; i < 51; i += 1) {
+        const suffix = String(i).padStart(2, '0');
+        const reverseSec = String(50 - i).padStart(2, '0');
+        const scanStatus = i === 0 ? 'unsafe' : 'failed';
+        const resultCode = i === 0 ? 'malware' : 'scan_timeout';
+        const appStatus = i === 0 ? 'submitted' : i === 1 ? 'sent_to_migration' : 'under_review';
+        database.exec(`
+            INSERT INTO students(id, student_number, normalized_student_number) VALUES ('s-${suffix}', 'STU-${suffix}', 'STU-${suffix}');
+            INSERT INTO applications(id, student_id, application_type, status, first_name, last_name)
+              VALUES ('app-${suffix}', 's-${suffix}', 'initial', '${appStatus}', 'Ad${suffix}', 'Soyad${suffix}');
+            INSERT INTO document_records(id, application_id, requirement_id, application_type)
+              VALUES ('d-${suffix}', 'app-${suffix}', 'req-initial-passport', 'initial');
+            INSERT INTO document_revisions(id, document_record_id, revision_number, status, is_current, submitted_by_type)
+              VALUES ('r-${suffix}', 'd-${suffix}', 1, 'submitted', 1, 'student');
+            INSERT INTO document_revision_files(id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status)
+              VALUES ('f-${suffix}', 'r-${suffix}', 0, 'quarantine/f-${suffix}', 'doc.pdf', 'application/pdf', 20, 'finalized', '${scanStatus}');
+            INSERT INTO upload_intents(id, revision_file_id, idempotency_key, expires_at, status, completed_at)
+              VALUES ('i-${suffix}', 'f-${suffix}', 'ik-${suffix}', '2026-11-27T01:00:00.000Z', 'completed', '2026-11-27T00:00:00.000Z');
+            INSERT INTO document_scan_jobs(id, file_id, revision_id, storage_key, byte_size, media_type, status, outcome, result_code, attempts, available_at, created_at, updated_at)
+              VALUES ('job-${suffix}', 'f-${suffix}', 'r-${suffix}', 'quarantine/f-${suffix}', 20, 'application/pdf',
+                      '${i === 0 ? 'complete' : 'failed'}', '${scanStatus}', '${resultCode}', 3,
+                      '2026-11-27T00:00:00.000Z', '2026-11-27T00:00:00.000Z', '2026-11-27T00:00:${reverseSec}.000Z');
+        `);
+    }
+
+    const status = await repository.readStatus();
+    assert.equal(status.actionable_failed_total, 51);
+    assert.equal(status.failed_jobs.length, 50);
+    assert.equal(status.failed_jobs.some((job) => job.application_id === 'app-sup'), false);
+    assert.equal(status.failed_jobs.some((job) => job.application_id === 'app-del'), false);
+    assert.equal(status.failed_jobs.some((job) => job.application_id === 'app-50'), false);
+
+    // Check unsafe item (i=0) and sent_to_migration item (i=1)
+    const unsafeJob = status.failed_jobs.find((job) => job.application_id === 'app-00');
+    assert.ok(unsafeJob);
+    assert.equal(unsafeJob.scan_status, 'unsafe');
+    assert.equal(unsafeJob.student_number, 'STU-00');
+    assert.equal(unsafeJob.first_name, 'Ad00');
+    assert.equal(unsafeJob.last_name, 'Soyad00');
+    assert.equal(unsafeJob.document_code, 'passport');
+    assert.equal(unsafeJob.revision_number, 1);
+    assert.equal(unsafeJob.application_status, 'submitted');
+    assert.equal(unsafeJob.can_request_resubmission, true);
+
+    const migrationJob = status.failed_jobs.find((job) => job.application_id === 'app-01');
+    assert.ok(migrationJob);
+    assert.equal(migrationJob.can_request_resubmission, false);
+
+    // Machine-only /api/scanner/status omits applicant PII
+    const machineResponse = await request(environment, 'status', { method: 'GET' });
+    assert.equal(machineResponse.status, 200);
+    const machineStatus = await machineResponse.json();
+    assert.equal(machineStatus.failed_jobs[0].student_number, undefined);
+    assert.equal(machineStatus.failed_jobs[0].first_name, undefined);
+});
+
+test('readStatus excludes unfinalized files, incomplete upload intents, and unaccepted media types', async () => {
+    const { database } = fixture();
+    const repository = createScannerRepository(database);
+
+    database.exec(`
+        INSERT INTO students(id, student_number, normalized_student_number)
+          VALUES ('s-unfin', 'U-1', 'U-1'), ('s-intent', 'U-2', 'U-2'), ('s-mime', 'U-3', 'U-3');
+        INSERT INTO applications(id, student_id, application_type, status, first_name, last_name)
+          VALUES ('app-unfin', 's-unfin', 'initial', 'under_review', 'A', 'B'),
+                 ('app-intent', 's-intent', 'initial', 'under_review', 'C', 'D'),
+                 ('app-mime', 's-mime', 'initial', 'under_review', 'E', 'F');
+        INSERT INTO document_records(id, application_id, requirement_id, application_type)
+          VALUES ('d-unfin', 'app-unfin', 'req-initial-passport', 'initial'),
+                 ('d-intent', 'app-intent', 'req-initial-passport', 'initial'),
+                 ('d-mime', 'app-mime', 'req-initial-passport', 'initial');
+        INSERT INTO document_revisions(id, document_record_id, revision_number, status, is_current, submitted_by_type)
+          VALUES ('r-unfin', 'd-unfin', 1, 'submitted', 1, 'student'),
+                 ('r-intent', 'd-intent', 1, 'submitted', 1, 'student'),
+                 ('r-mime', 'd-mime', 1, 'submitted', 1, 'student');
+        INSERT INTO document_revision_files(id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status)
+          VALUES ('f-unfin', 'r-unfin', 0, 'quarantine/u1', 'u1.pdf', 'application/pdf', 20, 'uploaded', 'failed'),
+                 ('f-intent', 'r-intent', 0, 'quarantine/u2', 'u2.pdf', 'application/pdf', 20, 'finalized', 'failed'),
+                 ('f-mime', 'r-mime', 0, 'quarantine/u3', 'u3.txt', 'text/plain', 20, 'finalized', 'failed');
+        INSERT INTO upload_intents(id, revision_file_id, idempotency_key, expires_at, status, completed_at)
+          VALUES ('i-unfin', 'f-unfin', 'ik-u1', '2026-11-27T01:00:00.000Z', 'completed', '2026-11-27T00:00:00.000Z'),
+                 ('i-intent', 'f-intent', 'ik-u2', '2026-11-27T01:00:00.000Z', 'pending', NULL),
+                 ('i-mime', 'f-mime', 'ik-u3', '2026-11-27T01:00:00.000Z', 'completed', '2026-11-27T00:00:00.000Z');
+    `);
+
+    const status = await repository.readStatus();
+    assert.equal(status.actionable_failed_total, 0);
+    assert.deepEqual(status.failed_jobs, []);
+});

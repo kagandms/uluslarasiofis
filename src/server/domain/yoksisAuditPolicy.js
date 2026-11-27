@@ -37,7 +37,8 @@ const IMPORT_ROW_KEYS = new Set([
     'gocStatus',
     'missingDeadline',
     'missingNote',
-    'gocLastQueryAt'
+    'gocLastQueryAt',
+    'recordDate'
 ]);
 
 /**
@@ -91,13 +92,22 @@ export function classifyStatus(applicationStatus, resultStatus) {
 }
 
 /**
+ * Single source of truth for mapping the Excel "İşlem Tamamlandı" status to the portal sync target.
+ * Kept in one exported constant until the office confirms its exact meaning.
+ */
+export const COMPLETED_GOC_STATUS_TARGET = Object.freeze({
+    normalizedText: 'islem tamamlandi',
+    targetState: 'approved'
+});
+
+/**
  * Classifies an Excel-sourced "Göç Durumu" string into a normalized status category.
  * @param {unknown} gocStatus Raw Göç Durumu text from YÖKSİS Excel export.
  * @returns {'successful'|'pending'|'missing_documents'|'other'} Status category.
  */
 export function classifyGocStatus(gocStatus) {
     const normalized = normalizeSearch(gocStatus);
-    if (normalized === 'islem tamamlandi') return 'successful';
+    if (normalized === COMPLETED_GOC_STATUS_TARGET.normalizedText) return 'successful';
     if (normalized === 'islem bekliyor') return 'pending';
     if (normalized === 'eksik belge istendi' || normalized.startsWith('eksik belge istendi ')) {
         return 'missing_documents';
@@ -133,7 +143,12 @@ export function validateDocuments(value) {
     });
 }
 
-function isValidIsoCalendarDate(value) {
+/**
+ * Checks whether a value is a valid `YYYY-MM-DD` calendar date.
+ * @param {unknown} value Candidate date string.
+ * @returns {boolean} True when valid ISO calendar date.
+ */
+export function isValidIsoCalendarDate(value) {
     if (typeof value !== 'string') return false;
     const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!match) return false;
@@ -145,6 +160,99 @@ function isValidIsoCalendarDate(value) {
     return date.getUTCFullYear() === year
         && date.getUTCMonth() === month - 1
         && date.getUTCDate() === day;
+}
+
+let istanbulDateFormatter;
+
+function getIstanbulDateFormatter() {
+    if (istanbulDateFormatter === undefined) {
+        try {
+            istanbulDateFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Europe/Istanbul',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+        } catch {
+            istanbulDateFormatter = null;
+        }
+    }
+    return istanbulDateFormatter;
+}
+
+function formatIstanbulDate(date) {
+    const formatter = getIstanbulDateFormatter();
+    if (formatter) {
+        try {
+            const parts = formatter.formatToParts(date);
+            const get = (type) => parts.find((part) => part.type === type)?.value || '';
+            const year = get('year');
+            const month = get('month');
+            const day = get('day');
+            if (year && month && day) return `${year}-${month}-${day}`;
+        } catch {
+            // Fallback below when Intl formatting fails.
+        }
+    }
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+/**
+ * Returns today's calendar date (`YYYY-MM-DD`) in `Europe/Istanbul`.
+ * @param {number} [nowMs=Date.now()] Reference timestamp in milliseconds.
+ * @returns {string} ISO calendar date.
+ */
+export function getIstanbulTodayIso(nowMs = Date.now()) {
+    return formatIstanbulDate(new Date(nowMs));
+}
+
+/**
+ * Converts a calendar date (`YYYY-MM-DD`) or timestamp string to an `Europe/Istanbul` calendar date.
+ * @param {unknown} value Raw date or timestamp string.
+ * @returns {string|null} ISO calendar date or null when invalid.
+ */
+export function toIstanbulCalendarDate(value) {
+    if (typeof value !== 'string') return null;
+    const text = value.trim();
+    if (!text) return null;
+    if (isValidIsoCalendarDate(text)) return text;
+    const parsed = new Date(text);
+    if (!Number.isFinite(parsed.getTime())) return null;
+    return formatIstanbulDate(parsed);
+}
+
+/**
+ * Computes signed calendar day difference `toIso - fromIso` between two `YYYY-MM-DD` dates.
+ * @param {unknown} fromIso Start ISO date.
+ * @param {unknown} toIso End ISO date.
+ * @returns {number|null} Signed day difference, or null if either date is invalid.
+ */
+export function diffIsoCalendarDays(fromIso, toIso) {
+    if (!isValidIsoCalendarDate(fromIso) || !isValidIsoCalendarDate(toIso)) return null;
+    const [fy, fm, fd] = fromIso.split('-').map(Number);
+    const [ty, tm, td] = toIso.split('-').map(Number);
+    const fromUtc = Date.UTC(fy, fm - 1, fd);
+    const toUtc = Date.UTC(ty, tm - 1, td);
+    return Math.round((toUtc - fromUtc) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Shifts a valid `YYYY-MM-DD` calendar date by `deltaDays` days.
+ * @param {string} isoDate Base ISO date.
+ * @param {number} deltaDays Signed day offset.
+ * @returns {string|null} Shifted ISO date or null when invalid.
+ */
+export function shiftIsoCalendarDate(isoDate, deltaDays) {
+    if (!isValidIsoCalendarDate(isoDate) || !Number.isInteger(deltaDays)) return null;
+    const [y, m, d] = isoDate.split('-').map(Number);
+    const shifted = new Date(Date.UTC(y, m - 1, d + deltaDays));
+    const sy = shifted.getUTCFullYear();
+    const sm = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+    const sd = String(shifted.getUTCDate()).padStart(2, '0');
+    return `${sy}-${sm}-${sd}`;
 }
 
 /**
@@ -282,6 +390,7 @@ export function validateImportRow(value) {
     }
 
     const gocLastQueryAt = readOptionalIsoDate(value.gocLastQueryAt, 'Göç son sorgu tarihi');
+    const recordDate = readOptionalIsoDate(value.recordDate, 'Kayıt tarihi');
 
     return {
         applicationNumber,
@@ -296,7 +405,8 @@ export function validateImportRow(value) {
         resultStatus: 'verified',
         missingDeadline,
         missingNote,
-        gocLastQueryAt
+        gocLastQueryAt,
+        recordDate
     };
 }
 

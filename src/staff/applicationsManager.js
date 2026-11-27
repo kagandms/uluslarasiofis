@@ -12,6 +12,7 @@ import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloa
 import { openTebligatDialog } from '../ui/tebligatDialog.js';
 import { canPrintTebligat } from '../shared/tebligatPage.js';
 import { createApplicationQueueFilters, splitNoteStatus } from './application-queue-filters.js';
+import { createStatusWithMigrationBadge } from './application-queue-table.js';
 import { describeGocnetPreparationError, prepareGocnetTransfer, readRegistrationNumberFromForm } from './gocnet-transfer.js';
 import { requestGocnetCorrection } from './gocnet-correction-dialog.js';
 import { createRecordNoteButton, loadTableRecordNotes } from './record-note.js';
@@ -25,8 +26,8 @@ import {
 const STATUS_LABELS = Object.freeze({
     draft: 'Taslak',
     submitted: 'Gönderildi', under_review: 'İncelemede', resubmission_required: 'Yeniden yükleme gerekli',
-    approved_for_processing: 'İşleme alınmak üzere onaylandı', sent_to_migration: 'Göç İdaresine gönderildi',
-    migration_approved: 'Göç İdaresi onayladı', completed: 'Tamamlandı', cancelled: 'İptal edildi', rejected: 'Reddedildi'
+    approved_for_processing: 'İşleme alınmak üzere onaylandı', sent_to_migration: 'Göç İdaresi inceliyor',
+    migration_approved: 'Göç İdaresi tarafından onaylandı', completed: 'Tamamlandı', cancelled: 'İptal edildi', rejected: 'Reddedildi'
 });
 const DOCUMENT_STATE_LABELS = Object.freeze({
     pending: 'İnceleme bekliyor', under_review: 'İnceleniyor', approved: 'Onaylandı',
@@ -37,7 +38,9 @@ const DOCUMENT_STATE_LABELS = Object.freeze({
 const STATUS_FILTERS = Object.freeze([
     ['all', 'Tüm durumlar'], ['draft', 'Taslaklar'], ['under_review', 'İncelemede'],
     ['resubmission_required', 'Yeniden yükleme gerekli'], ['approved', 'Onaylandı'],
-    ['migration', 'Göç İdaresine Gönderildi'],
+    ['migration', 'Göç İdaresi İnceliyor'],
+    ['migration_missing_documents', 'Göç: Eksik evrak'],
+    ['migration_approved', 'Göç İdaresi tarafından onayladı'],
     ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']
 ]);
 const SAFE_PREVIEW_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
@@ -50,8 +53,8 @@ const WORKFLOW_STATUSES = Object.freeze([
 ]);
 const STATUS_ACTION_LABELS = Object.freeze({
     under_review: 'İncelemede',
-    sent_to_migration: 'Göç İdaresine Gönderildi',
-    migration_approved: 'Göç İdaresi Onayladı',
+    sent_to_migration: 'Göç İdaresi İnceliyor',
+    migration_approved: 'Göç İdaresi Tarafından Onaylandı',
     completed: 'Tamamlandı',
     rejected: 'Reddedildi'
 });
@@ -256,12 +259,18 @@ function createQueueTable(document, items, onOpenDetail, onDownloadPdf, onDelete
         const values = [
             item.passport_number,
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
-            readStatusLabel(item.status),
+            createStatusWithMigrationBadge(
+                document,
+                readStatusLabel(item.status),
+                item.status === 'sent_to_migration' ? item.migration_office : null
+            ),
             formatDate(item.submitted_at || item.created_at),
             formatDate(item.updated_at)
         ];
         values.forEach((value, index) => {
-            const cell = createText(document, 'td', '', displayValue(value));
+            const cell = document.createElement('td');
+            if (value?.nodeType) cell.append(value);
+            else cell.textContent = displayValue(value);
             cell.dataset.label = headers[index + 1];
             row.append(cell);
         });
@@ -660,13 +669,25 @@ function createApplicationSummary(document, application, state = {}, handlers = 
     return section;
 }
 
+function readDefaultResubmissionReason(item) {
+    if (item?.scan_status === 'unsafe') {
+        return 'Güvenlik taraması dosyayı güvenli bulmadı; lütfen yeni ve temiz bir dosya yükleyin. / Security scan found the file unsafe; please upload a new clean file.';
+    }
+    if (item?.scan_status === 'failed') {
+        return 'Dosya güvenlik taramasından geçemedi; lütfen açılabilir yeni bir PDF veya fotoğraf yükleyin. / File could not pass security scan; please upload a new readable PDF or photo.';
+    }
+    return '';
+}
+
 function createResubmissionButton(document, item, options) {
     const request = document.createElement('button');
     request.type = 'button';
     request.className = 'btn btn-outline';
     request.dataset.action = 'request-document-resubmission';
     request.disabled = options.isPending;
-    request.textContent = item.revision_number == null ? 'Belge Yüklemesini İste' : 'Yeniden Yükleme İste';
+    request.textContent = options.applicationStatus === 'submitted'
+        ? 'İncelemeye al ve tekrar iste'
+        : (item.revision_number == null ? 'Belge Yüklemesini İste' : 'Yeniden Yükleme İste');
     request.addEventListener('click', () => options.handlers.onOpenResubmission(item));
     return request;
 }
@@ -767,7 +788,11 @@ function createResubmissionForm(document, item, state, handlers) {
     reason.dataset.action = 'resubmission-reason';
     label.htmlFor = 'staff-resubmission-reason';
     reason.id = label.htmlFor;
-    reason.addEventListener('input', () => reason.setCustomValidity(''));
+    reason.value = state.resubmissionReason ?? readDefaultResubmissionReason(item);
+    reason.addEventListener('input', () => {
+        reason.setCustomValidity('');
+        state.resubmissionReason = reason.value;
+    });
     cancel.type = 'button';
     cancel.className = 'btn btn-outline';
     cancel.dataset.action = 'cancel-document-resubmission';
@@ -830,7 +855,7 @@ function createDocumentSection(document, applicationId, documents, state, handle
         details.className = 'staff-application-details-grid staff-application-document-details-grid';
         fields.forEach(([fieldLabel, value]) => appendDetail(document, details, fieldLabel, value));
         card.append(details, item.access_available === true
-            ? createDocumentAccessActions(document, item, { applicationId, handlers, isPending: Boolean(state.actionPending) })
+            ? createDocumentAccessActions(document, item, { applicationId, applicationStatus: state.detail?.application?.status, handlers, isPending: Boolean(state.actionPending) })
             : createUnavailableDocumentState(document, item));
         if (item.scan_status === 'pending' && item.file_id) {
             const scanAction = document.createElement('div');
@@ -846,7 +871,16 @@ function createDocumentSection(document, applicationId, documents, state, handle
             card.append(scanAction);
         }
         if (item.access_available !== true && item.can_request_resubmission === true) {
-            card.append(createDocumentAccessActions(document, item, { applicationId, handlers, isPending: Boolean(state.actionPending) }));
+            card.append(createDocumentAccessActions(document, item, { applicationId, applicationStatus: state.detail?.application?.status, handlers, isPending: Boolean(state.actionPending) }));
+        } else if (item.can_request_resubmission !== true
+            && ['sent_to_migration', 'migration_approved'].includes(state.detail?.application?.status)
+            && ['failed', 'unsafe'].includes(item.scan_status)) {
+            card.append(createText(
+                document,
+                'p',
+                'staff-application-document-migration-note',
+                'Önce Göç\'ten geri alın'
+            ));
         } else if (item.scan_status === 'pending' && item.can_request_resubmission !== true
             && item.revision_number != null && item.revision_status === 'submitted'
             && ['under_review', 'resubmission_required'].includes(state.detail?.application?.status)) {
@@ -1233,6 +1267,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         actionPending: null, actionError: null, actionNotice: null, scanQueuedCode: null, resubmissionDocument: null,
+        resubmissionReason: '',
         fieldEdit: null, fieldEditNotice: null, fieldEditBannerError: null,
         rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
@@ -2038,6 +2073,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         discardPreview();
         state.rejectionTarget = null;
         state.rejectionReason = '';
+        state.resubmissionDocument = null;
+        state.resubmissionReason = '';
         state.view = 'detail';
         state.loading = true;
         state.error = false;
@@ -2086,7 +2123,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         }
         return 'İşlem tamamlanamadı. Güncel durumu kontrol edip tekrar deneyin.';
     }
-    async function completeAction(actionKey, operation) {
+    async function completeAction(actionKey, operation, options = {}) {
         if (state.actionPending || state.fieldEdit?.pending) return;
         const scrollY = document.defaultView?.scrollY ?? 0;
         state.actionPending = actionKey;
@@ -2108,17 +2145,20 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 state.rejectionReason = '';
             }
             state.resubmissionDocument = null;
+            state.resubmissionReason = '';
             discardPreview();
             await refreshDetail();
             await refreshQueueSnapshot();
         } catch (error) {
             state.actionError = readActionError(error);
-            if (error?.status === 409) {
+            const handled = options.onError ? await options.onError(error) : false;
+            if (!handled && error?.status === 409) {
                 if (actionKey.startsWith('status:')) {
                     state.rejectionTarget = null;
                     state.rejectionReason = '';
                 }
                 state.resubmissionDocument = null;
+                state.resubmissionReason = '';
                 discardPreview();
                 await refreshDetail();
                 await refreshQueueSnapshot();
@@ -2190,6 +2230,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     }
     function openResubmission(item) {
         state.resubmissionDocument = item;
+        state.resubmissionReason = readDefaultResubmissionReason(item);
         state.actionError = null;
         render();
         root.querySelector('[data-action="resubmission-reason"]')?.focus();
@@ -2197,13 +2238,50 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     function cancelResubmission() {
         if (state.actionPending) return;
         state.resubmissionDocument = null;
+        state.resubmissionReason = '';
         state.actionError = null;
         render();
     }
     function requestResubmission(item, reason) {
-        return completeAction(`resubmission:${item.code}`, () => api.requestDocumentResubmission(
-            state.detail.application.id, item.code, item.revision_number, reason
-        ));
+        const application = state.detail?.application;
+        if (!application) return;
+        state.resubmissionReason = reason;
+        let step1Succeeded = false;
+        return completeAction(`resubmission:${item.code}`, async () => {
+            if (application.status === 'submitted') {
+                const transitioned = await api.transitionApplication(
+                    application.id,
+                    'under_review',
+                    application.updated_at
+                );
+                step1Succeeded = true;
+                state.detail = {
+                    ...state.detail,
+                    application: {
+                        ...application,
+                        ...(transitioned?.application || {}),
+                        status: transitioned?.application_status || transitioned?.application?.status || 'under_review',
+                        updated_at: transitioned?.updated_at || transitioned?.application?.updated_at || application.updated_at
+                    }
+                };
+            }
+            await api.requestDocumentResubmission(
+                application.id,
+                item.code,
+                item.revision_number,
+                reason
+            );
+        }, {
+            onError: async () => {
+                if (!step1Succeeded) return false;
+                discardPreview();
+                const preservedError = state.actionError;
+                await refreshDetail();
+                await refreshQueueSnapshot();
+                state.actionError = preservedError;
+                return true;
+            }
+        });
     }
     async function sendToMigration(item) {
         if (state.actionPending) return;
@@ -2275,6 +2353,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         discardPreview();
         state.rejectionTarget = null;
         state.rejectionReason = '';
+        state.resubmissionDocument = null;
+        state.resubmissionReason = '';
         state.view = 'queue';
         state.error = false;
         state.loading = false;
@@ -2291,6 +2371,21 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         discardPreview();
         state.view = 'queue';
         void loadQueue();
+    });
+    document.addEventListener('staff-scanner:open-application', (event) => {
+        const applicationId = event.detail?.applicationId;
+        if (applicationId) void openDetail(applicationId);
+    });
+    document.addEventListener('staff-scanner:resubmission-requested', (event) => {
+        const applicationId = event.detail?.applicationId;
+        if (state.view === 'detail') {
+            if (applicationId && state.detail?.application?.id === applicationId) {
+                void refreshDetail();
+            }
+            void refreshQueueSnapshot();
+        } else if (state.view === 'queue') {
+            void loadQueue();
+        }
     });
     document.getElementById('btn-workspace-home')?.addEventListener('click', closePreviewOnWorkspaceExit);
     document.getElementById('btn-go-home-global')?.addEventListener('click', closePreviewOnWorkspaceExit);

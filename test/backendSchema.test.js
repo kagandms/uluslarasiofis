@@ -78,7 +78,7 @@ test('YÖKSİS audit migration stores one validated latest result per applicatio
         'application_status', 'status_category', 'result_status', 'documents_json', 'search_text',
         'scanned_at', 'updated_by_staff_id',
         'source', 'last_seen_import_id', 'unit', 'program', 'missing_deadline',
-        'goc_last_query_at', 'last_transaction_type', 'transaction_count'
+        'goc_last_query_at', 'last_transaction_type', 'transaction_count', 'record_date'
     ]);
     assert.ok(globPatterns.every((pattern) => Buffer.byteLength(pattern, 'utf8') <= 50),
         'D1 rejects GLOB patterns longer than 50 bytes');

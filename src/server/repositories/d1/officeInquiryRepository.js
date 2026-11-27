@@ -15,9 +15,12 @@ export function createOfficeInquiryRepository(database) {
         return database.prepare(`
             SELECT inquiries.id, inquiries.first_name, inquiries.last_name, inquiries.phone,
                    inquiries.email, inquiries.message, inquiries.language, inquiries.status,
-                   staff.display_name AS handled_by_name, inquiries.handled_at, inquiries.created_at
+                   staff.display_name AS handled_by_name, inquiries.handled_at,
+                   inquiries.staff_note, note_staff.display_name AS staff_note_updated_by_name,
+                   inquiries.staff_note_updated_at, inquiries.created_at
             FROM office_inquiries AS inquiries
             LEFT JOIN staff_users AS staff ON staff.id = inquiries.handled_by_staff_id
+            LEFT JOIN staff_users AS note_staff ON note_staff.id = inquiries.staff_note_updated_by_staff_id
             WHERE inquiries.id = ?
             LIMIT 1
         `).bind(id).first();
@@ -61,9 +64,12 @@ export function createOfficeInquiryRepository(database) {
             const result = await database.prepare(`
                 SELECT inquiries.id, inquiries.first_name, inquiries.last_name, inquiries.phone,
                        inquiries.email, inquiries.message, inquiries.language, inquiries.status,
-                       staff.display_name AS handled_by_name, inquiries.handled_at, inquiries.created_at
+                       staff.display_name AS handled_by_name, inquiries.handled_at,
+                       inquiries.staff_note, note_staff.display_name AS staff_note_updated_by_name,
+                       inquiries.staff_note_updated_at, inquiries.created_at
                 FROM office_inquiries AS inquiries
                 LEFT JOIN staff_users AS staff ON staff.id = inquiries.handled_by_staff_id
+                LEFT JOIN staff_users AS note_staff ON note_staff.id = inquiries.staff_note_updated_by_staff_id
                 ${whereClause}
                 ORDER BY inquiries.created_at DESC, inquiries.id DESC
                 LIMIT ?
@@ -127,6 +133,71 @@ export function createOfficeInquiryRepository(database) {
                 throw new Error('Office inquiry status audit did not complete.');
             }
             return findById(id);
+        },
+
+        /**
+         * Soru üzerindeki personel notunu iyimser eşzamanlılık denetimiyle günceller veya siler.
+         * Aynı D1 batch içinde not metni içermeyen denetim kaydı yazar.
+         * @param {{id: string, note: string|null, expectedNoteUpdatedAt: string|null, staffId: string, nowIso?: string, requestId?: string, auditId?: string}} input Not güncelleme girdileri.
+         * @returns {Promise<{status: 'saved'|'conflict'|'not_found', item: object|null}>} Güncelleme sonucu.
+         */
+        async updateNote({
+            id,
+            note,
+            expectedNoteUpdatedAt = null,
+            staffId,
+            nowIso = new Date().toISOString(),
+            requestId = `req_${crypto.randomUUID()}`,
+            auditId = crypto.randomUUID()
+        }) {
+            const safeMetadataJson = JSON.stringify({
+                inquiryId: id,
+                action: note === null ? 'cleared' : 'saved',
+                result: 'success'
+            });
+            const results = await database.batch([
+                database.prepare(`
+                    UPDATE office_inquiries
+                    SET staff_note = ?,
+                        staff_note_updated_by_staff_id = CASE WHEN ? IS NULL THEN NULL ELSE ? END,
+                        staff_note_updated_at = CASE WHEN ? IS NULL THEN NULL ELSE ? END,
+                        updated_at = ?
+                    WHERE id = ?
+                      AND (
+                          (? IS NULL AND staff_note_updated_at IS NULL)
+                          OR staff_note_updated_at = ?
+                      )
+                `).bind(
+                    note,
+                    note,
+                    staffId,
+                    note,
+                    nowIso,
+                    nowIso,
+                    id,
+                    expectedNoteUpdatedAt,
+                    expectedNoteUpdatedAt
+                ),
+                database.prepare(`
+                    INSERT INTO audit_events (
+                        id, event_type, actor_type, actor_staff_id, application_id,
+                        request_id, safe_metadata_json, created_at
+                    )
+                    SELECT ?, 'staff.office_inquiry_note_saved', 'staff', ?, NULL, ?, ?, ?
+                    WHERE changes() = 1
+                `).bind(auditId, staffId, requestId, safeMetadataJson, nowIso)
+            ]);
+            if (results[0]?.meta?.changes === 1) {
+                if (results[1]?.meta?.changes !== 1) {
+                    throw new Error('Office inquiry note audit did not complete.');
+                }
+                return { status: 'saved', item: await findById(id) };
+            }
+            const current = await findById(id);
+            if (!current) {
+                return { status: 'not_found', item: null };
+            }
+            return { status: 'conflict', item: current };
         },
 
         /**

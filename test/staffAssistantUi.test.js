@@ -737,8 +737,8 @@ test('application and yoksisAudit results render Turkish status labels and never
         'İncelemede',
         'Yeniden yükleme gerekli',
         'İşleme alınmak üzere onaylandı',
-        'Göç İdaresine gönderildi',
-        'Göç İdaresi onayladı',
+        'Göç İdaresi inceliyor',
+        'Göç İdaresi tarafından onaylandı',
         'Tamamlandı',
         'İptal edildi',
         'Reddedildi',
@@ -952,4 +952,81 @@ test('tebligat results render compactly via textContent in chat without opening 
     assert.match(log.textContent, /Sayfa: 20\.11\.2026/);
     assert.match(log.textContent, /No: -/);
     assert.match(log.textContent, /İşaretlenmedi/);
+});
+
+test('documentChoices renders clickable choice buttons via textContent and triggers print with preserved copies on click', async (context) => {
+    const { window, doc } = createStaffDom(context, { authenticated: true });
+    const sampleDoc = await PDFDocument.create();
+    sampleDoc.addPage([200, 300]);
+    const sampleBytes = await sampleDoc.save();
+
+    const openedUrls = [];
+    let printCalled = 0;
+    window.URL.createObjectURL = () => 'blob:https://portal.test/choice-pdf';
+    window.URL.revokeObjectURL = () => {};
+    window.open = (url) => {
+        openedUrls.push(url);
+        return {
+            addEventListener(type, handler) {
+                if (type === 'load') handler();
+            },
+            focus() {},
+            print() {
+                printCalled += 1;
+            }
+        };
+    };
+
+    const fetcher = async (url) => {
+        if (url === '/api/staff/assistant') {
+            return createJsonResponse({
+                reply: 'Birden fazla belge eşleşti; hangisini hazırlayayım? Taksit Dilekçesi, Boş Dilekçe',
+                state: 'confused',
+                results: {
+                    kind: 'documentChoices',
+                    copies: 5,
+                    items: [
+                        { documentId: 'taksitlendirme-dilekcesi', title: 'Taksit Dilekçesi' },
+                        { documentId: 'bos-dilekce-formu', title: '<img src=x> Boş Dilekçe' }
+                    ]
+                }
+            });
+        }
+        return {
+            ok: true,
+            status: 200,
+            async arrayBuffer() {
+                return sampleBytes.buffer.slice(
+                    sampleBytes.byteOffset,
+                    sampleBytes.byteOffset + sampleBytes.byteLength
+                );
+            }
+        };
+    };
+
+    const controller = initializeStaffAssistant({ root: doc, fetcher });
+    context.after(() => controller.destroy());
+    controller.open();
+
+    const input = doc.getElementById('staff-assistant-input');
+    input.value = '5 tane dilekçe çıkar';
+    input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    const log = doc.querySelector('[role="log"]');
+    assert.equal(log.querySelector('img'), null);
+    const buttons = [...log.querySelectorAll('.staff-assistant-choice-btn')];
+    assert.equal(buttons.length, 2);
+    assert.equal(buttons[0].textContent, 'Taksit Dilekçesi');
+    assert.equal(buttons[1].textContent, '<img src=x> Boş Dilekçe');
+    assert.equal(openedUrls.length, 0);
+
+    buttons[0].click();
+    await flushPromises();
+
+    assert.equal(buttons[0].disabled, true);
+    assert.equal(buttons[1].disabled, true);
+    assert.deepEqual(openedUrls, ['blob:https://portal.test/choice-pdf']);
+    assert.equal(printCalled, 1);
+    assert.match(log.textContent, /Taksit Dilekçesi için 5 kopya/);
 });

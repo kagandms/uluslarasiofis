@@ -11,6 +11,7 @@ export const INQUIRY_LAST_NAME_MAX_LENGTH = 60;
 export const INQUIRY_EMAIL_MAX_LENGTH = 254;
 export const INQUIRY_MESSAGE_MIN_LENGTH = 5;
 export const INQUIRY_MESSAGE_MAX_LENGTH = 1000;
+export const INQUIRY_NOTE_MAX_LENGTH = 1000;
 export const INQUIRY_MAX_ID_LENGTH = 64;
 export const INQUIRY_MAX_LIST_LIMIT = 100;
 export const INQUIRY_DEFAULT_LIST_LIMIT = 100;
@@ -25,6 +26,7 @@ const INQUIRY_ALLOWED_KEYS = Object.freeze([
     'website'
 ]);
 const STATUS_UPDATE_ALLOWED_KEYS = Object.freeze(['status']);
+const NOTE_UPDATE_ALLOWED_KEYS = Object.freeze(['note', 'expected_note_updated_at']);
 const EMAIL_PATTERN = /^[^\s@?#&%\/\\:;,<>"'()\[\]]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u;
 const SINGLE_LINE_CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F-\u009F\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/u;
 // Çok satırlı mesajlarda yalnızca \n satır sonuna izin verilir; diğer kontrol, bidi ve sıfır genişlikli karakterler reddedilir.
@@ -210,9 +212,57 @@ export function validateInquiryStatusUpdateBody(body) {
 }
 
 /**
+ * Personel soru notu güncelleme gövdesini doğrular.
+ * Boş veya yalnızca boşluk içeren not metni notu silmek için `null` olarak döndürülür.
+ * @param {unknown} body Ayrıştırılmış JSON istek gövdesi.
+ * @returns {{note: string|null, expectedNoteUpdatedAt: string|null}} Doğrulanmış not metni ve beklenen sürüm zaman damgası.
+ * @throws {ApiError} Bilinmeyen alan, geçersiz kontrol karakteri veya 1000 karakter sınırı aşılırsa 400 VALIDATION_ERROR fırlatır.
+ */
+export function validateInquiryNoteUpdateBody(body) {
+    requireOnlyKeys(body, NOTE_UPDATE_ALLOWED_KEYS);
+    if (typeof body.note !== 'string') {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Not metni geçerli bir yazı olmalıdır.');
+    }
+    const normalized = body.note.replace(/\r\n/g, '\n');
+    if (MESSAGE_DISALLOWED_CONTROL_CHAR_PATTERN.test(normalized)) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Not metninde geçersiz kontrol karakteri bulunamaz.');
+    }
+    const trimmed = normalized.trim();
+    const charLength = [...trimmed].length;
+    if (charLength > INQUIRY_NOTE_MAX_LENGTH) {
+        throw new ApiError(
+            400,
+            'VALIDATION_ERROR',
+            `Not metni en fazla ${INQUIRY_NOTE_MAX_LENGTH} karakter olabilir.`
+        );
+    }
+
+    let expectedNoteUpdatedAt = null;
+    if (body.expected_note_updated_at === null) {
+        expectedNoteUpdatedAt = null;
+    } else if (typeof body.expected_note_updated_at === 'string') {
+        if (SINGLE_LINE_CONTROL_CHAR_PATTERN.test(body.expected_note_updated_at)) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Not sürüm bilgisi geçersiz.');
+        }
+        const trimmedExpected = body.expected_note_updated_at.trim();
+        if (!trimmedExpected || [...trimmedExpected].length > 64) {
+            throw new ApiError(400, 'VALIDATION_ERROR', 'Not sürüm bilgisi geçersiz.');
+        }
+        expectedNoteUpdatedAt = trimmedExpected;
+    } else {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Not sürüm bilgisi geçersiz.');
+    }
+
+    return {
+        note: charLength === 0 ? null : trimmed,
+        expectedNoteUpdatedAt
+    };
+}
+
+/**
  * Veritabanı satırını personel API sözleşmesindeki InquiryDto biçimine dönüştürür.
  * @param {object} row `office_inquiries` ve `staff_users` birleşim satırı.
- * @returns {{id: string, first_name: string, last_name: string, phone: string, email: string|null, message: string, language: string, status: string, handled_by_name: string|null, handled_at: string|null, created_at: string}} Sözleşmeye uygun soru DTO'su.
+ * @returns {{id: string, first_name: string, last_name: string, phone: string, email: string|null, message: string, language: string, status: string, handled_by_name: string|null, handled_at: string|null, staff_note: string|null, staff_note_updated_by_name: string|null, staff_note_updated_at: string|null, created_at: string}} Sözleşmeye uygun soru DTO'su.
  */
 export function createInquiryDto(row) {
     return {
@@ -226,6 +276,9 @@ export function createInquiryDto(row) {
         status: row.status,
         handled_by_name: row.handled_by_name ?? null,
         handled_at: row.handled_at ?? null,
+        staff_note: row.staff_note ?? null,
+        staff_note_updated_by_name: row.staff_note_updated_by_name ?? null,
+        staff_note_updated_at: row.staff_note_updated_at ?? null,
         created_at: row.created_at
     };
 }

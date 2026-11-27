@@ -170,7 +170,7 @@ test('detail keeps the current status selected, allows Onaylandı without a PDF,
 
     const buttons = [...root.querySelectorAll('button')];
     assert.equal(buttons.find(button => button.textContent === 'Onaylandı').disabled, false);
-    assert.equal(buttons.find(button => button.textContent === 'Göçe Gönderildi').disabled, true);
+    assert.equal(buttons.find(button => button.textContent === 'Göç İdaresi inceliyor').disabled, true);
     assert.equal(buttons.find(button => button.textContent === 'İncelemede').classList.contains('is-current'), true);
     assert.equal(buttons.find(button => button.textContent === 'İncelemede').disabled, true);
     assert.equal(downloads, 1);
@@ -239,7 +239,9 @@ test('queue translates ready A4 state and preserves stale document warning', () 
         ['all', 'Tüm durumlar'],
         ['under_review', 'İncelemede'],
         ['approved', 'Onaylandı'],
-        ['sent_to_migration', 'Göç İdaresine Gönderildi'],
+        ['sent_to_migration', 'Göç İdaresi İnceliyor'],
+        ['migration_missing_documents', 'Göç: Eksik evrak'],
+        ['migration_approved', 'Göç İdaresi tarafından onayladı'],
         ['noted', 'Notu olanlar'],
         ['not_noted', 'Notu olmayanlar']
     ]);

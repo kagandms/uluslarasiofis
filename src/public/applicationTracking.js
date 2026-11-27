@@ -30,6 +30,20 @@ function formatDate(value, locale) {
     return formatApplicationTimestamp(value, locale);
 }
 
+function formatMigrationDeadlineDdMmYyyy(isoDate) {
+    if (typeof isoDate !== 'string') return null;
+    const match = isoDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[3]}.${match[2]}.${match[1]}` : null;
+}
+
+function formatMigrationMissingNotice(withoutDeadline, withDeadline, isoDeadline) {
+    const formattedDeadline = formatMigrationDeadlineDdMmYyyy(isoDeadline);
+    if (formattedDeadline && typeof withDeadline === 'string') {
+        return withDeadline.replace('{deadline}', formattedDeadline);
+    }
+    return withoutDeadline;
+}
+
 function appendDetail(document, list, label, value) {
     const term = createTextElement(document, 'dt', '', label);
     const detail = createTextElement(document, 'dd', '', value);
@@ -155,6 +169,19 @@ function createApplicationSummary(document, application, messages, locale) {
         if (value) appendDetail(document, details, messages[label], value);
     });
     section.append(details);
+    if (application.status === 'sent_to_migration' && application.migration_missing_documents === true) {
+        const noticeText = formatMigrationMissingNotice(
+            messages.trackingMigrationMissingDocuments,
+            messages.trackingMigrationMissingDocumentsWithDeadline,
+            application.migration_missing_deadline
+        );
+        if (noticeText) {
+            const notice = createTextElement(document, 'p', 'tracking-feedback tracking-migration-missing-notice', noticeText);
+            notice.dataset.feedbackType = 'warning';
+            notice.setAttribute('role', 'status');
+            section.append(notice);
+        }
+    }
     return section;
 }
 
@@ -353,6 +380,19 @@ function renderPhysicalResult(root, payload, locale) {
     if (typeof payload.rejection_reason === 'string' && payload.rejection_reason.trim()) {
         panel.append(createTextElement(document, 'strong', '', messages.rejectionReasonLabel),
             createTextElement(document, 'p', '', payload.rejection_reason));
+    }
+    if (payload.office_status === 'sent_to_migration' && payload.migration_missing_documents === true) {
+        const noticeText = formatMigrationMissingNotice(
+            messages.migrationMissingDocuments,
+            messages.migrationMissingDocumentsWithDeadline,
+            payload.migration_missing_deadline
+        );
+        if (noticeText) {
+            const notice = createTextElement(document, 'p', 'tracking-feedback tracking-migration-missing-notice', noticeText);
+            notice.dataset.feedbackType = 'warning';
+            notice.setAttribute('role', 'status');
+            panel.append(notice);
+        }
     }
     root.replaceChildren(panel);
 }

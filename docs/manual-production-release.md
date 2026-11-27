@@ -230,6 +230,29 @@ source that contains migrations `0046` and `0047`). Validation status: the basel
 boundary only; it does not prove live artifact equality or rollback safety. The live active version at the time of
 writing is the release of `9cf071d`; the next preflight for the candidate that carries this baseline has not run.
 
+## 0048 and 0049 baseline evidence
+
+Dated 27 November 2026. Source: the owner approved, in the session conversation, applying
+`migrations/0048_office_inquiry_notes.sql` (SHA-256
+`bc836bd507f40fec2efc5d2a3beb0980fbd224cf9a7f5ae484a2549bff5b4a8e`) and
+`migrations/0049_migration_office_states.sql` (SHA-256
+`f22b0062e749c4e730f800279dbbdfef88f6a626c3f24ab3675d5d857f37a2b2`) to production D1 with
+`npm run db:migrate:production`, and then, as a separate approval, advancing this baseline, merging into
+`production` and pushing. This workflow never applies migrations. A Time Travel bookmark was recorded before the
+apply (`0000071f-00000e12-00005130-ae09804b1e0a2a2b7bed2066beb9e59a`), and the pending list contained exactly
+these two. Both only add schema: `0048` adds three nullable columns to `office_inquiries`; `0049` creates
+`migration_office_states` with two indexes and adds `record_date` to `yoksis_document_audit_records`. Read-only
+checks afterwards: no pending migrations, the columns, table and indexes exist, the new table has 0 rows, row
+counts of `office_inquiries` (10), `yoksis_document_audit_records` (2194), `applications` (1544) and
+`physical_intakes` (714) were unchanged, and `PRAGMA foreign_key_check` returned no rows. The active Worker
+version was still the release of `097020c`.
+
+The code-only baseline advanced to `fb3af1b93b1d888135cc96361f63a41ef2daaa4f` (the reviewed source that contains
+the final form of `0048` and `0049`). `wrangler.jsonc`, secrets, bindings, cron triggers and `package.json` did
+not change. Validation status: the baseline records the reviewed source boundary only; it does not prove live
+artifact equality or rollback safety. No preflight has run for the candidate that carries this baseline. Details:
+[release preparation](2026-11-27-yetkili-yayin-hazirligi.md).
+
 ## Workers AI binding (chatbot)
 
 Dated 2026-11-23. The Workers AI binding (`AI`) is **not** created or updated by the release

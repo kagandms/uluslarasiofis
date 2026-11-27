@@ -1,11 +1,15 @@
 import {
+    countStaleUnfinishedImportRows,
     formatDeadlineWithRemaining,
+    formatGocLastQueryWithAge,
     formatLatestImportLine,
     isExportedAtStale,
+    isGocQueryStale,
     parseExportedAtFromFileName,
     parseYoksisExcel,
     uploadYoksisImport
 } from '../staff/yoksisExcelImport.js';
+import { openMigrationSyncDialog } from '../staff/migrationSyncDialog.js';
 
 const AUDIT_EVENT_ACTIONS = new Set([
     'YOKSIS_DOCUMENT_AUDIT_PROGRESS',
@@ -37,11 +41,11 @@ function setText(root, selector, value) {
     if (element) element.textContent = String(value ?? '');
 }
 
-function formatDocuments(documents) {
+function formatDocuments(documents, isExcel = false) {
     return documents.map((document) => {
         const required = document.required ? 'Zorunlu' : 'İsteğe bağlı';
         return [document.name, document.note, required, document.uploadStatus].filter(Boolean).join(' · ');
-    }).join('\n') || 'Eksik evrak bulunmadı';
+    }).join('\n') || (isExcel ? 'Son sorguda eksik evrak yoktu' : 'Eksik evrak bulunmadı');
 }
 
 function normalizeStatus(status) {
@@ -125,6 +129,7 @@ function appendRecord(root, data, categoryOverride = '', importMeta = null) {
     const verified = data.result?.status === 'verified';
     const identity = verified ? data.result.identity : null;
     const classification = verified ? categoryOverride || classifyApplicationStatus(data.result.applicationStatus) : 'unreadable';
+    const isExcel = Boolean(importMeta && typeof importMeta === 'object');
     const values = [
         data.entry?.applicationNumber || '—',
         identity ? `${identity.firstName} ${identity.lastName}`.trim() : '—',
@@ -132,7 +137,7 @@ function appendRecord(root, data, categoryOverride = '', importMeta = null) {
         identity?.passportNumber || '—',
         identity?.phone || '—',
         verified ? data.result.applicationStatus : 'Kontrol edilemedi',
-        verified ? formatDocuments(data.result.documents || []) : 'Kayıt güvenli biçimde okunamadı',
+        verified ? formatDocuments(data.result.documents || [], isExcel) : 'Kayıt güvenli biçimde okunamadı',
         CATEGORY_LABELS[classification] || CATEGORY_LABELS.other
     ];
     for (const value of values) {
@@ -140,7 +145,7 @@ function appendRecord(root, data, categoryOverride = '', importMeta = null) {
         cell.textContent = String(value);
         row.append(cell);
     }
-    if (importMeta && typeof importMeta === 'object') {
+    if (isExcel) {
         const unitProgram = [importMeta.unit, importMeta.program].filter(Boolean).join(' · ');
         if (unitProgram) {
             const meta = document.createElement('div');
@@ -151,6 +156,29 @@ function appendRecord(root, data, categoryOverride = '', importMeta = null) {
             meta.textContent = unitProgram;
             row.cells[1].append(meta);
         }
+        const queryEl = document.createElement('div');
+        queryEl.className = 'yoksis-audit-last-query';
+        queryEl.style.fontSize = '0.78rem';
+        queryEl.style.color = 'var(--staff-home-card-secondary)';
+        queryEl.style.marginTop = '0.2rem';
+        queryEl.textContent = formatGocLastQueryWithAge(importMeta.gocLastQueryAt);
+        row.cells[5].append(queryEl);
+
+        if (classification !== 'successful' && isGocQueryStale(importMeta.gocLastQueryAt)) {
+            const staleWarning = document.createElement('div');
+            staleWarning.className = 'yoksis-audit-query-stale-warning';
+            staleWarning.style.display = 'inline-block';
+            staleWarning.style.marginTop = '0.25rem';
+            staleWarning.style.padding = '0.12rem 0.45rem';
+            staleWarning.style.borderRadius = '999px';
+            staleWarning.style.fontSize = '0.74rem';
+            staleWarning.style.fontWeight = '700';
+            staleWarning.style.background = '#fff4df';
+            staleWarning.style.color = '#8a5a00';
+            staleWarning.textContent = 'Sorgu eski — güncel olmayabilir';
+            row.cells[5].append(staleWarning);
+        }
+
         const deadlineText = formatDeadlineWithRemaining(importMeta.missingDeadline);
         if (deadlineText) {
             const deadline = document.createElement('div');
@@ -226,6 +254,7 @@ export function initializeYoksisDocumentAuditManager(root) {
     const excelFileInput = root.querySelector('#audit-excel-file');
     const excelFileInfo = root.querySelector('#audit-excel-file-info');
     const excelUploadButton = root.querySelector('#audit-excel-upload');
+    const syncPortalButton = root.querySelector('#audit-sync-portal');
     const excelLatest = root.querySelector('#audit-import-latest');
     const excelStaleWarning = root.querySelector('#audit-excel-stale-warning');
     const excelSummary = root.querySelector('#audit-excel-summary');
@@ -238,7 +267,8 @@ export function initializeYoksisDocumentAuditManager(root) {
         busy: false,
         retryBusy: false,
         excelBusy: false,
-        unreadableCount: null
+        unreadableCount: null,
+        latestImport: null
     };
     const query = { status: 'all', page: 1, pageSize: PAGE_SIZE, total: 0, sequence: 0 };
     const pendingBatches = readPendingBatches(window);
@@ -258,6 +288,11 @@ export function initializeYoksisDocumentAuditManager(root) {
         }
         if (excelUploadButton) {
             excelUploadButton.disabled = state.excelBusy || !isValidExcelFile(excelFileInput?.files?.[0]);
+        }
+        if (syncPortalButton) {
+            const hasImport = Boolean(state.latestImport?.importId);
+            syncPortalButton.hidden = !hasImport;
+            syncPortalButton.disabled = state.busy || state.excelBusy || !hasImport;
         }
         if (excelFileInput) excelFileInput.disabled = state.excelBusy;
     }
@@ -429,10 +464,12 @@ export function initializeYoksisDocumentAuditManager(root) {
         const searchInput = root.querySelector('#audit-search');
         const statusSelect = root.querySelector('#audit-filter');
         const matchSelect = root.querySelector('#audit-match');
+        const staleOnlyCheckbox = root.querySelector('#audit-stale-only');
         const body = {
             q: searchInput?.value || '',
             status: statusSelect?.value || query.status,
             match: matchSelect?.value || 'all',
+            ...(staleOnlyCheckbox?.checked ? { staleQueryOnly: true } : {}),
             page: query.page,
             pageSize: query.pageSize
         };
@@ -643,9 +680,13 @@ export function initializeYoksisDocumentAuditManager(root) {
                 return;
             }
             const payload = await response.json();
+            state.latestImport = payload && payload.importId ? payload : null;
             excelLatest.textContent = formatLatestImportLine(payload);
+            updateControls();
         } catch {
+            state.latestImport = null;
             excelLatest.textContent = 'Son yükleme bilgisi alınamadı.';
+            updateControls();
         }
     }
 
@@ -708,7 +749,11 @@ export function initializeYoksisDocumentAuditManager(root) {
             }
 
             if (excelSummary) {
-                excelSummary.textContent = `${parsed.totalRows} satır, ${parsed.rows.length} başvuru (${parsed.mergedCount} tekrar birleştirildi), ${parsed.rejected.length} reddedildi`;
+                const staleUnfinishedCount = countStaleUnfinishedImportRows(parsed.rows);
+                const baseSummary = `${parsed.totalRows} satır, ${parsed.rows.length} başvuru (${parsed.mergedCount} tekrar birleştirildi), ${parsed.rejected.length} reddedildi`;
+                excelSummary.textContent = staleUnfinishedCount > 0
+                    ? `${baseSummary} · ${staleUnfinishedCount} tamamlanmamış kaydın Göç sorgusu 7 günden eski veya tarihsiz. Kesin sonuç için kaydı YÖKSİS'te yeniden sorgulayıp Excel'i tekrar indirin.`
+                    : baseSummary;
                 excelSummary.hidden = false;
             }
             renderRejectedRows(root, parsed.rejected);
@@ -763,6 +808,13 @@ export function initializeYoksisDocumentAuditManager(root) {
     stopButton.addEventListener('click', () => { void stopScan(); });
     excelFileInput?.addEventListener('change', () => { handleExcelFileChange(); });
     excelUploadButton?.addEventListener('click', () => { void handleExcelUpload(); });
+    syncPortalButton?.addEventListener('click', () => {
+        if (!state.latestImport?.importId) return;
+        openMigrationSyncDialog(root.ownerDocument, {
+            trigger: syncPortalButton,
+            onApplied: () => { void loadSharedRecords(); }
+        });
+    });
     root.querySelector('#audit-search-submit')?.addEventListener('click', () => {
         query.page = 1;
         void loadSharedRecords();
@@ -778,6 +830,10 @@ export function initializeYoksisDocumentAuditManager(root) {
         void loadSharedRecords();
     });
     root.querySelector('#audit-match')?.addEventListener('change', () => {
+        query.page = 1;
+        void loadSharedRecords();
+    });
+    root.querySelector('#audit-stale-only')?.addEventListener('change', () => {
         query.page = 1;
         void loadSharedRecords();
     });

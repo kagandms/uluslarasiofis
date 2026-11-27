@@ -6,6 +6,7 @@
 | --- | --- |
 | Development and workspace rules | [AGENTS.md](../AGENTS.md), [README.md](../README.md) |
 | Current production release procedure | [Manual production release](manual-production-release.md) |
+| Staff workflow release preparation (2026-11-27; migrations applied, code not released) | [Yayın hazırlığı](2026-11-27-yetkili-yayin-hazirligi.md) |
 | Handing work to another AI agent (Antigravity `agy`) | [Delegated AI agent task template](ai-agent-task-template.md), [GEMINI.md](../GEMINI.md) |
 | Repository workspace closeout and remaining follow-ups | [Repository hygiene closeout (2026-11-06)](repo-hygiene-closeout-2026-11-06.md) |
 | Release preparation history, not a runnable procedure | [Cloud CI/release preparation](deployment/cloud-ci-release.md), [cloud CI validation](deployment/cloud-ci-validation.md) |
@@ -23,6 +24,7 @@
 
 ## Plans, evidence, and drafts
 
+- [Staff daily workflow plan (2026-11-27)](plans/2026-11-27-yetkili-gunluk-is-akisi-plani.md) — status wording, re-requesting files that fail the security scan, inquiry notes, more forgiving Topi document-print requests, timesheet Excel export and YÖKSİS Excel status sync. Planned against `097020c`; implemented and validated locally on branch `claude/portal-update-features-plan-7a67da`, not merged to `production`, migrations 0048/0049 applied to production on 2026-11-27, code not released.
 - [Topi staff assistant, YKN automatic chain and YÖKSİS Excel import plan (2026-11-23)](2026-11-23-topi-yetkili-ykn-otomasyon-excel-plani.md) — implemented on task branches and merged into the local test branch `test/combined-2026-11-23` (not merged to `production`, not released); sections 13–15 record extra owner requests, decisions (self-hosted MediaPipe face detection, re-request on approved documents) and the current state. Phase 5 (chat log) and section 12 stage 0 are in progress on their own task branches. YKN chain trial waits for YÖKSİS access.
 - [Topi public chatbot evaluation evidence (2026-11-23)](2026-11-23-chatbot-eval-evidence.md) records the real Workers AI gate run (two rounds) for the public chatbot; historical evidence, not a release approval.
 - [Home page question form and AI chatbot plan (2026-11-18)](2026-11-18-home-question-form-and-chatbot-plan.md) is an unimplemented, unvalidated plan against `fdcb930`; re-verify it before executing.

@@ -106,12 +106,79 @@ const OLARAK_PATTERN = /(?:^|[^\p{L}])olarak(?=$|[^\p{L}])/u;
 const SAVE_VERB_PATTERN = /(?:^|[^\p{L}])kayd(?:et(?:sin\w*|sene\w*|mek\w*|me\w*|meli\w*)?|ed(?:er\w*|ebil\w*|in\w*|ilsin\w*|iyor\w*|ecek\w*|eyim|elim))(?=$|[^\p{L}])/u;
 const SAVE_CONTEXT_PATTERN = /(?:^|[^\p{L}])(?:yoksis(?:['’]?(?:e|te|de|i|ten|den))?|basvuru\w*|durum\w*|apply(?:['’]?(?:a|ya|e|ye|da|de))?)(?=$|[^\p{L}])/u;
 
-const PRINT_TRIGGER_PATTERN = /(?:^|[^\p{L}])(?:dilekce\w*|taahhutname\w*|checklist\w*|kontrol\s+liste\w*|basvuru\s+form\w*|kayit\s+silme\s+form\w*|yazdir\w*|cikar\w*|cikti\w*|kopya\w*|taksit\w*|indirim\s+dilekce\w*)(?=$|[^\p{L}])/u;
+const PRINT_TRIGGER_PATTERN = /(?:^|[^\p{L}])(?:dilekce\w*|taah+utname\w*|checklist\w*|kontrol\s+liste\w*|evrak\s+liste\w*|ikamet\s+liste\w*|basvuru\s+form\w*|kayit\s+silme(?:\s+form\w*)?|ilisik\s+kesme\w*|yazdir\w*|cikar\w*|cikart\w*|cikti\w*|kopya\w*|nusha\w*|taksit\w*|indirim(?:i|e|den)?|form(?:u|lar\w*)?)(?=$|[^\p{L}])/u;
+const PRINT_TYPO_TRIGGER_KEYWORDS = Object.freeze([
+    'dilekce',
+    'taahhutname',
+    'checklist',
+    'taksit',
+    'indirim',
+    'yazdir',
+    'cikar'
+]);
 const WORK_HOURS_TRIGGER_PATTERN = /(?:^|[^\p{L}])(?:saat\w*|dk|dakika\w*|mesai\w*|calisma\s+saat\w*|bucuk)(?=$|[^\p{L}])/u;
 const TEBLIGAT_TRIGGER_PATTERN = /(?:^|[^\p{L}])teblig\w*(?=$|[^\p{L}])/u;
 const YOKSIS_TRIGGER_PATTERN = /(?:^|[^\p{L}])(?:eksik\s+evrak\w*|yoksis\w*)(?=$|[^\p{L}])/u;
 const APPLICATION_TRIGGER_PATTERN = /(?:^|[^\p{L}])(?:basvuru\w*|sorgula\w*|ara|arayin|bul|bulun|ogrenci\s+no\w*)(?=$|[^\p{L}])/u;
 const YKN_TRIGGER_PATTERN = /(?:^|[^\p{L}])ykn(?:['’]?(?:ye|ya|e|a|de|da|yi|i))?(?=$|[^\p{L}])/u;
+
+/**
+ * Returns true when two lowercase ASCII-folded words are within Damerau-Levenshtein distance 1
+ * (single substitution, insertion, deletion, or adjacent transposition).
+ * @param {string} a First word.
+ * @param {string} b Second word.
+ * @returns {boolean} True when edit distance is at most 1.
+ */
+export function editDistanceAtMostOne(a, b) {
+    if (a === b) return true;
+    const lenA = a.length;
+    const lenB = b.length;
+    if (Math.abs(lenA - lenB) > 1) return false;
+
+    if (lenA === lenB) {
+        for (let i = 0; i < lenA; i += 1) {
+            if (a[i] !== b[i]) {
+                if (a.slice(i + 1) === b.slice(i + 1)) return true;
+                return (
+                    i + 1 < lenA
+                    && a[i] === b[i + 1]
+                    && a[i + 1] === b[i]
+                    && a.slice(i + 2) === b.slice(i + 2)
+                );
+            }
+        }
+        return true;
+    }
+
+    const shorter = lenA < lenB ? a : b;
+    const longer = lenA < lenB ? b : a;
+    for (let i = 0; i < shorter.length; i += 1) {
+        if (shorter[i] !== longer[i]) {
+            return shorter.slice(i) === longer.slice(i + 1);
+        }
+    }
+    return true;
+}
+
+function hasPrintTrigger(normalized) {
+    if (/\bgelen\s+sorular\w*/u.test(normalized)) {
+        return false;
+    }
+    if (/\bogrenci\w*/u.test(normalized) && /\b(?:sorgula\w*|ara(?:yin)?|bul(?:un)?)\b/u.test(normalized)) {
+        return false;
+    }
+    if (PRINT_TRIGGER_PATTERN.test(normalized)) {
+        return true;
+    }
+    const tokens = normalized.replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/);
+    for (const token of tokens) {
+        if (token.length < 5) continue;
+        if (PRINT_TYPO_TRIGGER_KEYWORDS.some((keyword) => editDistanceAtMostOne(token, keyword))) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /**
  * Normalizes Turkish text to ASCII-folded lowercase for deterministic matching.
@@ -179,6 +246,10 @@ function parseTurkishNumberWord(normalizedText) {
     const tokens = normalizedText.split(/\s+/).filter(Boolean);
     for (let i = 0; i < tokens.length; i += 1) {
         const word = tokens[i];
+        if (word === 'bir' && tokens[i + 1] === 'de') {
+            i += 1;
+            continue;
+        }
         if (word === 'on' && tokens[i + 1] === 'lisans') {
             continue;
         }
@@ -283,13 +354,25 @@ export function parseCount(text) {
     const normalized = normalizeTurkishText(text);
     if (!normalized) return null;
 
-    const digitMatch = normalized.match(/(?:^|\s)(-?\d{1,7})(?=\s|$)/u);
+    const unitMatch = normalized.match(/(?:^|\s)(-?\d{1,7})\s*(?:tane|adet|kopya|nusha|x)(?=$|[\s?!.,;:()[\]"'’])/u);
+    if (unitMatch) {
+        const value = Number.parseInt(unitMatch[1], 10);
+        if (Number.isSafeInteger(value)) return value;
+    }
+
+    const prefixXMatch = normalized.match(/(?:^|\s)x(\d{1,7})(?=$|[\s?!.,;:()[\]"'’])/u);
+    if (prefixXMatch) {
+        const value = Number.parseInt(prefixXMatch[1], 10);
+        if (Number.isSafeInteger(value)) return value;
+    }
+
+    const digitMatch = normalized.match(/(?:^|\s)(-?\d{1,7})(?=$|[\s?!.,;:()[\]"'’])/u);
     if (digitMatch) {
         const value = Number.parseInt(digitMatch[1], 10);
         if (Number.isSafeInteger(value)) return value;
     }
 
-    return parseTurkishNumberWord(normalized);
+    return parseTurkishNumberWord(normalized.replace(/[?!.,;:()[\]"'’]+/g, ' '));
 }
 
 /**
@@ -365,6 +448,55 @@ const APPLICATION_QUERY_REMOVE_PATTERN = new RegExp(
     'giu'
 );
 
+const DOCUMENT_QUERY_STOP_WORDS = new Set([
+    'tane', 'adet', 'kopya', 'nusha',
+    'sifir', 'bir', 'iki', 'uc', 'dort', 'bes', 'alti', 'yedi', 'sekiz', 'dokuz',
+    'yirmi', 'otuz', 'kirk', 'elli', 'yuz',
+    'mi', 'misin', 'misiniz', 'miyim', 'miyiz',
+    'lutfen', 'acaba', 'rica', 'etsem', 'eder', 'ederim', 'ediyorum',
+    'edebilir', 'edebilirim', 'edebilirsin', 'edebilirsen', 'edersen', 'ederseniz', 'bakalim',
+    'bana', 'bize', 'su', 'sunu', 'sundan', 'bu', 'bunu', 'bundan', 'o', 'onu', 'de', 'da', 've', 'icin',
+    'lazim', 'gerek', 'gerekiyor', 'istiyorum', 'isterim', 'istiyoruz',
+    'alabilir', 'alabilirim', 'alabilirsin',
+    'bas', 'basin', 'basar', 'basarsin', 'basabilir', 'basabilirsin', 'bassana',
+    'ver', 'verin', 'verir', 'verirsin', 'verebilir', 'verebilirsin', 'versene', 'versenize',
+    'hazirla', 'hazirlayin', 'hazirlar', 'hazirlayabilir',
+    'getir', 'getirin', 'getirir', 'getirebilir',
+    'cikti', 'ciktisi', 'ciktisini', 'ciktilari', 'ciktilarini'
+]);
+
+/**
+ * Normalizes and strips counts, question particles, polite fillers, and print verbs
+ * from a document print query. Safe to call on both local intent parses and AI model arguments.
+ * @param {string} text Raw document query or staff message.
+ * @returns {string} Cleaned ASCII-folded lowercase query.
+ */
+export function cleanDocumentPrintQuery(text) {
+    if (typeof text !== 'string') return '';
+    const folded = normalizeTurkishText(text)
+        .replace(/[?!.,;:()[\]"'’/]+/g, ' ')
+        .replace(/(?:^|\s)-?\d+\s*(?:tane|adet|kopya|nusha|x)(?=\s|$)/gu, ' ')
+        .replace(/(?:^|\s)x\d+(?=\s|$)/gu, ' ')
+        .replace(/(?:^|\s)-?\d+(?=\s|$)/gu, ' ')
+        .replace(/\brica\s+(?:etsem|ederim|ediyorum|edebilir\s+miyim|edebilirim)\b/gu, ' ')
+        .replace(/\bbir\s+de\b/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!folded) return '';
+    const tokens = folded.split(' ');
+    const kept = [];
+    for (let i = 0; i < tokens.length; i += 1) {
+        const token = tokens[i];
+        if (!token) continue;
+        if (token === 'on' && tokens[i + 1] !== 'lisans') continue;
+        if (DOCUMENT_QUERY_STOP_WORDS.has(token)) continue;
+        if (token.startsWith('cikar') || token.startsWith('yazdir')) continue;
+        kept.push(token);
+    }
+    return kept.join(' ').trim();
+}
+
 function cleanQueryTokens(rawMessage, removePattern) {
     return String(rawMessage || '')
         .replace(removePattern, ' ')
@@ -427,13 +559,10 @@ export function parseStaffIntent(message) {
     }
 
     // 4. Document print proposal (before YÖKSİS check when explicitly asking for taahhütname).
-    const isUndertakingDoc = /\btaahhutname\w*/u.test(normalized);
-    if (PRINT_TRIGGER_PATTERN.test(normalized) && (!YOKSIS_TRIGGER_PATTERN.test(normalized) || isUndertakingDoc)) {
+    const isUndertakingDoc = /\btaah+utname\w*/u.test(normalized);
+    if (hasPrintTrigger(normalized) && (!YOKSIS_TRIGGER_PATTERN.test(normalized) || isUndertakingDoc)) {
         const count = parseCount(trimmed);
-        const query = cleanQueryTokens(
-            trimmed,
-            /(?:^|[^\p{L}\p{N}])(?:-?\d+|tane|adet|kopya|n[uü]sha|yazd[iı]r[\p{L}\p{N}]*|[cç][iı]kar[\p{L}\p{N}]*|[cç][iı]kt[iı][\p{L}\p{N}]*|ver[\p{L}\p{N}]*|l[uü]tfen|on(?!\s+lisans)|bir|iki|[uü][cç]|d[oö]rt|be[sş]|alt[iı]|yedi|sekiz|dokuz|yirmi|otuz|k[iı]rk|elli)(?=$|[^\p{L}\p{N}])/giu
-        );
+        const query = cleanDocumentPrintQuery(trimmed);
         const args = { query };
         if (count !== null) args.copies = count;
         return { tool: 'propose_documents_print', args };

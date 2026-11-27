@@ -22,6 +22,8 @@ const APPLICATION_STATUS_FILTERS = Object.freeze({
     resubmission_required: Object.freeze(['resubmission_required']),
     approved: Object.freeze(['approved_for_processing']),
     migration: Object.freeze(['sent_to_migration', 'migration_approved']),
+    migration_missing_documents: Object.freeze(['sent_to_migration']),
+    migration_approved: Object.freeze(['migration_approved']),
     completed: Object.freeze(['completed']),
     terminal: Object.freeze(['completed', 'cancelled', 'rejected']),
     cancelled: Object.freeze(['cancelled']),
@@ -99,6 +101,7 @@ function readApplicationQuery(body) {
         searchTerm: readSearchTerm(body.q),
         statuses: APPLICATION_STATUS_FILTERS[statusFilter],
         isDraft: statusFilter === 'draft',
+        migrationMissingDocuments: statusFilter === 'migration_missing_documents',
         submittedAtFrom: fromDate ? istanbulMidnightUtc(fromDate) : null,
         submittedAtUntil: toDate ? istanbulMidnightUtc(nextCalendarDate(toDate)) : null,
         hasNote: noteFilter === 'all' ? null : noteFilter,
@@ -121,6 +124,14 @@ function createQueueItemDto(application) {
         created_at: application.created_at,
         updated_at: application.updated_at,
         deletion_state: application.deletion_state ?? null,
+        migration_office: application.status === 'sent_to_migration'
+            && application.migration_office_state === 'missing_documents'
+            ? {
+                state: 'missing_documents',
+                deadline: application.migration_office_deadline ?? null,
+                note: application.migration_office_note || ''
+            }
+            : null,
         spreadsheet: application.spreadsheet_state === 'pending_add'
             ? { state: 'pending', action: 'add' }
             : application.spreadsheet_state === 'pending_remove'
@@ -205,7 +216,14 @@ function createDocumentDetailDtos(application, storedRequirements) {
                 && ['pending', 'under_review'].includes(requirement.review_status)
                 || hasSafeCurrentDocument && requirement.revision_status === 'approved'
                 && requirement.review_status === 'approved')
-                && ['under_review', 'resubmission_required'].includes(application.status),
+                && (
+                    ['under_review', 'resubmission_required'].includes(application.status)
+                    || application.status === 'submitted'
+                    && hasFinalizedCurrentDocument
+                    && ['unsafe', 'failed'].includes(requirement.scan_status)
+                    && requirement.revision_status === 'submitted'
+                    && ['pending', 'under_review'].includes(requirement.review_status)
+                ),
             revision_number: requirement.revision_number ?? null,
             review_status: requirement.review_status ?? null,
             revision_status: requirement.revision_status ?? null,
@@ -255,6 +273,7 @@ export async function queryStaffApplications(request, environment) {
     const result = await createD1Repositories(environment.DB).applications.queryStaffApplications({
         statuses: query.statuses,
         isDraft: query.isDraft,
+        migrationMissingDocuments: query.migrationMissingDocuments,
         submittedAtFrom: query.submittedAtFrom,
         submittedAtUntil: query.submittedAtUntil,
         searchPattern: query.searchTerm ? escapeLikeTerm(query.searchTerm) : null,

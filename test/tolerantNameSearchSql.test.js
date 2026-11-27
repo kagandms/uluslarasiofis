@@ -55,6 +55,18 @@ function createMinimalApplicationDatabase() {
             state TEXT,
             sheet_name TEXT
         );
+        CREATE TABLE migration_office_states (
+            record_kind TEXT NOT NULL CHECK (record_kind IN ('online', 'physical')),
+            record_id TEXT NOT NULL,
+            application_number TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('reviewing', 'missing_documents', 'approved')),
+            note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 1000),
+            deadline TEXT,
+            import_id TEXT NOT NULL,
+            updated_by_staff_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (record_kind, record_id)
+        );
     `);
     return sqlite;
 }
@@ -108,6 +120,18 @@ function createMinimalPhysicalIntakeDatabase() {
             created_at TEXT,
             id TEXT,
             status TEXT
+        );
+        CREATE TABLE migration_office_states (
+            record_kind TEXT NOT NULL CHECK (record_kind IN ('online', 'physical')),
+            record_id TEXT NOT NULL,
+            application_number TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('reviewing', 'missing_documents', 'approved')),
+            note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 1000),
+            deadline TEXT,
+            import_id TEXT NOT NULL,
+            updated_by_staff_id TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (record_kind, record_id)
         );
     `);
     return sqlite;

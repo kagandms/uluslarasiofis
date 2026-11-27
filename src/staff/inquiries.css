@@ -314,6 +314,119 @@ body.dark-mode .staff-inquiry-copy-phone.is-copy-failed {
     font-size: 0.82rem;
 }
 
+.staff-inquiry-note-box {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--card-border));
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-color));
+}
+
+.staff-inquiry-note-label {
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.staff-inquiry-note-text {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.staff-inquiry-note-meta {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.staff-inquiry-note-editor {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--bg-color);
+}
+
+.staff-inquiry-note-editor-label {
+    color: var(--text-primary);
+    font-size: 0.84rem;
+    font-weight: 650;
+}
+
+.staff-inquiry-note-input {
+    width: 100%;
+    min-height: 4.5rem;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.staff-inquiry-note-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.staff-inquiry-note-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.staff-inquiry-note-counter {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-inquiry-note-counter.is-over-limit {
+    color: #9b1c1c;
+    font-weight: 700;
+}
+
+body.dark-mode .staff-inquiry-note-counter.is-over-limit {
+    color: #f2bac5;
+}
+
+.staff-inquiry-note-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.staff-inquiry-note-error {
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid #f5b7b1;
+    border-radius: 8px;
+    background: #fdf2f2;
+    color: #9b1c1c;
+    font-size: 0.84rem;
+    font-weight: 600;
+}
+
+body.dark-mode .staff-inquiry-note-error {
+    border-color: #70404c;
+    background: #3d222a;
+    color: #f2bac5;
+}
+
 .staff-inquiry-actions {
     display: flex;
     flex-wrap: wrap;

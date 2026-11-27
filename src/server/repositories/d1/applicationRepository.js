@@ -244,7 +244,7 @@ export function createApplicationRepository(database) {
             if (!selected) return null;
             return this.findById(selected.id);
         },
-        async queryStaffApplications({ statuses, isDraft = false, searchPattern, searchNameTokens, submittedAtFrom = null, submittedAtUntil = null, hasNote = null, pageSize, offset }) {
+        async queryStaffApplications({ statuses, isDraft = false, migrationMissingDocuments = false, searchPattern, searchNameTokens, submittedAtFrom = null, submittedAtUntil = null, hasNote = null, pageSize, offset }) {
             const conditions = [
                 isDraft ? "applications.status = 'draft'" : "applications.status <> 'draft'",
                 'NOT EXISTS (SELECT 1 FROM application_deletions WHERE application_id=applications.id)'
@@ -253,6 +253,15 @@ export function createApplicationRepository(database) {
             if (statuses?.length) {
                 conditions.push(`applications.status IN (${statuses.map(() => '?').join(', ')})`);
                 queryValues.push(...statuses);
+            }
+            if (migrationMissingDocuments) {
+                conditions.push("applications.status = 'sent_to_migration'");
+                conditions.push(`EXISTS (
+                    SELECT 1 FROM migration_office_states AS mos
+                    WHERE mos.record_kind = 'online'
+                      AND mos.record_id = applications.id
+                      AND mos.state = 'missing_documents'
+                )`);
             }
             if (submittedAtFrom) {
                 conditions.push(isDraft ? 'applications.created_at >= ?' : 'applications.submitted_at >= ?');
@@ -297,10 +306,14 @@ export function createApplicationRepository(database) {
                        applications.last_name, applications.application_type, applications.application_route, applications.status,
                        applications.submitted_at, applications.created_at, applications.updated_at,
                        application_spreadsheet_records.state AS spreadsheet_state,
-                       application_spreadsheet_records.sheet_name AS spreadsheet_sheet_name
+                       application_spreadsheet_records.sheet_name AS spreadsheet_sheet_name,
+                       mos.state AS migration_office_state,
+                       mos.note AS migration_office_note,
+                       mos.deadline AS migration_office_deadline
                 FROM applications
                 JOIN students ON students.id = applications.student_id
                 LEFT JOIN application_spreadsheet_records ON application_spreadsheet_records.application_id=applications.id
+                LEFT JOIN migration_office_states AS mos ON mos.record_kind = 'online' AND mos.record_id = applications.id
                 WHERE ${whereClause}
                 ORDER BY applications.updated_at DESC, applications.created_at DESC, applications.id DESC
                 LIMIT ? OFFSET ?

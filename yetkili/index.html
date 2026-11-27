@@ -30,6 +30,7 @@
     <link rel="stylesheet" href="/src/staff/staffAssistant.css">
     <link rel="stylesheet" href="/src/staff/chatLog.css">
     <link rel="stylesheet" href="/src/staff/permanentDelete.css">
+    <link rel="stylesheet" href="/src/staff/migrationSync.css">
     <link rel="stylesheet" href="/src/staff/workspaceSideNav.css">
 
     <!-- CDNs -->
@@ -265,6 +266,7 @@
                             </div>
                             <div class="yoksis-audit-controls" style="align-items: center;">
                                 <button id="audit-excel-upload" class="btn btn-primary" type="button" disabled>2. Excel yükle</button>
+                                <button id="audit-sync-portal" class="btn btn-outline" type="button" hidden>Durumları portala işle</button>
                             </div>
                             <div id="audit-excel-stale-warning" class="yoksis-audit-warning" role="alert" hidden>
                                 <strong>Bu dosya dünden kalma görünüyor.</strong> Daha güncel bir YÖKSİS dışa aktarımı indirmeniz önerilir.
@@ -317,6 +319,12 @@
                                     <option value="matched">Online başvurusu olanlar</option>
                                     <option value="unmatched">Online başvurusu olmayanlar</option>
                                 </select>
+                            </div>
+                            <div class="yoksis-audit-checkbox-field">
+                                <label class="yoksis-audit-checkbox-label" for="audit-stale-only">
+                                    <input id="audit-stale-only" type="checkbox">
+                                    <span>Göç sorgusu eski (7+ gün)</span>
+                                </label>
                             </div>
                             <button id="audit-refresh" class="btn btn-outline" type="button">Ortak kayıtları yenile</button>
                         </div>

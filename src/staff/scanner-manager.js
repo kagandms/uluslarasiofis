@@ -1,18 +1,75 @@
+import { PUBLIC_MESSAGES } from '../public/i18n/messages.js';
+
 const QUEUED_POLL_INTERVAL_MS = 60_000;
 const IDLE_POLL_INTERVAL_MS = 300_000;
+const NON_RETRYABLE_CODES = new Set(['unsupported_content', 'policy_blocked']);
+const MIGRATION_LOCKED_STATUSES = new Set(['sent_to_migration', 'migration_approved']);
+const TERMINAL_APPLICATION_STATUSES = new Set(['completed', 'cancelled', 'rejected']);
+
+async function requestJson(url, options = {}, fallbackError = 'İşlem tamamlanamadı.') {
+    const response = await fetch(url, { credentials: 'same-origin', ...options });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw Object.assign(new Error(payload?.error?.message || fallbackError), {
+            status: response.status,
+            code: payload?.error?.code
+        });
+    }
+    return payload;
+}
 
 async function fetchScanner(path, options = {}) {
-    const response = await fetch(`/api/staff/scanner/${path}`, { credentials: 'same-origin', ...options });
-    if (!response.ok) throw new Error('Tarama durumu okunamadı.');
-    return response.json();
+    return requestJson(`/api/staff/scanner/${path}`, options, 'Tarama durumu okunamadı.');
 }
 
 function createScannerApi() {
     return {
         readStatus: () => fetchScanner('status'),
-        retry: (jobId) => fetchScanner('retry', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ job_id: jobId }) })
+        retry: (jobId) => fetchScanner('retry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ job_id: jobId })
+        }),
+        requestResubmission: (applicationId, code, revisionNumber, reason) => requestJson(
+            `/api/staff/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(code)}/request-resubmission`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expected_revision_number: revisionNumber, reason })
+            }
+        ),
+        transitionApplication: (applicationId, targetStatus, expectedUpdatedAt) => requestJson(
+            `/api/staff/applications/${encodeURIComponent(applicationId)}/status`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target_status: targetStatus, expected_updated_at: expectedUpdatedAt })
+            }
+        )
     };
+}
+
+function readDocumentLabel(code) {
+    if (!code) return '';
+    const key = `document${code.replace(/(?:^|_)([a-z0-9])/g, (_, ch) => ch.toUpperCase())}`;
+    return PUBLIC_MESSAGES.tr[key] || code;
+}
+
+function readFailureReason(job) {
+    if (job.scan_status === 'unsafe' || job.result_code === 'malware') {
+        return 'Güvenlik taraması dosyayı güvenli bulmadı; yeni dosya yüklenmeli.';
+    }
+    if (NON_RETRYABLE_CODES.has(job.result_code)) {
+        return `Belge bu tarama politikasıyla doğrulanamadı (${job.result_code}). Başvuru sahibi desteklenen dosyayı replacement akışından yüklemeli; aynı dosyayı yeniden taramayın.`;
+    }
+    return `Tamamlanamayan tarama (${job.result_code}); ${job.attempts} deneme.`;
+}
+
+function readDefaultResubmissionReason(job) {
+    if (job.scan_status === 'unsafe' || job.result_code === 'malware') {
+        return 'Güvenlik taraması dosyayı güvenli bulmadı; lütfen yeni ve temiz bir dosya yükleyin. / Security scan found the file unsafe; please upload a new clean file.';
+    }
+    return 'Dosya güvenlik taramasından geçemedi; lütfen açılabilir yeni bir PDF veya fotoğraf yükleyin. / File could not pass security scan; please upload a new readable PDF or photo.';
 }
 
 function formatScanTime(isoString) {
@@ -105,8 +162,10 @@ export function initializeScannerManager(root, api = createScannerApi()) {
         const hostSummary = readHostSummary(status.runners || []);
         const isOfflineOrStale = hostSummary.includes('çevrimdışı') || hostSummary.includes('bayat');
         const failedJobs = status.failed_jobs || [];
-        // failed_jobs is a capped sample (latest 5); the full count comes from the status counter.
-        const failedTotal = (status.jobs || []).find((item) => item.status === 'failed')?.count ?? failedJobs.length;
+        // failed_jobs is capped at 50 current records; the full count comes from actionable_failed_total (or job counter fallback).
+        const failedTotal = typeof status.actionable_failed_total === 'number'
+            ? status.actionable_failed_total
+            : ((status.jobs || []).find((item) => item.status === 'failed')?.count ?? failedJobs.length);
         const sampleNotice = failedTotal > failedJobs.length ? ` (ilk ${failedJobs.length} kayıt gösteriliyor)` : '';
 
         if (isOfflineOrStale) {
@@ -137,21 +196,84 @@ export function initializeScannerManager(root, api = createScannerApi()) {
             failedJobs.forEach((job) => {
                 const row = document.createElement('div');
                 row.className = 'staff-scanner-failure-item';
-                const requiresReplacement = ['unsupported_content', 'policy_blocked'].includes(job.result_code);
-                if (requiresReplacement) {
-                    row.classList.add('is-warning');
-                    row.textContent = `Belge bu tarama politikasıyla doğrulanamadı (${job.result_code}). Başvuru sahibi desteklenen dosyayı replacement akışından yüklemeli; aynı dosyayı yeniden taramayın.`;
-                } else {
-                    row.classList.add('is-danger');
-                    row.textContent = `Tamamlanamayan tarama (${job.result_code}); ${job.attempts} deneme. `;
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = 'btn btn-outline btn-sm';
-                    button.dataset.action = 'retry-scan';
-                    button.textContent = 'Taramayı yeniden dene';
-                    button.addEventListener('click', () => retryJob(job.id, button));
-                    row.append(button);
+                const requiresReplacement = NON_RETRYABLE_CODES.has(job.result_code) || job.scan_status === 'unsafe';
+                row.classList.add(requiresReplacement ? 'is-warning' : 'is-danger');
+
+                const info = document.createElement('div');
+                info.className = 'staff-scanner-failure-info';
+                const studentName = [job.first_name, job.last_name].filter(Boolean).join(' ');
+                const metaParts = [studentName, job.student_number, readDocumentLabel(job.document_code)].filter(Boolean);
+                if (metaParts.length > 0) {
+                    const meta = document.createElement('strong');
+                    meta.className = 'staff-scanner-failure-meta';
+                    meta.textContent = metaParts.join(' · ');
+                    info.append(meta);
                 }
+                const reasonText = document.createElement('span');
+                reasonText.className = 'staff-scanner-failure-reason';
+                reasonText.textContent = readFailureReason(job);
+                info.append(reasonText);
+
+                const rowActions = document.createElement('div');
+                rowActions.className = 'staff-scanner-failure-actions';
+
+                if (job.application_id) {
+                    const openButton = document.createElement('button');
+                    openButton.type = 'button';
+                    openButton.className = 'btn btn-outline btn-sm';
+                    openButton.dataset.action = 'open-application';
+                    openButton.textContent = 'Başvuruyu aç';
+                    openButton.addEventListener('click', () => {
+                        const view = document.defaultView || window;
+                        const EventCtor = view?.CustomEvent || (typeof CustomEvent === 'function' ? CustomEvent : null);
+                        if (EventCtor) {
+                            document.dispatchEvent(new EventCtor('staff-scanner:open-application', {
+                                detail: { applicationId: job.application_id }
+                            }));
+                        }
+                    });
+                    rowActions.append(openButton);
+                }
+
+                if (MIGRATION_LOCKED_STATUSES.has(job.application_status)) {
+                    const note = document.createElement('span');
+                    note.className = 'staff-scanner-migration-note';
+                    note.textContent = 'Önce Göç\'ten geri alın';
+                    rowActions.append(note);
+                } else if (!TERMINAL_APPLICATION_STATUSES.has(job.application_status)
+                    && (job.revision_status === 'resubmission_required'
+                        || job.review_status === 'resubmission_required'
+                        || (job.application_status === 'resubmission_required' && job.can_request_resubmission === false))) {
+                    const note = document.createElement('span');
+                    note.className = 'staff-scanner-migration-note';
+                    note.textContent = 'Öğrenciden yeni dosya bekleniyor';
+                    rowActions.append(note);
+                } else if (!TERMINAL_APPLICATION_STATUSES.has(job.application_status)
+                    && job.can_request_resubmission !== false
+                    && job.application_id && job.document_code && job.revision_number != null
+                    && typeof api.requestResubmission === 'function') {
+                    const requestButton = document.createElement('button');
+                    requestButton.type = 'button';
+                    requestButton.className = 'btn btn-primary btn-sm';
+                    requestButton.dataset.action = 'request-resubmission';
+                    requestButton.textContent = job.application_status === 'submitted'
+                        ? 'İncelemeye al ve tekrar iste'
+                        : 'Tekrar yükleme iste';
+                    requestButton.addEventListener('click', () => openScannerResubmissionForm(row, job, requestButton));
+                    rowActions.append(requestButton);
+                }
+
+                if (!requiresReplacement && job.has_scan_job !== false) {
+                    const retryButton = document.createElement('button');
+                    retryButton.type = 'button';
+                    retryButton.className = 'btn btn-outline btn-sm';
+                    retryButton.dataset.action = 'retry-scan';
+                    retryButton.textContent = 'Taramayı yeniden dene';
+                    retryButton.addEventListener('click', () => retryJob(job.id, retryButton));
+                    rowActions.append(retryButton);
+                }
+
+                row.append(info, rowActions);
                 failuresContainer.append(row);
             });
             detailsRoot.append(failuresContainer);
@@ -195,6 +317,120 @@ export function initializeScannerManager(root, api = createScannerApi()) {
         } finally {
             refresh.disabled = false;
         }
+    }
+
+    function openScannerResubmissionForm(row, job, triggerButton) {
+        const existingForm = row.querySelector('.staff-scanner-resubmission-form');
+        if (existingForm) {
+            existingForm.querySelector('textarea')?.focus();
+            return;
+        }
+        const form = document.createElement('form');
+        form.className = 'staff-scanner-resubmission-form';
+        const textarea = document.createElement('textarea');
+        textarea.name = 'reason';
+        textarea.rows = 3;
+        textarea.required = true;
+        textarea.minLength = 3;
+        textarea.maxLength = 1000;
+        textarea.dataset.action = 'scanner-resubmission-reason';
+        textarea.value = readDefaultResubmissionReason(job);
+
+        const formActions = document.createElement('div');
+        formActions.className = 'staff-scanner-resubmission-actions';
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'btn btn-outline btn-sm';
+        cancel.dataset.action = 'cancel-scanner-resubmission';
+        cancel.textContent = 'Vazgeç';
+        const submit = document.createElement('button');
+        submit.type = 'submit';
+        submit.className = 'btn btn-primary btn-sm';
+        submit.dataset.action = 'submit-scanner-resubmission';
+        submit.textContent = 'Gönder';
+        const errorText = document.createElement('p');
+        errorText.className = 'staff-scanner-resubmission-error';
+        errorText.setAttribute('role', 'alert');
+        errorText.hidden = true;
+
+        cancel.addEventListener('click', () => form.remove());
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const reason = textarea.value.trim();
+            if ([...reason.replace(/[\s\p{C}]/gu, '')].length < 3) {
+                errorText.textContent = 'En az 3 karakter girin.';
+                errorText.hidden = false;
+                return;
+            }
+            submit.disabled = true;
+            cancel.disabled = true;
+            errorText.hidden = true;
+            let step1SucceededInSubmit = false;
+            try {
+                if (job.application_status === 'submitted') {
+                    const transitioned = await api.transitionApplication(
+                        job.application_id,
+                        'under_review',
+                        job.application_updated_at
+                    );
+                    step1SucceededInSubmit = true;
+                    job.application_status = transitioned?.application_status || transitioned?.application?.status || 'under_review';
+                    const nextUpdatedAt = transitioned?.updated_at || transitioned?.application?.updated_at;
+                    if (nextUpdatedAt) {
+                        job.application_updated_at = nextUpdatedAt;
+                    }
+                    triggerButton.textContent = 'Tekrar yükleme iste';
+                }
+                await api.requestResubmission(
+                    job.application_id,
+                    job.document_code,
+                    job.revision_number,
+                    reason
+                );
+                await loadStatus();
+                const view = document.defaultView || window;
+                const EventCtor = view?.CustomEvent || (typeof CustomEvent === 'function' ? CustomEvent : null);
+                if (EventCtor) {
+                    document.dispatchEvent(new EventCtor('staff-scanner:resubmission-requested', {
+                        detail: { applicationId: job.application_id, documentCode: job.document_code }
+                    }));
+                }
+            } catch (error) {
+                errorText.textContent = error?.message || 'Yeniden yükleme isteği gönderilemedi. Tekrar deneyin.';
+                errorText.hidden = false;
+                try {
+                    const status = await api.readStatus();
+                    const freshJob = (status?.failed_jobs || []).find((entry) =>
+                        entry.id === job.id
+                        || (entry.application_id === job.application_id && entry.document_code === job.document_code)
+                    );
+                    if (freshJob) {
+                        const preservedStatus = step1SucceededInSubmit && freshJob.application_status === 'submitted'
+                            ? job.application_status
+                            : freshJob.application_status;
+                        const preservedUpdatedAt = step1SucceededInSubmit && freshJob.application_status === 'submitted'
+                            ? job.application_updated_at
+                            : freshJob.application_updated_at;
+                        Object.assign(job, freshJob, {
+                            application_status: preservedStatus,
+                            application_updated_at: preservedUpdatedAt
+                        });
+                        triggerButton.textContent = job.application_status === 'submitted'
+                            ? 'İncelemeye al ve tekrar iste'
+                            : 'Tekrar yükleme iste';
+                    }
+                } catch {
+                    // Keep the open form, typed reason, and error even if status refresh fails.
+                }
+                submit.disabled = false;
+                cancel.disabled = false;
+            }
+        });
+
+        formActions.append(cancel, submit);
+        form.append(textarea, formActions, errorText);
+        row.append(form);
+        textarea.focus();
     }
 
     async function retryJob(jobId, button) {
