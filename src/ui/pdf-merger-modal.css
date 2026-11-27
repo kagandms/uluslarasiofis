@@ -56,6 +56,11 @@
 .pdf-merger-preview-content { display: block; width: 100%; min-height: 0; flex: 1; object-fit: contain; border: 0; }
 .pdf-merger-modal-card .staff-modal-header, .pdf-merger-modal-card .staff-modal-footer { padding: 12px 16px; }
 .pdf-merger-modal-card .staff-modal-footer .btn { padding: 9px 14px; }
+.pdf-merger-status { margin: 0; font-size: .9rem; font-weight: 600; line-height: 1.45; min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+.pdf-merger-status:not(:empty) { flex: 1 1 100%; }
+.pdf-merger-status.is-neutral { color: #334155; }
+.pdf-merger-status.is-success { padding: 8px 12px; border: 1px solid #86efac; border-radius: 6px; background: #f0fdf4; color: #166534; }
+.pdf-merger-status.is-error { padding: 8px 12px; border: 1px solid #fca5a5; border-radius: 6px; background: #fef2f2; color: #991b1b; }
 @media (max-width: 760px) {
     .pdf-merger-modal-card .pdf-merger-body { max-height: calc(92dvh - 150px); }
     .pdf-merger-modal-card .pdf-merger-documents > div:first-child { grid-template-columns: 1fr !important; }

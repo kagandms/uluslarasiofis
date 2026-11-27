@@ -255,13 +255,18 @@ test('resubmission upload control links file input to status via aria-describedb
 
     const fileInput = root.querySelector('input[type="file"]');
     assert.ok(fileInput, 'Resubmission file input must exist');
-    assert.equal(fileInput.id, 'resubmission-file-passport');
+    assert.equal(fileInput.id, 'upload-passport');
 
-    const label = root.querySelector('label[for="resubmission-file-passport"]');
+    const label = root.querySelector('label[for="upload-passport"]');
     assert.ok(label, 'Resubmission file input must have matching label[for]');
 
     const describedBy = fileInput.getAttribute('aria-describedby');
     assert.ok(describedBy, 'Resubmission file input must have aria-describedby');
-    const status = root.querySelector(`#${describedBy}`);
-    assert.ok(status, 'Status element referenced by aria-describedby must exist');
+    const describedIds = describedBy.split(/\s+/).filter(Boolean);
+    assert.ok(describedIds.includes('resubmission-status-passport'), 'aria-describedby must include the status element id');
+    for (const id of describedIds) {
+        assert.ok(root.querySelector(`#${id}`), `Element #${id} referenced by aria-describedby must exist`);
+    }
+    const button = root.querySelector('.application-upload-control > button');
+    assert.equal(button.getAttribute('aria-busy'), 'false');
 });

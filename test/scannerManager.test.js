@@ -9,8 +9,9 @@ function createScannerDom() {
     });
 }
 
-test('scanner panel shows "Öğrenciden yeni dosya bekleniyor" for failed files already marked resubmission_required', async () => {
+test('scanner panel shows "Öğrenciden yeni dosya bekleniyor" for failed files already marked resubmission_required', async (t) => {
     const dom = createScannerDom();
+    t.after(() => dom.window.close());
     const { document } = dom.window;
     const root = document.getElementById('scanner-root');
     const nowIso = new Date().toISOString();
@@ -67,7 +68,6 @@ test('scanner panel shows "Öğrenciden yeni dosya bekleniyor" for failed files 
 
     initializeScannerManager(root, api);
     await new Promise((resolve) => setTimeout(resolve, 20));
-    dom.window.closed = true;
 
     const items = [...root.querySelectorAll('.staff-scanner-failure-item')];
     assert.equal(items.length, 2);

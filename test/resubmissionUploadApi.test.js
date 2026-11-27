@@ -127,7 +127,9 @@ test('owner eligibility hint and replacement intent keep reviewed revision curre
     const eligibilityResponse = await worker.fetch(createRequest(`${RESUBMISSION_PATH}/resubmission-eligibility`, { cookie }), environment);
     const eligibility = await readJson(eligibilityResponse);
     assert.equal(eligibilityResponse.status, 200);
-    assert.deepEqual(eligibility.documents.map(({ code }) => code), ['passport']);
+    assert.deepEqual(eligibility.documents.map(({ code, description_key }) => ({ code, description_key })), [
+        { code: 'passport', description_key: 'documentPassportHelp' }
+    ]);
     assert.doesNotMatch(JSON.stringify(eligibility), /application_id|document_record_id|revision_id|storage_key/i);
 
     const intentResponse = await worker.fetch(createRequest(`${RESUBMISSION_PATH}/resubmission-upload-intent`, {

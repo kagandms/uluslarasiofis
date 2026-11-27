@@ -1,8 +1,14 @@
 import { putStudentDocumentDirect } from './applicationApi.js';
-import { PUBLIC_MESSAGES, SESSION3_MESSAGES } from './i18n/messages.js';
 import { createMultiPageDocumentPdf } from './multiFileDocument.js';
+import {
+    openRequirementDocumentComposer,
+    populateDocumentCard,
+    readUploadCardMessages,
+    updateDocumentUploadProgress
+} from './documentUploadCard.js';
 
 const MERGE_IMAGE_MEDIA_TYPES = Object.freeze(['image/jpeg', 'image/png', 'image/webp']);
+const ACTIVE_UPLOAD_STATES = Object.freeze(['preparing', 'uploading', 'verifying']);
 const MERGE_ERROR_MESSAGE_KEYS = Object.freeze({
     TOO_MANY_FILES: 'tooManyFiles',
     INVALID_FILE: 'invalidFileType',
@@ -10,170 +16,397 @@ const MERGE_ERROR_MESSAGE_KEYS = Object.freeze({
     MULTI_FILE_PROCESSING_FAILED: 'multiFileProcessingFailed'
 });
 
-function readMessages(document) {
-    const locale = document?.documentElement?.lang || 'tr';
-    const closeoutMessages = SESSION3_MESSAGES[locale] || SESSION3_MESSAGES.tr;
-    const publicMessages = PUBLIC_MESSAGES[locale] || PUBLIC_MESSAGES.tr;
-    return { ...closeoutMessages, ...publicMessages };
-}
-
-function setStatus(status, message) {
-    status.textContent = message;
-}
-
-function readErrorMessage(messages, error) {
+function readErrorKey(error) {
     if (error?.status === 401 || error?.code === 'APPLICATION_SESSION_REQUIRED') {
-        return messages.resubmissionUploadSessionExpired;
+        return 'resubmissionUploadSessionExpired';
     }
-    if (error?.code === 'UPLOAD_CAPABILITY_EXPIRED') return messages.resubmissionUploadCapabilityExpired;
-    if (error?.status === 409 || error?.code === 'RESUBMISSION_UPLOAD_CONFLICT') return messages.resubmissionUploadConflict;
+    if (error?.code === 'UPLOAD_CAPABILITY_EXPIRED') return 'resubmissionUploadCapabilityExpired';
+    if (error?.status === 409 || error?.code === 'RESUBMISSION_UPLOAD_CONFLICT') return 'resubmissionUploadConflict';
     if (error?.code === 'UPLOAD_NETWORK_ERROR' || error?.code === 'NETWORK_ERROR') {
-        return messages.resubmissionUploadNetworkError;
+        return 'resubmissionUploadNetworkError';
     }
-    return messages.resubmissionUploadFailed;
+    return 'resubmissionUploadFailed';
 }
 
-function readMergeErrorMessage(messages, error) {
-    const key = MERGE_ERROR_MESSAGE_KEYS[error?.code] || 'multiFileProcessingFailed';
-    return messages[key] || messages.resubmissionUploadInvalidFile;
+function readMergeErrorKey(error) {
+    return MERGE_ERROR_MESSAGE_KEYS[error?.code] || 'multiFileProcessingFailed';
 }
 
 function isAllowedFile(file, requirement) {
-    return file && Number.isSafeInteger(file.size) && file.size > 0
+    return Boolean(file && Number.isSafeInteger(file.size) && file.size > 0
         && file.size <= requirement.max_byte_size
-        && requirement.accepted_media_types.includes(file.type);
+        && requirement.accepted_media_types.includes(file.type));
 }
 
 function isSessionFailure(error) {
     return error?.status === 401 || error?.code === 'APPLICATION_SESSION_REQUIRED';
 }
 
-function buildAcceptAttribute(requirement) {
-    // Başvuru sihirbazıyla uyumlu olarak PDF kabul eden alanlarda birleştirilebilir görselleri de seçilebilir yap.
-    const acceptedTypes = new Set(requirement.accepted_media_types);
-    if (acceptedTypes.has('application/pdf')) {
-        MERGE_IMAGE_MEDIA_TYPES.forEach((type) => acceptedTypes.add(type));
-    }
-    return [...acceptedTypes].join(',');
+function isUploadActive(task) {
+    return Boolean(task && ACTIVE_UPLOAD_STATES.includes(task.state));
 }
 
-async function readPdfPageCount(file, fallbackCount) {
-    if (typeof file?.arrayBuffer !== 'function') return fallbackCount;
-    try {
-        const { PDFDocument } = await import('pdf-lib');
-        const pdfDocument = await PDFDocument.load(await file.arrayBuffer());
-        const pageCount = pdfDocument.getPageCount();
-        return Number.isSafeInteger(pageCount) && pageCount > 0 ? pageCount : fallbackCount;
-    } catch {
-        return fallbackCount;
-    }
-}
-
-function formatMergedReadyStatus(messages, fileCount, pageCount) {
-    return messages.resubmissionUploadMergedReady
-        .replace('{files}', String(fileCount))
-        .replace('{pages}', String(pageCount));
-}
-
-function setValidationAlert(fileInput, button, status, message) {
-    button.disabled = true;
-    fileInput.setAttribute('aria-invalid', 'true');
-    status.setAttribute('role', 'alert');
-    setStatus(status, message);
+function getResubmissionStatusTone(_requirement, task) {
+    if (!task) return 'error';
+    if (task.state === 'complete') return 'success';
+    if (['failed_upload', 'failed_finalize', 'unknown_finalize_result'].includes(task.state)) return 'error';
+    return 'pending';
 }
 
 /**
- * Mounts the owner-only replacement upload control.
+ * Mounts the owner-only replacement upload control using the shared document card UI.
  * @param {HTMLElement} card Current document card in owner tracking.
- * @param {object} requirement Server-provided code, media allowlist, and size limit.
+ * @param {object} requirement Server-provided code, media allowlist, size limit, and tracking fields.
  * @param {object} api Owner-only intent and finalize functions.
- * @param {object} [options] Locale messages, progress transport, PDF merger, and lifecycle callbacks.
- * @returns {{fileInput: HTMLInputElement, button: HTMLButtonElement, status: HTMLParagraphElement}} Mounted controls.
+ * @param {object} [options] Locale messages, progress transport, PDF merger, composer, and lifecycle callbacks.
+ * @returns {{card: HTMLElement, fileInput: HTMLInputElement, button: HTMLButtonElement, status: HTMLParagraphElement, retryButton: HTMLButtonElement|null, cancelButton: HTMLButtonElement|null}} Mounted controls.
  */
 export function initializeResubmissionUpload(card, requirement, api, options = {}) {
     const document = card.ownerDocument;
-    const baseMessages = readMessages(document);
+    const baseMessages = readUploadCardMessages(document);
     const messages = options.messages ? { ...baseMessages, ...options.messages } : baseMessages;
     const mergeFilesToPdf = options.createMultiPageDocumentPdf || createMultiPageDocumentPdf;
-    const section = document.createElement('section');
-    const label = document.createElement('label');
-    const fileInput = document.createElement('input');
-    const button = document.createElement('button');
-    const status = document.createElement('p');
+    const cardRequirement = {
+        ...requirement,
+        required: requirement.required ?? requirement.is_required,
+        upload_status: requirement.upload_status || (requirement.filename ? 'finalized' : undefined),
+        review_status: 'resubmission_required'
+    };
+
     let activeController = null;
     let hasSessionFailure = false;
-    let preparedFile = null;
     let selectionGeneration = 0;
+    let task = null;
 
-    section.className = 'resubmission-upload-control';
-    fileInput.type = 'file';
-    fileInput.id = `resubmission-file-${requirement.code}`;
-    fileInput.accept = buildAcceptAttribute(requirement);
-    fileInput.multiple = true;
-    fileInput.setAttribute('aria-label', messages.resubmissionUploadChooseFile);
-    label.htmlFor = fileInput.id;
-    label.className = 'resubmission-upload-label';
-    label.textContent = messages.resubmissionFileLabel || messages.resubmissionUploadChooseFile;
-    button.type = 'button';
-    button.className = 'application-button application-button-primary';
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'false');
-    button.textContent = messages.resubmissionUploadAction;
-    status.id = `resubmission-status-${requirement.code}`;
-    status.className = 'tracking-message';
-    status.setAttribute('aria-live', 'polite');
-    status.setAttribute('role', 'status');
-    fileInput.setAttribute('aria-describedby', status.id);
+    function renderCard({ ariaInvalid = false, disabled = false } = {}) {
+        const state = {
+            uploads: task ? { [requirement.code]: task } : {},
+            deleting: {}
+        };
+        populateDocumentCard(card, cardRequirement, state, {
+            messages,
+            cardClassName: 'tracking-document-card application-document-card',
+            allowUpload: true,
+            allowDelete: false,
+            ariaInvalid,
+            disabled: disabled || hasSessionFailure,
+            statusId: `resubmission-status-${requirement.code}`,
+            statusTone: getResubmissionStatusTone
+        });
+        card.querySelector('input[type="file"]')?.addEventListener('change', handleFileChange);
+    }
 
-    fileInput.addEventListener('change', async () => {
-        if (hasSessionFailure) return;
-        // Yeni seçim önceki hazırlanmış dosyayı ve süren birleştirme/yükleme denemesini geçersiz kılar.
+    function handleSessionFailure(currentTask, controller) {
+        hasSessionFailure = true;
+        selectionGeneration += 1;
+        if (controller && !controller.signal.aborted) controller.abort();
+        if (activeController && !activeController.signal.aborted) activeController.abort();
+        activeController = null;
+        if (currentTask) {
+            currentTask.file = null;
+            currentTask.intentId = null;
+            currentTask.abortController = null;
+            currentTask.state = 'failed_upload';
+            currentTask.statusKey = null;
+            currentTask.errorKey = 'resubmissionUploadSessionExpired';
+        }
+        document.getElementById('pdf-merger-modal-overlay')?.remove();
+        renderCard({ ariaInvalid: true, disabled: true });
+        options.onSessionFailure?.();
+    }
+
+    async function finalizeTask(currentTask, expectedGeneration) {
+        currentTask.state = 'verifying';
+        currentTask.statusKey = 'resubmissionUploadVerifying';
+        currentTask.errorKey = null;
+        renderCard();
+        try {
+            const finalizeResult = await api.finalizeResubmissionUpload(currentTask.intentId);
+            if (expectedGeneration !== selectionGeneration || hasSessionFailure) return 'stale';
+            currentTask.state = 'complete';
+            currentTask.file = null;
+            currentTask.intentId = null;
+            currentTask.statusKey = 'resubmissionUploadComplete';
+            currentTask.errorKey = null;
+            renderCard();
+            try {
+                await options.onComplete?.(requirement.code, finalizeResult?.document || finalizeResult);
+            } catch (error) {
+                if (isSessionFailure(error)) {
+                    handleSessionFailure(currentTask);
+                    return 'session_expired';
+                }
+            }
+            return 'complete';
+        } catch (error) {
+            if (isSessionFailure(error)) {
+                handleSessionFailure(currentTask);
+                return 'session_expired';
+            }
+            if (expectedGeneration !== selectionGeneration || hasSessionFailure) return 'stale';
+            if (['UPLOAD_OBJECT_MISSING', 'UPLOAD_OBJECT_MISMATCH', 'UPLOAD_INTENT_EXPIRED', 'UPLOAD_INTENT_UNAVAILABLE'].includes(error?.code)) {
+                currentTask.intentId = null;
+                currentTask.state = 'failed_upload';
+                currentTask.statusKey = null;
+                currentTask.errorKey = readErrorKey(error);
+                renderCard({ ariaInvalid: true });
+                return 'unavailable';
+            }
+            // Retry finalize with the same intent_id only after an unknown/network/5xx result.
+            // 409 conflicts and capability errors invalidate the intent on the server, so retry must create a new intent.
+            const isUnknownResult = error?.code === 'NETWORK_ERROR' || error?.code === 'UPLOAD_NETWORK_ERROR' || error?.status >= 500;
+            if (!isUnknownResult) {
+                currentTask.intentId = null;
+            }
+            currentTask.state = isUnknownResult ? 'unknown_finalize_result' : 'failed_finalize';
+            currentTask.statusKey = null;
+            currentTask.errorKey = readErrorKey(error);
+            renderCard({ ariaInvalid: true });
+            return 'failed';
+        }
+    }
+
+    async function runUploadTask(currentTask, expectedGeneration = selectionGeneration) {
+        if (!currentTask || isUploadActive(currentTask) || hasSessionFailure) return;
+        currentTask.errorKey = null;
+        currentTask.statusKey = null;
+
+        if (currentTask.intentId) {
+            const outcome = await finalizeTask(currentTask, expectedGeneration);
+            if (outcome !== 'unavailable') return;
+            if (!currentTask.file || expectedGeneration !== selectionGeneration || hasSessionFailure) return;
+        }
+
+        if (!isAllowedFile(currentTask.file, requirement)) {
+            currentTask.state = 'failed_upload';
+            currentTask.errorKey = currentTask.file && Number.isSafeInteger(currentTask.file.size) && currentTask.file.size > requirement.max_byte_size
+                ? 'fileTooLarge'
+                : 'resubmissionUploadInvalidFile';
+            renderCard({ ariaInvalid: true });
+            return;
+        }
+
+        currentTask.state = 'preparing';
+        currentTask.progress = 0;
+        currentTask.statusKey = 'resubmissionUploadPreparing';
+        const currentController = new AbortController();
+        activeController = currentController;
+        currentTask.abortController = currentController;
+        renderCard();
+
+        let upload;
+        try {
+            ({ upload } = await api.createResubmissionUploadIntent(requirement.code, currentTask.file));
+        } catch (error) {
+            if (activeController === currentController) activeController = null;
+            currentTask.abortController = null;
+            if (isSessionFailure(error)) {
+                handleSessionFailure(currentTask, currentController);
+                return;
+            }
+            if (currentController.signal.aborted || expectedGeneration !== selectionGeneration || hasSessionFailure) return;
+            currentTask.state = 'failed_upload';
+            currentTask.statusKey = null;
+            currentTask.errorKey = readErrorKey(error);
+            renderCard({ ariaInvalid: true });
+            return;
+        }
+
+        if (currentController.signal.aborted || expectedGeneration !== selectionGeneration || hasSessionFailure) {
+            if (activeController === currentController) activeController = null;
+            currentTask.abortController = null;
+            return;
+        }
+
+        currentTask.intentId = upload.intent_id;
+        currentTask.state = 'uploading';
+        currentTask.statusKey = 'resubmissionUploadProgress';
+        renderCard();
+
+        try {
+            await (options.putStudentDocumentDirect || putStudentDocumentDirect)(upload, currentTask.file, {
+                signal: currentController.signal,
+                XMLHttpRequestClass: options.XMLHttpRequestClass,
+                onProgress: (percent) => {
+                    if (!currentController.signal.aborted && expectedGeneration === selectionGeneration && !hasSessionFailure) {
+                        currentTask.progress = percent;
+                        updateDocumentUploadProgress(card, currentTask, messages);
+                    }
+                }
+            });
+        } catch (error) {
+            if (activeController === currentController) activeController = null;
+            currentTask.abortController = null;
+            if (isSessionFailure(error)) {
+                handleSessionFailure(currentTask, currentController);
+                return;
+            }
+            if (error?.code === 'UPLOAD_CANCELLED' || currentController.signal.aborted) {
+                if (expectedGeneration !== selectionGeneration || hasSessionFailure) return;
+                currentTask.intentId = null;
+                currentTask.state = 'cancelled';
+                currentTask.statusKey = null;
+                currentTask.errorKey = 'uploadState_cancelled';
+                renderCard();
+                return;
+            }
+            if (expectedGeneration !== selectionGeneration || hasSessionFailure) return;
+            currentTask.intentId = null;
+            currentTask.state = 'failed_upload';
+            currentTask.statusKey = null;
+            currentTask.errorKey = readErrorKey(error);
+            renderCard({ ariaInvalid: true });
+            return;
+        }
+
+        if (activeController === currentController) activeController = null;
+        currentTask.abortController = null;
+        if (currentController.signal.aborted || expectedGeneration !== selectionGeneration || hasSessionFailure) return;
+
+        await finalizeTask(currentTask, expectedGeneration);
+    }
+
+    card.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-action]');
+        if (!button || hasSessionFailure) return;
+        const action = button.dataset.action;
+
+        if (action === 'document-compose') {
+            if (!requirement.accepted_media_types.includes('application/pdf') || isUploadActive(task)) return;
+            await openRequirementDocumentComposer(document, requirement, {
+                openPdfMergerModal: options.openPdfMergerModal,
+                messages,
+                onSaveFile: async (file) => {
+                    if (hasSessionFailure) {
+                        throw new Error(messages.resubmissionUploadSessionExpired);
+                    }
+                    selectionGeneration += 1;
+                    const currentGeneration = selectionGeneration;
+                    if (activeController) {
+                        activeController.abort();
+                        activeController = null;
+                    }
+                    if (!isAllowedFile(file, requirement)) {
+                        const errorKey = file && Number.isSafeInteger(file.size) && file.size > requirement.max_byte_size
+                            ? 'fileTooLarge'
+                            : 'resubmissionUploadInvalidFile';
+                        task = {
+                            state: 'failed_upload',
+                            progress: 0,
+                            file: null,
+                            intentId: null,
+                            abortController: null,
+                            errorKey,
+                            statusKey: null
+                        };
+                        renderCard({ ariaInvalid: true });
+                        throw new Error(messages[errorKey] || messages.resubmissionUploadInvalidFile);
+                    }
+                    task = {
+                        state: 'selected',
+                        progress: 0,
+                        file,
+                        intentId: null,
+                        abortController: null,
+                        errorKey: null,
+                        statusKey: null
+                    };
+                    await runUploadTask(task, currentGeneration);
+                    if (task.state !== 'complete') {
+                        throw new Error(messages[task.errorKey || task.statusKey] || messages.resubmissionUploadFailed);
+                    }
+                }
+            });
+            return;
+        }
+
+        if (action === 'document-retry') {
+            if (!task || isUploadActive(task)) return;
+            await runUploadTask(task, selectionGeneration);
+            return;
+        }
+
+        if (action === 'document-cancel') {
+            task?.abortController?.abort();
+        }
+    });
+
+    async function handleFileChange(event) {
+        const input = event.target;
+        const InputClass = document.defaultView?.HTMLInputElement;
+        if (InputClass ? !(input instanceof InputClass) : input?.tagName !== 'INPUT') return;
+        if (input.type !== 'file' || hasSessionFailure) return;
+
         selectionGeneration += 1;
         const currentGeneration = selectionGeneration;
         if (activeController) {
             activeController.abort();
             activeController = null;
-            button.setAttribute('aria-busy', 'false');
         }
-        preparedFile = null;
 
-        const files = Array.from(fileInput.files || []);
+        const files = Array.from(input.files || []);
         if (!files.length) {
-            button.disabled = true;
-            fileInput.setAttribute('aria-invalid', 'false');
-            status.setAttribute('role', 'status');
-            setStatus(status, '');
+            task = null;
+            renderCard();
             return;
         }
 
         const isSingleAcceptedFile = files.length === 1 && requirement.accepted_media_types.includes(files[0].type);
         if (isSingleAcceptedFile) {
-            const isFileValid = isAllowedFile(files[0], requirement);
-            preparedFile = isFileValid ? files[0] : null;
-            button.disabled = !isFileValid || hasSessionFailure;
-            fileInput.setAttribute('aria-invalid', !isFileValid ? 'true' : 'false');
-            if (!isFileValid) {
-                status.setAttribute('role', 'alert');
-                setStatus(status, messages.resubmissionUploadInvalidFile);
-            } else {
-                status.setAttribute('role', 'status');
-                setStatus(status, '');
+            if (!isAllowedFile(files[0], requirement)) {
+                const errorKey = Number.isSafeInteger(files[0].size) && files[0].size > requirement.max_byte_size
+                    ? 'fileTooLarge'
+                    : 'resubmissionUploadInvalidFile';
+                task = {
+                    state: 'failed_upload',
+                    progress: 0,
+                    file: null,
+                    intentId: null,
+                    abortController: null,
+                    errorKey,
+                    statusKey: null
+                };
+                renderCard({ ariaInvalid: true });
+                return;
             }
+            task = {
+                state: 'selected',
+                progress: 0,
+                file: files[0],
+                intentId: null,
+                abortController: null,
+                errorKey: null,
+                statusKey: null
+            };
+            await runUploadTask(task, currentGeneration);
             return;
         }
 
-        // PDF kabul edilmiyorsa veya tek dosya birleştirilebilir görsel türünde değilse doğrudan reddet.
         if (!requirement.accepted_media_types.includes('application/pdf')
             || (files.length === 1 && !MERGE_IMAGE_MEDIA_TYPES.includes(files[0].type))) {
-            setValidationAlert(fileInput, button, status, messages.resubmissionUploadInvalidFile);
+            task = {
+                state: 'failed_upload',
+                progress: 0,
+                file: null,
+                intentId: null,
+                abortController: null,
+                errorKey: 'resubmissionUploadInvalidFile',
+                statusKey: null
+            };
+            renderCard({ ariaInvalid: true });
             return;
         }
 
-        button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
-        fileInput.setAttribute('aria-invalid', 'false');
-        status.setAttribute('role', 'status');
-        setStatus(status, messages.multiFilePreparing);
+        task = {
+            state: 'preparing',
+            progress: 0,
+            file: null,
+            intentId: null,
+            abortController: null,
+            errorKey: null,
+            statusKey: 'multiFilePreparing'
+        };
+        renderCard();
 
         try {
             const mergedFile = await mergeFilesToPdf(files, {
@@ -187,90 +420,28 @@ export function initializeResubmissionUpload(card, requirement, api, options = {
                     : 'INVALID_FILE';
                 throw Object.assign(new Error(code), { code });
             }
-            const pageCount = await readPdfPageCount(mergedFile, files.length);
-            if (currentGeneration !== selectionGeneration || hasSessionFailure) return;
-            preparedFile = mergedFile;
-            button.disabled = hasSessionFailure;
-            button.setAttribute('aria-busy', 'false');
-            fileInput.setAttribute('aria-invalid', 'false');
-            status.setAttribute('role', 'status');
-            setStatus(status, formatMergedReadyStatus(messages, files.length, pageCount));
+            task.file = mergedFile;
+            task.state = 'selected';
+            task.statusKey = null;
+            await runUploadTask(task, currentGeneration);
         } catch (error) {
             if (currentGeneration !== selectionGeneration || hasSessionFailure) return;
-            preparedFile = null;
-            button.setAttribute('aria-busy', 'false');
-            setValidationAlert(fileInput, button, status, readMergeErrorMessage(messages, error));
+            task.file = null;
+            task.state = 'failed_upload';
+            task.statusKey = null;
+            task.errorKey = readMergeErrorKey(error);
+            renderCard({ ariaInvalid: true });
         }
-    });
+    }
 
-    button.addEventListener('click', async () => {
-        const file = preparedFile;
-        if (!isAllowedFile(file, requirement) || hasSessionFailure) {
-            setValidationAlert(fileInput, button, status, messages.resubmissionUploadInvalidFile);
-            return;
-        }
-        fileInput.setAttribute('aria-invalid', 'false');
-        activeController = new AbortController();
-        const currentController = activeController;
-        const uploadGeneration = selectionGeneration;
-        button.disabled = true;
-        button.setAttribute('aria-busy', 'true');
-        status.setAttribute('role', 'status');
-        setStatus(status, messages.resubmissionUploadPreparing);
-        try {
-            const { upload } = await api.createResubmissionUploadIntent(requirement.code, file);
-            if (currentController.signal.aborted || uploadGeneration !== selectionGeneration) return;
-            setStatus(status, messages.resubmissionUploadProgress);
-            await (options.putStudentDocumentDirect || putStudentDocumentDirect)(upload, file, {
-                signal: currentController.signal,
-                XMLHttpRequestClass: options.XMLHttpRequestClass,
-                onProgress: (percent) => {
-                    if (!currentController.signal.aborted && uploadGeneration === selectionGeneration) {
-                        setStatus(status, `${messages.resubmissionUploadProgress} ${percent}%`);
-                    }
-                }
-            });
-            if (currentController.signal.aborted || uploadGeneration !== selectionGeneration) return;
-            setStatus(status, messages.resubmissionUploadVerifying);
-            const finalizeResult = await api.finalizeResubmissionUpload(upload.intent_id);
-            if (currentController.signal.aborted || uploadGeneration !== selectionGeneration) return;
-            button.setAttribute('aria-busy', 'false');
-            setStatus(status, messages.resubmissionUploadComplete);
-            try {
-                await options.onComplete?.(requirement.code, finalizeResult?.document || finalizeResult);
-            } catch (error) {
-                if (isSessionFailure(error)) throw error;
-            }
-        } catch (error) {
-            if (isSessionFailure(error)) {
-                hasSessionFailure = true;
-                selectionGeneration += 1;
-                preparedFile = null;
-                currentController.abort();
-                button.setAttribute('aria-busy', 'false');
-                status.setAttribute('role', 'alert');
-                fileInput.setAttribute('aria-invalid', 'true');
-                fileInput.disabled = true;
-                button.disabled = true;
-                options.onSessionFailure?.();
-                setStatus(status, messages.resubmissionUploadSessionExpired);
-                return;
-            }
-            if ((error?.code === 'UPLOAD_CANCELLED' && currentController.signal.aborted)
-                || currentController.signal.aborted
-                || uploadGeneration !== selectionGeneration) {
-                return;
-            }
-            button.setAttribute('aria-busy', 'false');
-            status.setAttribute('role', 'alert');
-            fileInput.setAttribute('aria-invalid', 'true');
-            setStatus(status, readErrorMessage(messages, error));
-            button.disabled = false;
-        } finally {
-            if (activeController === currentController) activeController = null;
-        }
-    });
-    section.append(label, fileInput, button, status);
-    card.append(section);
-    return { fileInput, button, status };
+    renderCard();
+
+    return {
+        card,
+        get fileInput() { return card.querySelector('input[type="file"]'); },
+        get button() { return card.querySelector('.application-upload-control > button'); },
+        get status() { return card.querySelector('.document-upload-status'); },
+        get retryButton() { return card.querySelector('[data-action="document-retry"]'); },
+        get cancelButton() { return card.querySelector('[data-action="document-cancel"]'); }
+    };
 }

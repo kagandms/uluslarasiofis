@@ -118,7 +118,7 @@ export async function readCurrentResubmissionEligibility(request, environment) {
         const eligibility = evaluateResubmissionEligibility(createEligibilityInput(row, policy));
         if (!eligibility.allowed) return [];
         return [{
-            code: row.code, label_key: policy.label_key, mode: eligibility.mode,
+            code: row.code, label_key: policy.label_key, description_key: policy.description_key, mode: eligibility.mode,
             accepted_media_types: policy.accepted_media_types, max_byte_size: policy.max_byte_size
         }];
     });

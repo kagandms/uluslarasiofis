@@ -10,6 +10,7 @@ import { resolvePdfMergerText, formatPdfMergerText as fmt } from './pdf-merger-t
 
 const DEFAULT_MAX_FILES = 30;
 const YOKSIS_SAFE_LIMIT_BYTES = 9 * 1024 * 1024;
+const STUDENT_MAX_BYTES = 10 * 1024 * 1024;
 
 function formatBytes(bytes) {
     if (!Number.isFinite(bytes) || bytes === 0) return '0 B';
@@ -65,6 +66,8 @@ export function openPdfMergerModal(options = {}) {
     if (existingModal?.dataset.isProcessing === 'true') { showToast(t.busy, 'warning'); return; }
     if (existingModal) existingModal.remove();
 
+    const isStudentMode = options.studentMode === true;
+    const outputLimitBytes = isStudentMode ? STUDENT_MAX_BYTES : YOKSIS_SAFE_LIMIT_BYTES;
     const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
     if (!Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > 300) throw new Error('Belge sınırı geçersiz.');
     let readyPdf = null;
@@ -301,9 +304,31 @@ export function openPdfMergerModal(options = {}) {
     footer.style.gap = '8px';
 
     const progressMsg = document.createElement('span');
-    progressMsg.style.fontSize = '0.85rem';
-    progressMsg.style.color = 'var(--accent, #7e1830)';
-    progressMsg.style.fontWeight = '500';
+    if (isStudentMode) {
+        progressMsg.className = 'pdf-merger-status';
+    } else {
+        progressMsg.style.fontSize = '0.85rem';
+        progressMsg.style.color = 'var(--accent, #7e1830)';
+        progressMsg.style.fontWeight = '500';
+    }
+
+    function setProgressStatus(tone, message) {
+        progressMsg.textContent = message;
+        if (!isStudentMode) return;
+        progressMsg.classList.remove('is-neutral', 'is-success', 'is-error');
+        if (tone === 'error') {
+            progressMsg.classList.add('is-error');
+            progressMsg.setAttribute('role', 'alert');
+        } else if (tone === 'success') {
+            progressMsg.classList.add('is-success');
+            progressMsg.setAttribute('role', 'status');
+        } else if (tone === 'neutral') {
+            progressMsg.classList.add('is-neutral');
+            progressMsg.setAttribute('role', 'status');
+        } else {
+            progressMsg.removeAttribute('role');
+        }
+    }
 
     const btnMerge = document.createElement('button');
     btnMerge.type = 'button';
@@ -441,7 +466,7 @@ export function openPdfMergerModal(options = {}) {
     }
 
     function renderList() {
-        progressMsg.textContent = '';
+        setProgressStatus(null, '');
         btnMerge.removeAttribute('title');
         readyPdf = null;
         readyPdfCanBeUsed = false;
@@ -455,8 +480,8 @@ export function openPdfMergerModal(options = {}) {
     }
 
     async function saveReadyPdf() {
-        if (!readyPdfCanBeUsed || !readyPdf || readyPdf.byteLength > YOKSIS_SAFE_LIMIT_BYTES) {
-            progressMsg.textContent = t.tooLarge;
+        if (!readyPdfCanBeUsed || !readyPdf || readyPdf.byteLength > outputLimitBytes) {
+            setProgressStatus('error', isStudentMode ? t.studentTooLarge : t.tooLarge);
             return;
         }
         const controls = [...overlay.querySelectorAll('button,input,select')].map(node => ({ node, wasDisabled: node.disabled }));
@@ -464,13 +489,13 @@ export function openPdfMergerModal(options = {}) {
         overlay.dataset.isProcessing = 'true';
         controls.forEach(({ node }) => { node.disabled = true; });
         try {
-            progressMsg.textContent = t.saving;
+            setProgressStatus('neutral', t.saving);
             await options.onSave(readyPdf, preparedFields);
             showToast(options.successMessage || t.saved, 'success');
             overlay.remove();
         } catch (error) {
             console.error('Physical PDF confirmation failed.', { errorName: error.name, code: error.code });
-            progressMsg.textContent = error.message;
+            setProgressStatus('error', error.message);
             showToast(error.message, 'error');
         } finally {
             isSaving = false;
@@ -499,39 +524,51 @@ export function openPdfMergerModal(options = {}) {
         buildControls.forEach(({ node }) => { node.disabled = true; });
 
         try {
-            progressMsg.textContent = t.merging;
+            setProgressStatus('neutral', isStudentMode ? t.studentPreparing : t.merging);
             if (options.onPrepare) {
-                progressMsg.textContent = 'Başvuru formundan öğrenci bilgileri okunuyor…';
+                if (!isStudentMode) progressMsg.textContent = 'Başvuru formundan öğrenci bilgileri okunuyor…';
                 preparedFields = await options.onPrepare([...selectedFiles]);
             }
-            const result = await mergeDocumentsToPdf(selectedFiles, (prog) => {
-                progressMsg.textContent = prog.message;
+            const mergeFn = typeof options.mergeDocumentsToPdf === 'function' ? options.mergeDocumentsToPdf : mergeDocumentsToPdf;
+            const result = await mergeFn(selectedFiles, (prog) => {
+                if (!isStudentMode) progressMsg.textContent = prog.message;
             });
 
             const mergedBytes = result.bytes;
             readyPdf = mergedBytes;
-            readyPdfCanBeUsed = result.metrics.targetReached;
+            readyPdfCanBeUsed = isStudentMode
+                ? mergedBytes.byteLength <= outputLimitBytes
+                : result.metrics.targetReached;
             previewUrl = URL.createObjectURL(new Blob([mergedBytes], { type: 'application/pdf' }));
             previewLink.href = previewUrl;
             previewLink.hidden = false;
-            const targetMessage = result.metrics.targetReached
-                ? t.targetReached
-                : result.metrics.warning;
-            const compressionMessage = Number.isInteger(result.metrics.compressionPercent)
-                ? fmt(t.compressionUsed, { p: result.metrics.compressionPercent })
-                : t.compressionNone;
-            const rasterNotice = result.metrics.rasterizedPdfs
-                ? t.rasterNotice
-                : '';
-            progressMsg.textContent = `PDF ${formatBytes(result.metrics.inputBytes)} → ${formatBytes(result.metrics.outputBytes)}. ${targetMessage}${compressionMessage}${rasterNotice} ${t.checkReadable}`;
-            btnMerge.textContent = options.onSave ? (options.confirmLabel || t.confirmSave) : t.confirmDownload;
+            const confirmLabelText = options.onSave ? (options.confirmLabel || t.confirmSave) : t.confirmDownload;
+            if (isStudentMode) {
+                if (readyPdfCanBeUsed) {
+                    setProgressStatus('success', fmt(t.studentReady, { confirm: confirmLabelText }));
+                } else {
+                    setProgressStatus('error', t.studentTooLarge);
+                }
+            } else {
+                const targetMessage = result.metrics.targetReached
+                    ? t.targetReached
+                    : result.metrics.warning;
+                const compressionMessage = Number.isInteger(result.metrics.compressionPercent)
+                    ? fmt(t.compressionUsed, { p: result.metrics.compressionPercent })
+                    : t.compressionNone;
+                const rasterNotice = result.metrics.rasterizedPdfs
+                    ? t.rasterNotice
+                    : '';
+                progressMsg.textContent = `PDF ${formatBytes(result.metrics.inputBytes)} → ${formatBytes(result.metrics.outputBytes)}. ${targetMessage}${compressionMessage}${rasterNotice} ${t.checkReadable}`;
+            }
+            btnMerge.textContent = confirmLabelText;
             btnMerge.disabled = !readyPdfCanBeUsed;
-            if (!readyPdfCanBeUsed) btnMerge.title = t.mustBeSmall;
+            if (!readyPdfCanBeUsed) btnMerge.title = isStudentMode ? t.studentMustBeSmall : t.mustBeSmall;
             closeBtn.disabled = false;
         } catch (err) {
             console.error('[PDF Merger Modal] Hata:', err);
             showToast(fmt(t.mergeFailed, { error: err.message }), 'error');
-            progressMsg.textContent = t.error;
+            setProgressStatus('error', t.error);
             btnMerge.disabled = Boolean(readyPdf && !readyPdfCanBeUsed);
             closeBtn.disabled = false;
         } finally {

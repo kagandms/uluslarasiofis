@@ -194,6 +194,21 @@ function createDocumentList(document, documents, messages, allowFilename, replac
 
     documents.forEach((item) => {
         const card = document.createElement('li');
+        const replacement = replacementDocuments?.find((entry) => entry.code === item.code);
+        if (allowFilename && replacement) {
+            const cardRequirement = {
+                ...item,
+                ...replacement,
+                required: item.required ?? replacement.required ?? replacement.is_required,
+                description_key: replacement.description_key || item.description_key || ''
+            };
+            initializeResubmissionUpload(card, cardRequirement, replacement.api, {
+                messages, onComplete: onReplacementComplete, onSessionFailure,
+                putStudentDocumentDirect: replacement.api.putStudentDocumentDirect
+            });
+            list.append(card);
+            return;
+        }
         const title = createTextElement(document, 'h3', '', messages[item.label_key] || messages.trackingStatusUnknown);
         const status = createTextElement(document, 'p', 'tracking-document-status', messages[`trackingDocumentStatus_${item.status}`] || messages.trackingStatusUnknown);
         card.className = 'tracking-document-card';
@@ -240,13 +255,6 @@ function createDocumentList(document, documents, messages, allowFilename, replac
             );
             successNotice.append(successTitle, scanStatusP);
             card.append(successNotice);
-        }
-        const replacement = replacementDocuments?.find((entry) => entry.code === item.code);
-        if (allowFilename && replacement) {
-            initializeResubmissionUpload(card, replacement, replacement.api, {
-                messages, onComplete: onReplacementComplete, onSessionFailure,
-                putStudentDocumentDirect: replacement.api.putStudentDocumentDirect
-            });
         }
         list.append(card);
     });

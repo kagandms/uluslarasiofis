@@ -5,9 +5,14 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         saving: 'PDF başvurunuza yükleniyor…',
         saved: 'PDF başvurunuza eklendi.',
         confirmSave: 'Kontrol ettim, başvuruma ekle',
+        merge: 'PDF oluştur',
         tooLarge: 'PDF 9 MB sınırının altında değil. Sayfa sayısını azaltıp yeniden oluşturun.',
         mustBeSmall: 'PDF 9 MB altında olmalı.',
-        merging: 'Sayfalar birleştiriliyor ve boyut kontrol ediliyor…'
+        merging: 'Sayfalar birleştiriliyor ve boyut kontrol ediliyor…',
+        studentPreparing: 'PDF hazırlanıyor…',
+        studentReady: '✅ PDF başarıyla oluşturuldu. Şimdi “{confirm}” düğmesine basın.',
+        studentTooLarge: 'PDF 10 MB sınırını geçiyor. Sayfa sayısını azaltıp tekrar oluşturun.',
+        studentMustBeSmall: 'PDF 10 MB altında olmalı.'
     },
     en: {
         title: 'Add document pages',
@@ -30,7 +35,7 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         photoLimit: 'The limit of {max} photos has been reached. You can create the PDF now.',
         clearAll: 'Clear all',
         listHint: 'You can preview and reorder the added pages.',
-        merge: 'Create PDF and show size',
+        merge: 'Create PDF',
         previewLink: 'Open the PDF and zoom in to check it',
         tooLarge: 'The PDF is not under 9 MB. Remove some pages and create it again.',
         saving: 'Uploading the PDF to your application…',
@@ -58,7 +63,11 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         position: '{label}, position {n}',
         fromPhone: 'From phone',
         closePreview: 'Close preview',
-        previewOf: 'Preview of {label}'
+        previewOf: 'Preview of {label}',
+        studentPreparing: 'Preparing PDF…',
+        studentReady: '✅ PDF created successfully. Now press “{confirm}”.',
+        studentTooLarge: 'The PDF exceeds the 10 MB limit. Remove some pages and create it again.',
+        studentMustBeSmall: 'The PDF must be under 10 MB.'
     },
     ru: {
         title: 'Добавить страницы документа',
@@ -81,7 +90,7 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         photoLimit: 'Достигнут лимит в {max} фото. Можно создать PDF.',
         clearAll: 'Очистить всё',
         listHint: 'Добавленные страницы можно просмотреть и упорядочить.',
-        merge: 'Создать PDF и показать размер',
+        merge: 'Создать PDF',
         previewLink: 'Открыть PDF и проверить при увеличении',
         tooLarge: 'PDF больше 9 МБ. Уберите несколько страниц и создайте заново.',
         saving: 'PDF загружается в вашу заявку…',
@@ -109,7 +118,11 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         position: '{label}, позиция {n}',
         fromPhone: 'С телефона',
         closePreview: 'Закрыть просмотр',
-        previewOf: 'Просмотр: {label}'
+        previewOf: 'Просмотр: {label}',
+        studentPreparing: 'Подготовка PDF…',
+        studentReady: '✅ PDF успешно создан. Нажмите «{confirm}».',
+        studentTooLarge: 'Размер PDF превышает лимит 10 МБ. Уменьшите количество страниц и создайте заново.',
+        studentMustBeSmall: 'PDF должен быть меньше 10 МБ.'
     },
     tk: {
         title: 'Resminama sahypalaryny goş',
@@ -132,7 +145,7 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         photoLimit: '{max} surat çägine ýetildi. PDF döredip bilersiňiz.',
         clearAll: 'Hemmesini arassala',
         listHint: 'Goşulan sahypalary görüp, tertibini üýtgedip bilersiňiz.',
-        merge: 'PDF döret we ölçegini görkez',
+        merge: 'PDF döret',
         previewLink: 'PDF-i aç we ulaldyp barla',
         tooLarge: 'PDF 9 MB-dan uly. Käbir sahypalary aýryp täzeden dörediň.',
         saving: 'PDF arzaňyza ýüklenýär…',
@@ -160,7 +173,11 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         position: '{n}-nji ýerde {label}',
         fromPhone: 'Telefondan',
         closePreview: 'Görnüşi ýap',
-        previewOf: '{label} görnüşi'
+        previewOf: '{label} görnüşi',
+        studentPreparing: 'PDF taýýarlanýar…',
+        studentReady: '✅ PDF üstünlikli döredildi. Indi “{confirm}” düwmesine basyň.',
+        studentTooLarge: 'PDF 10 MB çäginden geçýär. Sahypa sanyny azaldyp täzeden dörediň.',
+        studentMustBeSmall: 'PDF 10 MB-dan kiçi bolmaly.'
     },
     ar: {
         title: 'إضافة صفحات المستند',
@@ -183,7 +200,7 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         photoLimit: 'تم الوصول إلى حد {max} صورة. يمكنك إنشاء ملف PDF الآن.',
         clearAll: 'مسح الكل',
         listHint: 'يمكنك معاينة الصفحات المضافة وترتيبها.',
-        merge: 'إنشاء PDF وعرض الحجم',
+        merge: 'إنشاء PDF',
         previewLink: 'افتح ملف PDF وكبّره للتحقق منه',
         tooLarge: 'حجم ملف PDF ليس أقل من 9 ميغابايت. احذف بعض الصفحات وأعد إنشاءه.',
         saving: 'جارٍ رفع ملف PDF إلى طلبك…',
@@ -211,7 +228,11 @@ const PDF_MERGER_MESSAGES = Object.freeze({
         position: '{label}، الموضع {n}',
         fromPhone: 'من الهاتف',
         closePreview: 'إغلاق المعاينة',
-        previewOf: 'معاينة {label}'
+        previewOf: 'معاينة {label}',
+        studentPreparing: 'جارٍ تحضير ملف PDF…',
+        studentReady: '✅ تم إنشاء ملف PDF بنجاح. اضغط الآن على «{confirm}».',
+        studentTooLarge: 'يتجاوز حجم ملف PDF حد 10 ميغابايت. قلّل عدد الصفحات وأعد إنشاءه.',
+        studentMustBeSmall: 'يجب أن يكون ملف PDF أقل من 10 ميغابايت.'
     }
 });
 

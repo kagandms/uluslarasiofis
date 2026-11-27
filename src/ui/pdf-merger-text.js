@@ -48,7 +48,11 @@ export const PDF_MERGER_DEFAULT_TEXT = Object.freeze({
     position: '{n}. sırada {label}',
     fromPhone: 'Telefondan',
     closePreview: 'Önizlemeyi kapat',
-    previewOf: '{label} önizlemesi'
+    previewOf: '{label} önizlemesi',
+    studentPreparing: 'PDF hazırlanıyor…',
+    studentReady: '✅ PDF başarıyla oluşturuldu. Şimdi “{confirm}” düğmesine basın.',
+    studentTooLarge: 'PDF 10 MB sınırını geçiyor. Sayfa sayısını azaltıp tekrar oluşturun.',
+    studentMustBeSmall: 'PDF 10 MB altında olmalı.'
 });
 
 /** Merges caller overrides onto the defaults. */
