@@ -1748,16 +1748,16 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         render();
         try {
             const result = await api.queryApplications({ ...state.query, ...splitNoteStatus(state.query.status) });
-            if (requestId !== queueRequestId) return;
+            if (requestId !== queueRequestId || state.view !== 'queue') return;
             state.result = result;
             state.recordNotesResult = null;
             state.recordNotes.clear();
         } catch (error) {
-            if (requestId !== queueRequestId) return;
+            if (requestId !== queueRequestId || state.view !== 'queue') return;
             state.error = true;
             state.errorStatus = error?.status ?? null;
         }
-        if (requestId === queueRequestId) {
+        if (requestId === queueRequestId && state.view === 'queue') {
             state.loading = false;
             render();
         }
@@ -2069,6 +2069,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     }
     async function openDetail(applicationId) {
         if (state.actionPending || state.fieldEdit?.pending) return;
+        queueRequestId += 1;
         fieldEditController.reset();
         discardPreview();
         state.rejectionTarget = null;
@@ -2390,4 +2391,31 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     document.getElementById('btn-workspace-home')?.addEventListener('click', closePreviewOnWorkspaceExit);
     document.getElementById('btn-go-home-global')?.addEventListener('click', closePreviewOnWorkspaceExit);
     render();
+}
+
+const DEEP_LINK_PARAM = 'basvuru';
+const DEEP_LINK_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * Opens an application detail from the `?basvuru=<id>` boot parameter and removes it from the URL.
+ * @param {Document} doc Staff page document.
+ * @param {Window} [win] Owner window.
+ * @param {(() => void)|null} [openApplicationsView] Callback to switch to the applications workspace.
+ * @returns {string|null} Opened application ID, or null when absent or invalid.
+ */
+export function openApplicationFromDeepLink(doc = document, win = doc?.defaultView, openApplicationsView = null) {
+    if (!doc || !win?.location) return null;
+    const url = new URL(win.location.href);
+    const rawId = url.searchParams.get(DEEP_LINK_PARAM);
+    if (rawId === null) return null;
+    const candidate = rawId.trim();
+    url.searchParams.delete(DEEP_LINK_PARAM);
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    win.history?.replaceState?.(win.history.state, '', nextUrl);
+    if (!DEEP_LINK_ID_PATTERN.test(candidate)) return null;
+    openApplicationsView?.();
+    doc.dispatchEvent(new win.CustomEvent('staff-scanner:open-application', {
+        detail: { applicationId: candidate }
+    }));
+    return candidate;
 }

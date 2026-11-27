@@ -11,10 +11,10 @@ import { runOCR, cancelOCR } from '../services/ocrService.js';
 import { generateAndDownloadPdf, printDocument } from '../services/pdfGenerator.js';
 import { showToast } from '../ui/toastManager.js';
 import { initTebligatSearch } from '../ui/tebligatSearch.js';
-import { initWorkspaceNavigation } from '../ui/workspaceNavigation.js';
+import { initWorkspaceNavigation, showWorkspaceView } from '../ui/workspaceNavigation.js';
 import { initYknManager } from '../managers/yknManager.js';
 import { initStaffAuth } from './auth.js';
-import { initializeStaffApplicationsManager } from './applicationsManager.js';
+import { initializeStaffApplicationsManager, openApplicationFromDeepLink } from './applicationsManager.js';
 import { initializeStaffApplicationRatings } from './application-ratings.js';
 import { initDocumentsManager } from '../ui/documents-manager.js';
 import { initLiveClock } from '../ui/liveClock.js';
@@ -104,6 +104,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.addEventListener('staff-applications:view-changed', (event) => {
                 scannerPanel.hidden = event.detail?.view === 'detail';
             });
+            openApplicationFromDeepLink(document, window, () => showWorkspaceView('applications'));
         }
     } catch (error) {
         console.error('Applications workspace failed to initialize.', { errorName: error?.name || 'UNKNOWN_ERROR' });

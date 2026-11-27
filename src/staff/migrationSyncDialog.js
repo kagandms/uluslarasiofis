@@ -41,11 +41,18 @@ export function chunkSyncItems(items, size = MIGRATION_SYNC_BATCH_SIZE) {
 
 const NOT_SENT_WARNING_TEXT = 'Bu gruptaki kayıtlar portalda henüz Göç İdaresine iletilmemiş görünüyor. Seçilenler önce Göç İdaresine iletildi olarak işaretlenir; online kayıtlarda belgeler de toplu olarak onaylanır.';
 
+function isConfirmationOnlyNameCheck(item) {
+    if (item?.confirmation_only === true || item?.reason === 'name_confirmation') return true;
+    return item?.current_status === 'sent_to_migration'
+        && item?.target_state === 'reviewing'
+        && item?.reason !== 'missing_documents_cleared';
+}
+
 export function summarizeSyncPlan(plan) {
     const actionable = [
         ...(plan?.changes || []),
         ...(plan?.needsAttention || []),
-        ...(plan?.nameCheck || [])
+        ...(plan?.nameCheck || []).filter((item) => !isConfirmationOnlyNameCheck(item))
     ];
     let approved = 0;
     let missingDocuments = 0;
@@ -114,10 +121,22 @@ function resolveItemIdentity(item) {
     };
 }
 
+function createDetailLink(document, item) {
+    if (item?.record_kind === 'physical' || !item?.record_id) return null;
+    const link = createEl(document, 'a', 'migration-sync-detail-link', 'Detaya git');
+    link.href = `/yetkili/?basvuru=${encodeURIComponent(String(item.record_id))}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.addEventListener('click', (event) => {
+        event.stopPropagation();
+    });
+    return link;
+}
+
 function getFocusableElements(container) {
     return [...container.querySelectorAll(
         'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-    )].filter((el) => !el.hidden && el.offsetParent !== null || el.tagName === 'BUTTON' || el.tagName === 'INPUT');
+    )].filter((el) => !el.hidden && (el.offsetParent !== null || el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'A'));
 }
 
 /**
@@ -242,11 +261,24 @@ export function openMigrationSyncDialog(document, options = {}) {
 
             const main = createEl(document, 'div', 'migration-sync-item-main');
             const top = createEl(document, 'div', 'migration-sync-item-top');
+            const stateLabel = TARGET_STATE_LABELS[item.target_state] || item.target_state;
+            const isNameCheckConfirmationOnly = groupName === 'nameCheck' && isConfirmationOnlyNameCheck(item);
             top.append(
                 createEl(document, 'span', '', identity.fullName),
                 createEl(document, 'span', 'migration-sync-tag', item.record_kind === 'physical' ? 'Fiziksel' : 'Online'),
-                createEl(document, 'span', 'migration-sync-tag', TARGET_STATE_LABELS[item.target_state] || item.target_state)
+                createEl(
+                    document,
+                    'span',
+                    'migration-sync-tag',
+                    groupName === 'nameCheck' ? `Göç durumu: ${stateLabel}` : stateLabel
+                )
             );
+            if (isNameCheckConfirmationOnly) {
+                top.append(createEl(document, 'span', 'migration-sync-tag', 'Durum değişmeyecek'));
+            }
+            if (groupName === 'nameCheck') {
+                top.append(createEl(document, 'span', 'migration-sync-tag migration-sync-tag--match', 'Öğrenci no eşleşti ✓'));
+            }
             if (item.target_state !== 'approved' && isGocQueryStale(item.goc_last_query_at, nowMs)) {
                 top.append(createEl(document, 'span', 'migration-sync-tag migration-sync-tag--warning', 'güncel olmayabilir'));
             }
@@ -266,6 +298,22 @@ export function openMigrationSyncDialog(document, options = {}) {
                     'migration-sync-item-names',
                     `Excel: ${excelName} · Portal: ${identity.fullName}`
                 ));
+                if (item.name_level === 'different') {
+                    main.append(createEl(
+                        document,
+                        'div',
+                        'migration-sync-item-caution',
+                        'Adlar belirgin farklı, detaydan kontrol edin.'
+                    ));
+                }
+                if (isNameCheckConfirmationOnly) {
+                    main.append(createEl(
+                        document,
+                        'div',
+                        'migration-sync-item-note',
+                        'İşaretlemek yalnızca aynı kişi olduğunu kaydeder.'
+                    ));
+                }
             }
             main.append(meta);
             if (item.target_state === 'missing_documents') {
@@ -286,6 +334,12 @@ export function openMigrationSyncDialog(document, options = {}) {
                 );
                 main.append(warningEl);
             }
+            const detailLink = createDetailLink(document, item);
+            if (detailLink) {
+                const actions = createEl(document, 'div', 'migration-sync-item-actions');
+                actions.append(detailLink);
+                main.append(actions);
+            }
             li.append(checkbox, main);
             list.append(li);
         }
@@ -304,6 +358,11 @@ export function openMigrationSyncDialog(document, options = {}) {
                 createEl(document, 'span', '', identity.fullName),
                 createEl(document, 'span', 'migration-sync-tag', item.record_kind === 'physical' ? 'Fiziksel' : 'Online')
             );
+            if (item.target_state) {
+                const stateLabel = TARGET_STATE_LABELS[item.target_state] || item.target_state;
+                top.append(createEl(document, 'span', 'migration-sync-tag', `Göç durumu: ${stateLabel}`));
+            }
+            top.append(createEl(document, 'span', 'migration-sync-tag migration-sync-tag--match', 'Öğrenci no eşleşti ✓'));
             const queryText = formatGocLastQueryWithAge(item.goc_last_query_at, nowMs);
             const meta = createEl(
                 document,
@@ -323,6 +382,12 @@ export function openMigrationSyncDialog(document, options = {}) {
                 ));
             }
             main.append(meta, reasonEl);
+            const detailLink = createDetailLink(document, item);
+            if (detailLink) {
+                const actions = createEl(document, 'div', 'migration-sync-item-actions');
+                actions.append(detailLink);
+                main.append(actions);
+            }
             li.append(main);
             list.append(li);
         }
@@ -493,7 +558,7 @@ export function openMigrationSyncDialog(document, options = {}) {
             const section = createEl(document, 'section', 'migration-sync-section');
             section.dataset.syncGroup = 'nameCheck';
             const head = createEl(document, 'div', 'migration-sync-section-head');
-            head.append(createEl(document, 'h4', 'migration-sync-section-title', `Ad yazımı farklı — kontrol edip işaretleyin (${nameCheck.length})`));
+            head.append(createEl(document, 'h4', 'migration-sync-section-title', `Ad farklı — kontrol edip işaretleyin (${nameCheck.length})`));
             section.append(head, renderSelectableList(nameCheck, 'nameCheck'));
             body.append(section);
         }
