@@ -520,7 +520,19 @@ async function runProposeWorkHours(args, context) {
     };
 }
 
-const GENERIC_DOCUMENT_WORDS = new Set(['dilekce', 'checklist', 'form']);
+const GENERIC_DOCUMENT_WORDS = new Set(['dilekce', 'checklist', 'form', 'ikamet', 'ucret', 'kayit', 'basvuru']);
+
+function hasGraduateIntent(queryTokens, searchText) {
+    if (queryTokens.some((token) =>
+        token.startsWith('lisansustu')
+        || token.startsWith('yukseklisans')
+        || token === 'master'
+        || token.startsWith('doktora')
+    )) {
+        return true;
+    }
+    return /\byuksek\s+lisans\b/u.test(searchText);
+}
 
 function splitSearchWords(text) {
     return normalizeTurkishText(text)
@@ -533,6 +545,9 @@ function splitSearchWords(text) {
 function scoreTokenMatch(queryToken, docToken, { allowStem = true } = {}) {
     if (queryToken === docToken) return 4;
     if (queryToken === 'lisans' && docToken.startsWith('lisansustu')) {
+        return 0;
+    }
+    if (queryToken.startsWith('lisansustu') && docToken === 'lisans') {
         return 0;
     }
     if (allowStem) {
@@ -576,20 +591,23 @@ export function matchOfficeDocuments(documentId, query) {
     if (queryTokens.length === 0) return [];
 
     const isBareGeneric = queryTokens.length === 1 && GENERIC_DOCUMENT_WORDS.has(queryTokens[0]);
+    const candidateDocs = hasGraduateIntent(queryTokens, searchText)
+        ? OFFICE_DOCUMENTS.filter((doc) => doc.id !== 'on-lisans-lisans-checklist')
+        : OFFICE_DOCUMENTS;
 
     if (!isBareGeneric) {
         // 1. Exact title match.
-        const exactTitle = OFFICE_DOCUMENTS.filter((doc) => normalizeTurkishText(doc.title) === searchText);
+        const exactTitle = candidateDocs.filter((doc) => normalizeTurkishText(doc.title) === searchText);
         if (exactTitle.length > 0) return exactTitle;
 
         // 2. Exact alias match.
-        const exactAlias = OFFICE_DOCUMENTS.filter((doc) =>
+        const exactAlias = candidateDocs.filter((doc) =>
             (doc.aliases || []).some((alias) => normalizeTurkishText(alias) === searchText)
         );
         if (exactAlias.length > 0) return exactAlias;
 
         // 3. Full alias token match (exact or 1-letter typo tolerance for 5+ char words).
-        const fullAliasMatches = OFFICE_DOCUMENTS.filter((doc) =>
+        const fullAliasMatches = candidateDocs.filter((doc) =>
             (doc.aliases || []).some((alias) => {
                 const aliasTokens = splitSearchWords(alias);
                 if (aliasTokens.length !== queryTokens.length) return false;
@@ -603,7 +621,7 @@ export function matchOfficeDocuments(documentId, query) {
 
     // 4. Scored token-based matching across title, aliases, id, and tags.
     const scored = [];
-    for (const doc of OFFICE_DOCUMENTS) {
+    for (const doc of candidateDocs) {
         const titleWords = splitSearchWords(doc.title);
         const aliasWords = splitSearchWords((doc.aliases || []).join(' '));
         const tagIdWords = splitSearchWords([doc.id.replace(/-/g, ' '), ...(doc.tags || [])].join(' '));
@@ -628,11 +646,14 @@ export function matchOfficeDocuments(documentId, query) {
 function suggestNearestDocuments(query, limit = 3) {
     const cleaned = cleanDocumentPrintQuery(query || '');
     const queryTokens = splitSearchWords(cleaned);
+    const candidateDocs = hasGraduateIntent(queryTokens, cleaned)
+        ? OFFICE_DOCUMENTS.filter((doc) => doc.id !== 'on-lisans-lisans-checklist')
+        : OFFICE_DOCUMENTS;
     if (queryTokens.length === 0) {
-        return OFFICE_DOCUMENTS.slice(0, limit);
+        return candidateDocs.slice(0, limit);
     }
 
-    const scored = OFFICE_DOCUMENTS.map((doc) => {
+    const scored = candidateDocs.map((doc) => {
         const docWords = splitSearchWords([
             doc.title,
             ...(doc.aliases || []),

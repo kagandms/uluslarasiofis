@@ -297,3 +297,80 @@ test('staff scanner panel hides retry-scan when failed row has no scan job', asy
     assert.ok(root.querySelector('[data-action="request-resubmission"]'));
     document.defaultView.close();
 });
+
+test('staff scanner panel refreshes job data on 409 without looping on stale updated_at/revision_number and dispatches DOM event on success', async () => {
+    const module = await import('../src/staff/scanner-manager.js');
+    const document = new JSDOM('<section></section>').window.document;
+    const root = document.querySelector('section');
+    document.defaultView.setTimeout = () => 0;
+
+    const dispatchedEvents = [];
+    document.addEventListener('staff-scanner:resubmission-requested', (event) => {
+        dispatchedEvents.push(event.detail);
+    });
+
+    let serverRevision = 1;
+    let serverUpdatedAt = '2026-11-27T08:00:00.000Z';
+    const resubmissionCalls = [];
+
+    const api = {
+        readStatus: async () => ({
+            jobs: [],
+            runners: [],
+            last_successful_scan: null,
+            actionable_failed_total: 1,
+            failed_jobs: [{
+                id: 'job-409',
+                result_code: 'scan_timeout',
+                scan_status: 'failed',
+                attempts: 1,
+                application_id: 'app-409',
+                student_number: 'STU-409',
+                first_name: 'Can',
+                last_name: 'Demir',
+                document_code: 'passport',
+                revision_number: serverRevision,
+                application_status: 'under_review',
+                application_updated_at: serverUpdatedAt,
+                can_request_resubmission: true
+            }]
+        }),
+        retry: async () => {},
+        requestResubmission: async (appId, code, rev, reason) => {
+            resubmissionCalls.push({ appId, code, rev, reason });
+            if (rev === 1) {
+                serverRevision = 2;
+                serverUpdatedAt = '2026-11-27T08:05:00.000Z';
+                throw Object.assign(new Error('Belge güncellendi, tekrar deneyin.'), { status: 409 });
+            }
+            return { ok: true };
+        }
+    };
+
+    module.initializeScannerManager(root, api);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    root.querySelector('[data-action="request-resubmission"]').click();
+    const textarea = root.querySelector('[data-action="scanner-resubmission-reason"]');
+    textarea.value = 'Özel tarama nedeni.';
+
+    // First submit hits 409 -> refreshes job data (revision_number becomes 2), keeps form, reason, and error
+    root.querySelector('.staff-scanner-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(resubmissionCalls.length, 1);
+    assert.equal(resubmissionCalls[0].rev, 1);
+    assert.equal(root.querySelector('[data-action="scanner-resubmission-reason"]').value, 'Özel tarama nedeni.');
+    assert.match(root.querySelector('.staff-scanner-resubmission-error').textContent, /Belge güncellendi/);
+
+    // Second submit uses refreshed revision_number = 2 and dispatches DOM event on success
+    root.querySelector('.staff-scanner-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(resubmissionCalls.length, 2);
+    assert.equal(resubmissionCalls[1].rev, 2);
+    assert.deepEqual(dispatchedEvents, [{ applicationId: 'app-409', documentCode: 'passport' }]);
+    document.defaultView.close();
+});

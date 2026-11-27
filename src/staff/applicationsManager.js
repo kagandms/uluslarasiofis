@@ -779,8 +779,11 @@ function createResubmissionForm(document, item, state, handlers) {
     reason.dataset.action = 'resubmission-reason';
     label.htmlFor = 'staff-resubmission-reason';
     reason.id = label.htmlFor;
-    reason.value = readDefaultResubmissionReason(item);
-    reason.addEventListener('input', () => reason.setCustomValidity(''));
+    reason.value = state.resubmissionReason ?? readDefaultResubmissionReason(item);
+    reason.addEventListener('input', () => {
+        reason.setCustomValidity('');
+        state.resubmissionReason = reason.value;
+    });
     cancel.type = 'button';
     cancel.className = 'btn btn-outline';
     cancel.dataset.action = 'cancel-document-resubmission';
@@ -1255,6 +1258,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     const state = {
         view: 'queue', loading: false, error: false, errorStatus: null, detail: null,
         actionPending: null, actionError: null, actionNotice: null, scanQueuedCode: null, resubmissionDocument: null,
+        resubmissionReason: '',
         fieldEdit: null, fieldEditNotice: null, fieldEditBannerError: null,
         rejectionTarget: null, rejectionReason: '',
         preview: null, result: null, archiveApplicationId: null, archiveController: null,
@@ -2060,6 +2064,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         discardPreview();
         state.rejectionTarget = null;
         state.rejectionReason = '';
+        state.resubmissionDocument = null;
+        state.resubmissionReason = '';
         state.view = 'detail';
         state.loading = true;
         state.error = false;
@@ -2108,7 +2114,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         }
         return 'İşlem tamamlanamadı. Güncel durumu kontrol edip tekrar deneyin.';
     }
-    async function completeAction(actionKey, operation) {
+    async function completeAction(actionKey, operation, options = {}) {
         if (state.actionPending || state.fieldEdit?.pending) return;
         const scrollY = document.defaultView?.scrollY ?? 0;
         state.actionPending = actionKey;
@@ -2130,17 +2136,20 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 state.rejectionReason = '';
             }
             state.resubmissionDocument = null;
+            state.resubmissionReason = '';
             discardPreview();
             await refreshDetail();
             await refreshQueueSnapshot();
         } catch (error) {
             state.actionError = readActionError(error);
-            if (error?.status === 409) {
+            const handled = options.onError ? await options.onError(error) : false;
+            if (!handled && error?.status === 409) {
                 if (actionKey.startsWith('status:')) {
                     state.rejectionTarget = null;
                     state.rejectionReason = '';
                 }
                 state.resubmissionDocument = null;
+                state.resubmissionReason = '';
                 discardPreview();
                 await refreshDetail();
                 await refreshQueueSnapshot();
@@ -2212,6 +2221,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     }
     function openResubmission(item) {
         state.resubmissionDocument = item;
+        state.resubmissionReason = readDefaultResubmissionReason(item);
         state.actionError = null;
         render();
         root.querySelector('[data-action="resubmission-reason"]')?.focus();
@@ -2219,12 +2229,15 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     function cancelResubmission() {
         if (state.actionPending) return;
         state.resubmissionDocument = null;
+        state.resubmissionReason = '';
         state.actionError = null;
         render();
     }
     function requestResubmission(item, reason) {
         const application = state.detail?.application;
         if (!application) return;
+        state.resubmissionReason = reason;
+        let step1Succeeded = false;
         return completeAction(`resubmission:${item.code}`, async () => {
             if (application.status === 'submitted') {
                 const transitioned = await api.transitionApplication(
@@ -2232,6 +2245,7 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                     'under_review',
                     application.updated_at
                 );
+                step1Succeeded = true;
                 state.detail = {
                     ...state.detail,
                     application: {
@@ -2248,6 +2262,16 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
                 item.revision_number,
                 reason
             );
+        }, {
+            onError: async () => {
+                if (!step1Succeeded) return false;
+                discardPreview();
+                const preservedError = state.actionError;
+                await refreshDetail();
+                await refreshQueueSnapshot();
+                state.actionError = preservedError;
+                return true;
+            }
         });
     }
     async function sendToMigration(item) {
@@ -2320,6 +2344,8 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
         discardPreview();
         state.rejectionTarget = null;
         state.rejectionReason = '';
+        state.resubmissionDocument = null;
+        state.resubmissionReason = '';
         state.view = 'queue';
         state.error = false;
         state.loading = false;
@@ -2340,6 +2366,17 @@ export function initializeStaffApplicationsManager(root, api = createStaffApplic
     document.addEventListener('staff-scanner:open-application', (event) => {
         const applicationId = event.detail?.applicationId;
         if (applicationId) void openDetail(applicationId);
+    });
+    document.addEventListener('staff-scanner:resubmission-requested', (event) => {
+        const applicationId = event.detail?.applicationId;
+        if (state.view === 'detail') {
+            if (applicationId && state.detail?.application?.id === applicationId) {
+                void refreshDetail();
+            }
+            void refreshQueueSnapshot();
+        } else if (state.view === 'queue') {
+            void loadQueue();
+        }
     });
     document.getElementById('btn-workspace-home')?.addEventListener('click', closePreviewOnWorkspaceExit);
     document.getElementById('btn-go-home-global')?.addEventListener('click', closePreviewOnWorkspaceExit);

@@ -135,6 +135,8 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
         editingNoteIds: new Set(),
         noteDrafts: new Map(),
         noteErrors: new Map(),
+        staleNoteIds: new Set(),
+        orphanedNoteDraft: null,
         pendingIds: new Set(),
         requestSeq: 0
     };
@@ -411,6 +413,7 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
                 state.editingNoteIds.delete(item.id);
                 state.noteDrafts.delete(item.id);
                 state.noteErrors.delete(item.id);
+                state.staleNoteIds.delete(item.id);
                 render();
                 findInquiryActionButton(rootElement, item.id, 'edit-inquiry-note')?.focus();
             });
@@ -600,6 +603,55 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
         statusRegion.hidden = !state.statusMessage;
         panel.append(statusRegion);
 
+        if (state.orphanedNoteDraft) {
+            const orphanBox = document.createElement('div');
+            orphanBox.className = 'staff-inquiry-orphaned-draft';
+            orphanBox.setAttribute('role', 'alert');
+
+            const orphanMsg = document.createElement('p');
+            orphanMsg.className = 'staff-inquiry-orphaned-draft-message';
+            orphanMsg.textContent = state.orphanedNoteDraft.message;
+
+            const orphanText = document.createElement('textarea');
+            orphanText.className = 'staff-inquiry-orphaned-draft-text';
+            orphanText.readOnly = true;
+            orphanText.rows = 3;
+            orphanText.setAttribute('aria-label', 'Kaydedilmemiş not taslağı');
+            orphanText.value = state.orphanedNoteDraft.text;
+
+            const orphanActions = document.createElement('div');
+            orphanActions.className = 'staff-inquiry-orphaned-draft-actions';
+
+            const copyDraftBtn = document.createElement('button');
+            copyDraftBtn.type = 'button';
+            copyDraftBtn.className = 'btn btn-outline';
+            copyDraftBtn.dataset.action = 'copy-orphaned-note-draft';
+            copyDraftBtn.textContent = 'Taslağı kopyala';
+            copyDraftBtn.addEventListener('click', async () => {
+                const copied = await copyTextToClipboard(document, state.orphanedNoteDraft?.text || '');
+                copyDraftBtn.textContent = copied ? 'Kopyalandı' : 'Kopyalanamadı';
+                notifyToast(
+                    document,
+                    copied ? 'Taslak kopyalandı.' : 'Taslak kopyalanamadı.',
+                    copied ? 'success' : 'error'
+                );
+            });
+
+            const dismissBtn = document.createElement('button');
+            dismissBtn.type = 'button';
+            dismissBtn.className = 'btn btn-outline';
+            dismissBtn.dataset.action = 'dismiss-orphaned-note-draft';
+            dismissBtn.textContent = 'Kapat';
+            dismissBtn.addEventListener('click', () => {
+                state.orphanedNoteDraft = null;
+                render();
+            });
+
+            orphanActions.append(copyDraftBtn, dismissBtn);
+            orphanBox.append(orphanMsg, orphanText, orphanActions);
+            panel.append(orphanBox);
+        }
+
         if (state.loading && state.items.length === 0) {
             const loadingMsg = document.createElement('p');
             loadingMsg.className = 'staff-inquiries-empty';
@@ -634,16 +686,18 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
                 `${STAFF_INQUIRIES_URL}?status=${encodeURIComponent(state.activeTab)}&limit=100`,
                 { headers: { Accept: 'application/json' } }
             );
-            if (seq !== state.requestSeq) return;
+            if (seq !== state.requestSeq) return false;
             state.items = Array.isArray(payload?.items) ? payload.items : [];
             state.counts = normalizeCounts(payload?.counts);
             updateHomeBadges();
+            return true;
         } catch (error) {
-            if (seq !== state.requestSeq) return;
+            if (seq !== state.requestSeq) return false;
             console.error('Staff inquiries load failed.', { errorName: error?.name || 'Error' });
             if (!silentError) {
                 state.errorMessage = error?.message || 'Sorular yüklenemedi. Lütfen tekrar deneyin.';
             }
+            return false;
         } finally {
             if (seq === state.requestSeq) {
                 state.loading = false;
@@ -712,6 +766,35 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
         render();
 
         try {
+            if (state.staleNoteIds.has(item.id)) {
+                const reloaded = await loadInquiries(state.activeTab, { silentError: true });
+                if (!reloaded) {
+                    state.editingNoteIds.add(item.id);
+                    state.noteDrafts.set(item.id, draftText);
+                    state.noteErrors.set(item.id, 'Güncel not yüklenemedi. Lütfen tekrar deneyin.');
+                    return;
+                }
+                state.staleNoteIds.delete(item.id);
+                const stillInTab = state.items.some((entry) => entry.id === item.id);
+                if (!stillInTab) {
+                    state.editingNoteIds.delete(item.id);
+                    state.noteDrafts.delete(item.id);
+                    state.noteErrors.delete(item.id);
+                    state.orphanedNoteDraft = {
+                        message: 'Not başka bir yetkili tarafından güncellendi ve soru bu sekmeden taşındı veya silindi. Kaydedilmemiş taslağınızı aşağıdan kopyalayabilirsiniz.',
+                        text: draftText
+                    };
+                    return;
+                }
+                state.editingNoteIds.add(item.id);
+                state.noteDrafts.set(item.id, draftText);
+                state.noteErrors.set(
+                    item.id,
+                    'Güncel not yukarıda gösteriliyor; kaydetmek için tekrar Kaydet’e basın.'
+                );
+                return;
+            }
+
             const payload = await requestJson(`${STAFF_INQUIRIES_URL}/${encodeURIComponent(item.id)}/note`, {
                 method: 'PUT',
                 headers: {
@@ -730,17 +813,40 @@ export function mountInquiryManager(rootElement, { fetcher } = {}) {
             state.editingNoteIds.delete(item.id);
             state.noteDrafts.delete(item.id);
             state.noteErrors.delete(item.id);
+            state.staleNoteIds.delete(item.id);
             state.statusMessage = updatedItem?.staff_note ? 'Not kaydedildi.' : 'Not silindi.';
         } catch (error) {
             console.error('Staff inquiry note update failed.', { errorName: error?.name || 'Error' });
             if (error?.status === 409 || error?.code === 'INQUIRY_NOTE_CONFLICT') {
-                state.editingNoteIds.add(item.id);
-                state.noteDrafts.set(item.id, draftText);
-                state.noteErrors.set(
-                    item.id,
-                    error?.message || 'Not başka bir yetkili tarafından güncellendi. Güncel not yukarıda gösteriliyor.'
-                );
-                await loadInquiries(state.activeTab, { silentError: true });
+                const reloaded = await loadInquiries(state.activeTab, { silentError: true });
+                if (!reloaded) {
+                    state.staleNoteIds.add(item.id);
+                    state.editingNoteIds.add(item.id);
+                    state.noteDrafts.set(item.id, draftText);
+                    state.noteErrors.set(
+                        item.id,
+                        'Not başka bir yetkili tarafından güncellendi, ancak güncel not yüklenemedi. Kaydet’e basarak yeniden yüklemeyi deneyin.'
+                    );
+                } else {
+                    state.staleNoteIds.delete(item.id);
+                    const stillInTab = state.items.some((entry) => entry.id === item.id);
+                    if (!stillInTab) {
+                        state.editingNoteIds.delete(item.id);
+                        state.noteDrafts.delete(item.id);
+                        state.noteErrors.delete(item.id);
+                        state.orphanedNoteDraft = {
+                            message: 'Not başka bir yetkili tarafından güncellendi ve soru bu sekmeden taşındı veya silindi. Kaydedilmemiş taslağınızı aşağıdan kopyalayabilirsiniz.',
+                            text: draftText
+                        };
+                    } else {
+                        state.editingNoteIds.add(item.id);
+                        state.noteDrafts.set(item.id, draftText);
+                        state.noteErrors.set(
+                            item.id,
+                            'Not başka bir yetkili tarafından güncellendi. Güncel not yukarıda gösteriliyor.'
+                        );
+                    }
+                }
             } else {
                 state.noteErrors.set(item.id, error?.message || 'Not kaydedilemedi. Lütfen tekrar deneyin.');
             }

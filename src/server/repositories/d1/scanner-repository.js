@@ -184,6 +184,7 @@ async function recordHeartbeat(database, input) {
         .bind(input.runner_id,input.health,input.engine_version,input.signature_version,input.signature_updated_at,input.now).run();
 }
 
+const ACCEPTED_MEDIA_TYPES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
 const FAILED_JOBS_FROM = `
     FROM document_revision_files AS files
     JOIN document_revisions AS revisions ON revisions.id = files.revision_id
@@ -191,11 +192,14 @@ const FAILED_JOBS_FROM = `
     JOIN document_requirements AS requirements ON requirements.id = records.requirement_id
     JOIN applications ON applications.id = records.application_id
     JOIN students ON students.id = applications.student_id
+    JOIN upload_intents AS intents ON intents.revision_file_id = files.id AND intents.status = 'completed'
 `;
 const FAILED_JOBS_WHERE = `
     WHERE revisions.is_current = 1
+      AND files.upload_status = 'finalized'
       AND files.cleanup_status = 'none'
       AND files.scan_status IN ('failed', 'unsafe')
+      AND files.media_type IN ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')
       AND NOT EXISTS (SELECT 1 FROM application_deletions AS deletions WHERE deletions.application_id = applications.id)
 `;
 
@@ -213,6 +217,10 @@ async function readStatus(database, { includeApplicantDetails = true } = {}) {
                    COALESCE(jobs.result_code, files.scan_status) AS result_code,
                    COALESCE(jobs.updated_at, files.created_at, revisions.uploaded_at) AS updated_at,
                    files.scan_status AS scan_status,
+                   files.upload_status AS upload_status,
+                   files.cleanup_status AS cleanup_status,
+                   files.media_type AS media_type,
+                   intents.status AS upload_intent_status,
                    applications.id AS application_id,
                    students.student_number AS student_number,
                    applications.first_name AS first_name,
@@ -259,6 +267,10 @@ async function readStatus(database, { includeApplicantDetails = true } = {}) {
             can_request_resubmission: ['submitted', 'under_review', 'resubmission_required'].includes(row.application_status)
                 && row.revision_status === 'submitted'
                 && ['pending', 'under_review'].includes(row.review_status)
+                && row.upload_status === 'finalized'
+                && row.cleanup_status === 'none'
+                && row.upload_intent_status === 'completed'
+                && ACCEPTED_MEDIA_TYPES.has(row.media_type)
         };
     });
     return {

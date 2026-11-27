@@ -956,3 +956,47 @@ test('Görev 5: AI model query for propose_documents_print also undergoes cleanu
         copies: 10
     });
 });
+
+test('matchOfficeDocuments and propose_documents_print never match undergraduate checklist for graduate queries and offer choices for generic terms', async () => {
+    const { matchOfficeDocuments } = await import('../src/server/domain/staffAssistantTools.js');
+    const { environment } = await createFixture();
+
+    for (const query of ['lisansüstü', 'yüksek lisans', 'master', 'doktora', 'lisansüstü başvuru', 'lisansüstü kayıt']) {
+        const directMatches = matchOfficeDocuments(undefined, query);
+        assert.equal(
+            directMatches.some((doc) => doc.id === 'on-lisans-lisans-checklist'),
+            false,
+            `Undergraduate checklist must never match graduate query: ${query}`
+        );
+    }
+
+    for (const query of ['lisansüstü', 'yüksek lisans', 'master', 'doktora']) {
+        const matches = matchOfficeDocuments(undefined, query);
+        assert.equal(matches.length, 1, `Expected single graduate match for: ${query}`);
+        assert.equal(matches[0].id, 'lisansustu-evrak-kontrol');
+    }
+
+    for (const message of ['lisansüstü başvuru çıkar', 'lisansüstü kayıt çıkar', 'ikamet', 'ücret', 'kayıt', 'başvuru']) {
+        const directMatches = matchOfficeDocuments(undefined, message);
+        assert.notEqual(directMatches.length, 1, `Ambiguous query must not auto-select a single doc: ${message}`);
+    }
+
+    for (const message of ['lisansüstü başvuru çıkar 2 tane', 'lisansüstü kayıt çıkar 2 tane']) {
+        const resp = await worker.fetch(createAssistantRequest({ message }), environment, {});
+        const payload = validateStaffAssistantResponse(await resp.json());
+        assert.equal(resp.status, 200);
+        assert.equal(payload.state, 'confused');
+        assert.equal(payload.action, undefined);
+        assert.equal(payload.results?.kind, 'documentChoices');
+        assert.equal(payload.results?.copies, 2);
+        assert.equal(
+            payload.results.items.some((item) => item.documentId === 'on-lisans-lisans-checklist'),
+            false,
+            `Choices must not include undergraduate checklist for: ${message}`
+        );
+        assert.ok(
+            payload.results.items.some((item) => item.documentId === 'lisansustu-evrak-kontrol'),
+            `Choices should include graduate checklist for: ${message}`
+        );
+    }
+});

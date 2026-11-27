@@ -682,3 +682,80 @@ test('unsaved note draft survives list refresh and 409 conflict keeps draft whil
     assert.match(root.querySelector('.staff-inquiry-note-meta').textContent, /Son düzenleyen: Mert Görevli/);
     assert.match(root.querySelector('.staff-inquiry-note-error').textContent, /güncellendi/);
 });
+
+test('409 conflict with failed reload reports reload failure, retries reload on next save, and handles inquiry leaving tab', async (context) => {
+    const { dom, root } = createStaffDom(context);
+    let serverItem = {
+        ...NEW_ITEMS[0],
+        staff_note: 'İlk not',
+        staff_note_updated_by_name: 'Deniz Görevli',
+        staff_note_updated_at: '2026-11-27T08:00:00.000Z'
+    };
+    let getMode = 'ok';
+    const putBodies = [];
+
+    const controller = mountInquiryManager(root, {
+        fetcher: async (url, options = {}) => {
+            const method = options.method || 'GET';
+            if (method === 'GET') {
+                if (getMode === 'fail') {
+                    return createJsonResponse({ error: { message: 'Sunucu hatası' } }, 500);
+                }
+                if (getMode === 'moved') {
+                    return createJsonResponse({ items: [], counts: { new: 0, answered: 1 } });
+                }
+                return createJsonResponse({ items: [serverItem], counts: { new: 1, answered: 0 } });
+            }
+            if (method === 'PUT' && String(url).endsWith('/inq-1/note')) {
+                const body = JSON.parse(options.body);
+                putBodies.push(body);
+                if (body.expected_note_updated_at !== serverItem.staff_note_updated_at) {
+                    return createJsonResponse({ error: { code: 'INQUIRY_NOTE_CONFLICT', message: 'Çakışma' } }, 409);
+                }
+                serverItem = { ...serverItem, staff_note: body.note, staff_note_updated_at: '2026-11-27T08:10:00.000Z' };
+                return createJsonResponse({ item: serverItem });
+            }
+            throw new Error(`Unexpected request: ${method} ${url}`);
+        }
+    });
+    context.after(() => controller?.destroy());
+    await flushPromises();
+
+    // Open editor and type draft
+    root.querySelector('[data-action="edit-inquiry-note"]').click();
+    const input = root.querySelector('[data-inquiry-note-input="inq-1"]');
+    input.value = 'Taslak metni';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+
+    // Server updates note, and subsequent reload fails
+    serverItem = { ...serverItem, staff_note: 'Güncel sunucu notu', staff_note_updated_at: '2026-11-27T08:05:00.000Z' };
+    getMode = 'fail';
+    root.querySelector('[data-action="save-inquiry-note"]').click();
+    await flushPromises();
+
+    assert.equal(putBodies.length, 1);
+    const errorEl = root.querySelector('.staff-inquiry-note-error');
+    assert.match(errorEl.textContent, /yüklenemedi/);
+    assert.doesNotMatch(errorEl.textContent, /yukarıda gösteriliyor/);
+    assert.equal(root.querySelector('[data-inquiry-note-input="inq-1"]').value, 'Taslak metni');
+
+    // Next save retries reload instead of sending stale PUT
+    getMode = 'ok';
+    root.querySelector('[data-action="save-inquiry-note"]').click();
+    await flushPromises();
+    assert.equal(putBodies.length, 1);
+    assert.equal(root.querySelector('.staff-inquiry-note-text').textContent, 'Güncel sunucu notu');
+    assert.equal(root.querySelector('[data-inquiry-note-input="inq-1"]').value, 'Taslak metni');
+
+    // Now suppose another 409 happens and the inquiry left the current tab
+    serverItem = { ...serverItem, staff_note_updated_at: '2026-11-27T08:06:00.000Z' };
+    getMode = 'moved';
+    root.querySelector('[data-action="save-inquiry-note"]').click();
+    await flushPromises();
+
+    assert.equal(root.querySelector('[data-inquiry-note-input="inq-1"]'), null);
+    const orphanBox = root.querySelector('.staff-inquiry-orphaned-draft');
+    assert.ok(orphanBox);
+    assert.equal(orphanBox.querySelector('.staff-inquiry-orphaned-draft-text').value, 'Taslak metni');
+    assert.ok(orphanBox.querySelector('[data-action="copy-orphaned-note-draft"]'));
+});

@@ -68,6 +68,8 @@ function renderMonth(root, payload) {
     }).join('') || '<p class="work-hours-empty-history">Bu ay için kayıt yok.</p>';
 }
 
+const BLOB_REVOKE_DELAY_MS = 60_000;
+
 function triggerFileDownload(doc, fileName, bytes) {
     const view = doc?.defaultView || globalThis;
     const BlobCtor = view.Blob || globalThis.Blob;
@@ -83,7 +85,11 @@ function triggerFileDownload(doc, fileName, bytes) {
     doc.body.append(link);
     link.click();
     link.remove();
-    urlApi.revokeObjectURL(objectUrl);
+    const scheduleTimer = typeof view.setTimeout === 'function' ? view.setTimeout.bind(view) : globalThis.setTimeout;
+    const timer = scheduleTimer(() => {
+        urlApi.revokeObjectURL?.(objectUrl);
+    }, BLOB_REVOKE_DELAY_MS);
+    if (typeof timer?.unref === 'function') timer.unref();
 }
 
 function handleTimesheetExport(root, personKey) {
