@@ -41,11 +41,11 @@ const EXPECTED_PHYSICAL_RECEIPT = Object.freeze({
     },
     ru: {
         sent_to_migration: 'Миграционное управление рассматривает ваше дело.',
-        migration_approved: 'Одобрено миграционной службой.'
+        migration_approved: 'Одобрено Миграционным управлением.'
     },
     tk: {
-        sent_to_migration: 'Migrasiýa gullugy faýlyňyzy barlaýar.',
-        migration_approved: 'Migrasiýa gullugy tarapyndan tassyklandy.'
+        sent_to_migration: 'Migrasiýa edarasy faýlyňyzy gözden geçirýär.',
+        migration_approved: 'Migrasiýa edarasy tarapyndan tassyklandy.'
     },
     ar: {
         sent_to_migration: 'تقوم إدارة الهجرة بمراجعة ملفك.',
@@ -68,6 +68,17 @@ test('public messages and chatbot status labels expose clear migration status wo
             documents: []
         }, locale);
         assert.ok(summary.includes(EXPECTED_PUBLIC[locale].sent_to_migration));
+    }
+});
+
+test('physical and online migration wording match for ru and tk', () => {
+    for (const locale of ['ru', 'tk']) {
+        for (const key of ['sent_to_migration', 'migration_approved']) {
+            assert.equal(
+                PHYSICAL_RECEIPT_MESSAGES[locale][key],
+                `${PUBLIC_MESSAGES[locale][`applicationStatus_${key}`]}.`
+            );
+        }
     }
 });
 
