@@ -137,6 +137,10 @@ function buildPurgeStatements(database, {
         database.prepare(`
             DELETE FROM staff_record_notes
             WHERE record_kind = 'physical' AND record_id = ? AND ${existsGuard}
+        `).bind(intakeId, ...guardBindings),
+        database.prepare(`
+            DELETE FROM migration_office_states
+            WHERE record_kind = 'physical' AND record_id = ? AND ${existsGuard}
         `).bind(intakeId, ...guardBindings)
     );
 

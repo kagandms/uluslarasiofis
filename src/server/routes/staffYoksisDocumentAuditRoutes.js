@@ -1,4 +1,6 @@
 import { ApiError } from '../domain/errors.js';
+import { MAX_MIGRATION_SYNC_APPLY_ITEMS, buildMigrationSyncPlan } from '../domain/migrationSync.js';
+import { createMigrationSyncRepository } from '../repositories/d1/migrationSyncRepository.js';
 import {
     MAX_BATCH_BYTES,
     MAX_BATCH_RECORDS,
@@ -18,7 +20,11 @@ import {
 import { jsonResponse } from '../http/apiResponse.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { requireStaff } from '../auth/staffAuth.js';
+import { hashSessionToken, readCookie } from '../auth/sessionToken.js';
+import { hasPhysicalTransferSchema, isPhysicalSessionAllowed } from '../config/physical-intake-gate.js';
 import { requireMethod, requireSameOrigin } from './shared.js';
+
+const SYNC_STAFF_ROLES = Object.freeze(['reviewer', 'admin']);
 
 function classifyWriteFailure(error) {
     const causes = [error, error?.cause, error?.cause?.cause];
@@ -482,6 +488,236 @@ async function readRecords(request, environment, requestId) {
     return jsonResponse({ records, total: count?.total || 0, page, pageSize }, 200, requestId);
 }
 
+function validateSyncApplyBody(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)
+        || Object.keys(body).some((key) => !['import_id', 'items'].includes(key))) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Eşitleme isteğinin biçimini kontrol edin.');
+    }
+    if (typeof body.import_id !== 'string' || !body.import_id.trim() || body.import_id.length > 128) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Aktarım kimliği geçersiz.');
+    }
+    if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > MAX_MIGRATION_SYNC_APPLY_ITEMS) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Bir pakette 1 ile 20 arasında kayıt gönderilebilir.');
+    }
+    return {
+        import_id: body.import_id.trim(),
+        items: body.items.map((item) => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)
+                || Object.keys(item).some((key) => !['record_kind', 'record_id', 'application_number', 'version'].includes(key))) {
+                throw new ApiError(400, 'VALIDATION_ERROR', 'Eşitleme satırı biçimi geçersiz.');
+            }
+            if (item.record_kind !== 'online' && item.record_kind !== 'physical') {
+                throw new ApiError(400, 'VALIDATION_ERROR', 'Kayıt türü geçersiz.');
+            }
+            if (typeof item.record_id !== 'string' || !item.record_id.trim() || item.record_id.length > 128) {
+                throw new ApiError(400, 'VALIDATION_ERROR', 'Kayıt kimliği geçersiz.');
+            }
+            if (typeof item.application_number !== 'string' || !/^\d{4}-\d{2}-\d{7}$/.test(item.application_number.trim())) {
+                throw new ApiError(400, 'VALIDATION_ERROR', 'Başvuru numarası geçersiz.');
+            }
+            if (item.record_kind === 'online') {
+                if (typeof item.version !== 'string' || !item.version.trim() || item.version.length > 64) {
+                    throw new ApiError(400, 'VALIDATION_ERROR', 'Kayıt sürümü geçersiz.');
+                }
+            } else if (!Number.isSafeInteger(item.version) || item.version < 1) {
+                throw new ApiError(400, 'VALIDATION_ERROR', 'Kayıt sürümü geçersiz.');
+            }
+            return {
+                record_kind: item.record_kind,
+                record_id: item.record_id.trim(),
+                application_number: item.application_number.trim(),
+                version: item.version
+            };
+        })
+    };
+}
+
+async function canAccessPhysicalRecords(request, environment) {
+    if (!['staging', 'production'].includes(environment.APP_ENV)) return false;
+    const sessionToken = readCookie(request, 'staff_session');
+    if (!sessionToken) return false;
+    const sessionHash = await hashSessionToken(sessionToken);
+    if (!isPhysicalSessionAllowed(environment, sessionHash)) return false;
+    return hasPhysicalTransferSchema(environment);
+}
+
+async function previewMigrationSync(request, environment, requestId) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const body = await readJsonBody(request, MAX_BATCH_BYTES);
+    if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length > 0) {
+        throw new ApiError(400, 'VALIDATION_ERROR', 'Önizleme isteği geçersiz alan içeriyor.');
+    }
+    const repository = createMigrationSyncRepository(environment.DB);
+    const latestImport = await repository.readLatestFinalizedImport();
+    if (!latestImport) {
+        return jsonResponse({
+            import_id: null,
+            exported_at: null,
+            changes: [],
+            needsAttention: [],
+            manual: [],
+            unchangedCount: 0
+        }, 200, requestId);
+    }
+    const includePhysical = await canAccessPhysicalRecords(request, environment);
+    const [auditRows, portalRecords] = await Promise.all([
+        repository.listFinalizedExcelAuditRows(latestImport.id),
+        repository.listPortalRecordsForSync({ includePhysical })
+    ]);
+    const plan = buildMigrationSyncPlan({ auditRows, portalRecords });
+    return jsonResponse({
+        import_id: latestImport.id,
+        exported_at: latestImport.exported_at ?? null,
+        ...plan
+    }, 200, requestId);
+}
+
+async function applyMigrationSync(request, environment, requestId, staff) {
+    requireMethod(request, 'POST');
+    requireSameOrigin(request);
+    const { import_id: importId, items } = validateSyncApplyBody(await readJsonBody(request, MAX_BATCH_BYTES));
+    const hasPhysicalItems = items.some((item) => item.record_kind === 'physical');
+    if (hasPhysicalItems && !await canAccessPhysicalRecords(request, environment)) {
+        throw new ApiError(403, 'PHYSICAL_INTAKE_DISABLED', 'Fiziksel başvuru bu oturum için etkin değil.');
+    }
+    const repository = createMigrationSyncRepository(environment.DB);
+    const latestImport = await repository.readLatestFinalizedImport();
+    if (!latestImport || latestImport.id !== importId) {
+        return jsonResponse({
+            applied: [],
+            conflicts: items.map((item) => ({
+                record_kind: item.record_kind,
+                record_id: item.record_id,
+                application_number: item.application_number,
+                reason: 'import_changed'
+            }))
+        }, 200, requestId);
+    }
+
+    const [auditRows, portalRecords] = await Promise.all([
+        repository.listFinalizedExcelAuditRows(latestImport.id),
+        repository.listPortalRecordsForSync({ includePhysical: hasPhysicalItems })
+    ]);
+    const plan = buildMigrationSyncPlan({ auditRows, portalRecords });
+    const actionableByKey = new Map(
+        [...plan.changes, ...plan.needsAttention].map((entry) => [`${entry.record_kind}:${entry.record_id}`, entry])
+    );
+    const portalByKey = new Map(
+        portalRecords.map((record) => [`${record.record_kind}:${record.record_id}`, record])
+    );
+
+    const applied = [];
+    const conflicts = [];
+
+    for (const item of items) {
+        const key = `${item.record_kind}:${item.record_id}`;
+        const planned = actionableByKey.get(key);
+
+        if (!planned) {
+            const existing = portalByKey.get(key);
+            const currentVersion = existing
+                ? (existing.record_kind === 'online' ? existing.updated_at : existing.lock_version)
+                : null;
+            const alreadyAppliedForImport = Boolean(
+                existing
+                && existing.overlay_import_id === importId
+                && existing.overlay_application_number === item.application_number
+                && (existing.overlay_state === 'approved' || currentVersion === item.version)
+            );
+            if (alreadyAppliedForImport) {
+                applied.push({
+                    record_kind: item.record_kind,
+                    record_id: item.record_id,
+                    application_number: item.application_number,
+                    target_state: existing.overlay_state,
+                    idempotent: true
+                });
+            } else {
+                conflicts.push({
+                    record_kind: item.record_kind,
+                    record_id: item.record_id,
+                    application_number: item.application_number,
+                    reason: 'version_conflict'
+                });
+            }
+            continue;
+        }
+
+        if (planned.application_number !== item.application_number || planned.version !== item.version) {
+            conflicts.push({
+                record_kind: item.record_kind,
+                record_id: item.record_id,
+                application_number: item.application_number,
+                reason: 'version_conflict'
+            });
+            continue;
+        }
+
+        const now = new Date().toISOString();
+        try {
+            const ok = planned.record_kind === 'online'
+                ? await repository.applyOnlineItem({
+                    recordId: planned.record_id,
+                    currentStatus: planned.current_status,
+                    expectedUpdatedAt: planned.version,
+                    targetState: planned.target_state,
+                    applicationNumber: planned.application_number,
+                    note: planned.note,
+                    deadline: planned.deadline,
+                    importId,
+                    staffId: staff.id,
+                    now,
+                    requestId
+                })
+                : await repository.applyPhysicalItem({
+                    recordId: planned.record_id,
+                    currentStatus: planned.current_status,
+                    expectedLockVersion: planned.version,
+                    targetState: planned.target_state,
+                    applicationNumber: planned.application_number,
+                    note: planned.note,
+                    deadline: planned.deadline,
+                    importId,
+                    staffId: staff.id,
+                    now,
+                    requestId
+                });
+            if (ok) {
+                applied.push({
+                    record_kind: planned.record_kind,
+                    record_id: planned.record_id,
+                    application_number: planned.application_number,
+                    target_state: planned.target_state
+                });
+            } else {
+                conflicts.push({
+                    record_kind: item.record_kind,
+                    record_id: item.record_id,
+                    application_number: item.application_number,
+                    reason: 'version_conflict'
+                });
+            }
+        } catch (error) {
+            console.error('YÖKSİS durum eşitleme yazımı başarısız.', {
+                requestId,
+                errorName: error?.name || 'UnknownError',
+                failureKind: classifyWriteFailure(error),
+                failureCode: readWriteFailureCode(error),
+                failureDetail: readWriteFailureDetail(error)
+            });
+            conflicts.push({
+                record_kind: item.record_kind,
+                record_id: item.record_id,
+                application_number: item.application_number,
+                reason: 'write_failed'
+            });
+        }
+    }
+
+    return jsonResponse({ applied, conflicts }, 200, requestId);
+}
+
 /**
  * Routes authenticated staff YÖKSİS document audit requests (scan writes, Excel imports, latest import, and query).
  * @param {Request} request Incoming Worker request.
@@ -490,11 +726,17 @@ async function readRecords(request, environment, requestId) {
  * @returns {Promise<Response>} JSON response.
  */
 export async function handleStaffYoksisDocumentAudit(request, environment, requestId) {
-    const staff = await requireStaff(request, environment);
     const { pathname } = new URL(request.url);
+    const roles = pathname === '/api/staff/yoksis-document-audit/sync/preview'
+        || pathname === '/api/staff/yoksis-document-audit/sync/apply'
+        ? SYNC_STAFF_ROLES
+        : undefined;
+    const staff = await requireStaff(request, environment, roles);
     if (pathname === '/api/staff/yoksis-document-audit/records') return writeRecords(request, environment, requestId, staff);
     if (pathname === '/api/staff/yoksis-document-audit/query') return readRecords(request, environment, requestId);
     if (pathname === '/api/staff/yoksis-document-audit/import') return importExcelRows(request, environment, requestId, staff);
     if (pathname === '/api/staff/yoksis-document-audit/import/latest') return readLatestImport(request, environment, requestId);
+    if (pathname === '/api/staff/yoksis-document-audit/sync/preview') return previewMigrationSync(request, environment, requestId);
+    if (pathname === '/api/staff/yoksis-document-audit/sync/apply') return applyMigrationSync(request, environment, requestId, staff);
     throw new ApiError(404, 'NOT_FOUND', 'İstenen kayıt bulunamadı.');
 }
