@@ -35,3 +35,17 @@ Kaynak: `claude/portal-update-features-plan-7a67da`. Yalnız yerel ortam ve sent
 | C06 | Eski sorgulu Excel yeni eksik evrak işaretini silemez; yeni sorgulu "incelemede" siler |
 | C07 | Eksik evrak → öğrenci uyarı ve son tarihi görür (açıklama, başvuru no görmez); onaylanınca veya geri alınınca uyarı kaybolur |
 | C08 | Filtreler (eksik evrak, onaylandı, eski sorgu) doğru sayı ve sayfalama; kalıcı silmede ek bilgi temizlenir |
+
+## Sonuçlar (2026-11-27, yerel)
+
+| Maddeler | Otomatik | Not |
+| --- | --- | --- |
+| A01–A07 | 7/7 geçti | İlk koşuda 4 hata test yazımından kaynaklandı (yanlış mod adı, belge kodu, sütun adı, yanıt alanı) |
+| B01–B07 | 7/7 geçti | İlk koşuda 2 hata Excel okuma biçiminden kaynaklandı |
+| C01–C08 | tümü geçti (11 test) | İlk koşuda hatalar test verisi ve beklenti biçiminden kaynaklandı |
+
+- Bu turda ürün kodunda hata bulunmadı; ürün kodu değişmedi.
+- Duyarlılık denemesi (geçici kopyada ürün bilerek bozuldu): tarih koruması, ad eşleşmesi, sürüm denetimi, not çakışması, kopya sınırı, silinmiş başvuru filtresi, boş gün, öğrenci uyarısı. 8/8 yakalandı; sonuncusu için ilk turda test eksikti, eklendi.
+- Tam paket: `npm test` 2.523 test, 2.522 geçti, 1 atlandı; `build:production` ve `deploy:dry-run:production` geçti.
+- Tarayıcı (geçici kopya, yapay zekâ yerine boş yanıt veren taklit): Topi cümleleri doğru belge ve adet verdi; belirsiz istekte seçenek düğmeleri göründü; seçilen belgenin PDF'i hazırlandı. İkamet, YÖKSİS ve çalışma saatleri ekranlarında 375 px'te yatay taşma ölçülmedi.
+- **Doğrulanamadı:** yazdırma penceresinin açılması (test tarayıcısı yeni pencereyi engelliyor; mevcut yazdırma yolu değişmedi), gerçek yapay zekâ modeli, gerçek portal verisiyle eşitleme.
