@@ -138,23 +138,130 @@ test('buildMigrationSyncPlan routes level B to nameCheck, preserves unchanged, a
     assert.equal(plan.needsAttention.length, 0);
     assert.equal(plan.unchangedCount, 1);
 
-    assert.equal(plan.nameCheck.length, 2);
+    assert.equal(plan.nameCheck.length, 3);
     const nc1 = plan.nameCheck.find((item) => item.record_id === 'app-1');
     assert.equal(nc1.excel_name, 'Resad Ibragimov');
+    assert.equal(nc1.name_level, 'similar');
     assert.equal(nc1.target_state, 'approved');
     assert.equal(nc1.needs_attention, false);
 
     const nc2 = plan.nameCheck.find((item) => item.record_id === 'app-2');
     assert.equal(nc2.excel_name, 'Guwanc Jumayew');
+    assert.equal(nc2.name_level, 'similar');
     assert.equal(nc2.reason, 'not_sent_to_migration');
     assert.equal(nc2.needs_attention, true);
+
+    const nc6 = plan.nameCheck.find((item) => item.record_id === 'app-6');
+    assert.equal(nc6.excel_name, 'Ali Karimov');
+    assert.equal(nc6.name_level, 'different');
+    assert.equal(nc6.target_state, 'approved');
+    assert.equal(nc6.needs_attention, false);
 
     const manualReasons = Object.fromEntries(plan.manual.map((item) => [item.record_id, item.reason]));
     assert.equal(manualReasons['app-4'], 'stale_query_conflict');
     assert.equal(manualReasons['app-5'], 'terminal_status_conflict');
-    assert.equal(manualReasons['app-6'], 'name_mismatch');
-    const mismatchItem = plan.manual.find((item) => item.record_id === 'app-6');
-    assert.equal(mismatchItem.excel_name, 'Ali Karimov');
+    assert.equal(manualReasons['app-6'], undefined);
+});
+
+test('buildMigrationSyncPlan routes different names on open records to nameCheck even when unchanged, keeps stale/protected in manual, and remembers confirmed application_number', () => {
+    const plan = buildMigrationSyncPlan({
+        nowMs: Date.parse('2026-11-27T10:00:00+03:00'),
+        auditRows: [
+            // 1) Different name, open sent_to_migration + reviewing (unchanged state) -> nameCheck confirmation_only
+            audit('Ali Karimov', {
+                student_number: '26000000101',
+                application_number: '2026-11-0000101',
+                application_status: 'İşlem Bekliyor'
+            }),
+            // 2) Different name, open sent_to_migration + identical missing_documents -> nameCheck confirmation_only
+            audit('Veli Demir', {
+                student_number: '26000000102',
+                application_number: '2026-11-0000102',
+                application_status: 'Eksik Belge İstendi',
+                documents_json: JSON.stringify([{ name: 'Pasaport' }]),
+                missing_deadline: '2026-12-15'
+            }),
+            // 3) Different name, stale_query_conflict -> manual (stale_query_conflict wins)
+            audit('Murat Kaya', {
+                student_number: '26000000103',
+                application_number: '2026-11-0000103',
+                application_status: 'İşlem Tamamlandı',
+                goc_last_query_at: '2026-11-10'
+            }),
+            // 4) Different name, protected/completed -> manual (name_mismatch)
+            audit('Caner Yilmaz', {
+                student_number: '26000000104',
+                application_number: '2026-11-0000104',
+                application_status: 'İşlem Bekliyor'
+            }),
+            // 5) Different name, but overlay_application_number matches -> treated as compatible (changes)
+            audit('Zeynep Aydin', {
+                student_number: '26000000105',
+                application_number: '2026-11-0000105',
+                application_status: 'İşlem Tamamlandı'
+            }),
+            // 6) Different name, overlay_application_number is DIFFERENT -> asked again in nameCheck
+            audit('Elif Sahin', {
+                student_number: '26000000106',
+                application_number: '2026-11-0000106',
+                application_status: 'İşlem Tamamlandı'
+            })
+        ],
+        portalRecords: [
+            portal('Omar', 'Karimov', { record_id: 'app-diff-unchanged', student_number: '26000000101', status: 'sent_to_migration' }),
+            portal('Hasan', 'Yildiz', {
+                record_id: 'app-diff-missing',
+                student_number: '26000000102',
+                status: 'sent_to_migration',
+                overlay_state: 'missing_documents',
+                overlay_note: 'Pasaport',
+                overlay_deadline: '2026-12-15',
+                overlay_goc_last_query_at: '2026-11-25'
+            }),
+            portal('Kemal', 'Arslan', {
+                record_id: 'app-diff-stale',
+                student_number: '26000000103',
+                status: 'sent_to_migration',
+                overlay_state: 'missing_documents',
+                overlay_goc_last_query_at: '2026-11-20'
+            }),
+            portal('Burak', 'Ozturk', { record_id: 'app-diff-closed', student_number: '26000000104', status: 'completed' }),
+            portal('Merve', 'Koc', {
+                record_id: 'app-remembered',
+                student_number: '26000000105',
+                status: 'sent_to_migration',
+                overlay_state: 'reviewing',
+                overlay_application_number: '2026-11-0000105'
+            }),
+            portal('Selin', 'Celik', {
+                record_id: 'app-new-appnum',
+                student_number: '26000000106',
+                status: 'sent_to_migration',
+                overlay_state: 'reviewing',
+                overlay_application_number: '2026-11-0000999'
+            })
+        ]
+    });
+
+    assert.deepEqual(plan.changes.map((item) => item.record_id), ['app-remembered']);
+    assert.deepEqual(plan.nameCheck.map((item) => item.record_id), ['app-diff-unchanged', 'app-diff-missing', 'app-new-appnum']);
+
+    const unchangedDiff = plan.nameCheck.find((item) => item.record_id === 'app-diff-unchanged');
+    assert.equal(unchangedDiff.name_level, 'different');
+    assert.equal(unchangedDiff.confirmation_only, true);
+    assert.equal(unchangedDiff.excel_name, 'Ali Karimov');
+
+    const missingDiff = plan.nameCheck.find((item) => item.record_id === 'app-diff-missing');
+    assert.equal(missingDiff.name_level, 'different');
+    assert.equal(missingDiff.confirmation_only, true);
+
+    const newAppNum = plan.nameCheck.find((item) => item.record_id === 'app-new-appnum');
+    assert.equal(newAppNum.name_level, 'different');
+
+    const manualById = Object.fromEntries(plan.manual.map((item) => [item.record_id, item]));
+    assert.equal(manualById['app-diff-stale'].reason, 'stale_query_conflict');
+    assert.equal(manualById['app-diff-closed'].reason, 'name_mismatch');
+    assert.equal(manualById['app-diff-closed'].excel_name, 'Caner Yilmaz');
 });
 
 async function createRouteTestEnv() {
@@ -208,7 +315,8 @@ test('sync/preview returns nameCheck and sync/apply applies nameCheck only when 
         INSERT INTO students (id, student_number, normalized_student_number, created_at, updated_at)
         VALUES
             ('stu-1', '26000000011', '26000000011', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z'),
-            ('stu-2', '26000000012', '26000000012', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z')
+            ('stu-2', '26000000012', '26000000012', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z'),
+            ('stu-3', '26000000013', '26000000013', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z')
     `).run();
 
     await database.prepare(`
@@ -218,7 +326,8 @@ test('sync/preview returns nameCheck and sync/apply applies nameCheck only when 
         )
         VALUES
             ('app-sim', 'stu-1', 'initial', 'sent_to_migration', 'Rashad', 'Ibragimov', 0, '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z'),
-            ('app-dif', 'stu-2', 'initial', 'sent_to_migration', 'Omar', 'Karimov', 0, '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z')
+            ('app-dif', 'stu-2', 'initial', 'sent_to_migration', 'Omar', 'Karimov', 0, '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z'),
+            ('app-closed-dif', 'stu-3', 'initial', 'completed', 'Burak', 'Ozturk', 0, '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z')
     `).run();
 
     await database.prepare(`
@@ -229,7 +338,8 @@ test('sync/preview returns nameCheck and sync/apply applies nameCheck only when 
         )
         VALUES
             ('2026-11-0000011', '26000000011', 'Resad Ibragimov', '', '', '', 'İşlem Tamamlandı', 'successful', 'verified', '[]', 'resad ibragimov 26000000011', '2026-11-27T08:00:00.000Z', 'reviewer-1', 'excel', 'imp-1', '2026-11-10', '2026-11-26'),
-            ('2026-11-0000012', '26000000012', 'Ali Karimov', '', '', '', 'İşlem Tamamlandı', 'successful', 'verified', '[]', 'ali karimov 26000000012', '2026-11-27T08:00:00.000Z', 'reviewer-1', 'excel', 'imp-1', '2026-11-10', '2026-11-26')
+            ('2026-11-0000012', '26000000012', 'Ali Karimov', '', '', '', 'İşlem Tamamlandı', 'successful', 'verified', '[]', 'ali karimov 26000000012', '2026-11-27T08:00:00.000Z', 'reviewer-1', 'excel', 'imp-1', '2026-11-10', '2026-11-26'),
+            ('2026-11-0000013', '26000000013', 'Caner Yilmaz', '', '', '', 'İşlem Tamamlandı', 'successful', 'verified', '[]', 'caner yilmaz 26000000013', '2026-11-27T08:00:00.000Z', 'reviewer-1', 'excel', 'imp-1', '2026-11-10', '2026-11-26')
     `).run();
 
     const previewRes = await handleStaffYoksisDocumentAudit(
@@ -239,13 +349,17 @@ test('sync/preview returns nameCheck and sync/apply applies nameCheck only when 
     );
     assert.equal(previewRes.status, 200);
     const previewJson = await previewRes.json();
-    assert.equal(previewJson.nameCheck.length, 1);
-    assert.equal(previewJson.nameCheck[0].record_id, 'app-sim');
-    assert.equal(previewJson.nameCheck[0].excel_name, 'Resad Ibragimov');
+    assert.equal(previewJson.nameCheck.length, 2);
+    const simPreview = previewJson.nameCheck.find((item) => item.record_id === 'app-sim');
+    assert.equal(simPreview.excel_name, 'Resad Ibragimov');
+    assert.equal(simPreview.name_level, 'similar');
+    const difPreview = previewJson.nameCheck.find((item) => item.record_id === 'app-dif');
+    assert.equal(difPreview.excel_name, 'Ali Karimov');
+    assert.equal(difPreview.name_level, 'different');
     assert.equal(previewJson.manual.length, 1);
-    assert.equal(previewJson.manual[0].record_id, 'app-dif');
+    assert.equal(previewJson.manual[0].record_id, 'app-closed-dif');
     assert.equal(previewJson.manual[0].reason, 'name_mismatch');
-    assert.equal(previewJson.manual[0].excel_name, 'Ali Karimov');
+    assert.equal(previewJson.manual[0].excel_name, 'Caner Yilmaz');
 
     // Apply rejects unknown fields
     await assert.rejects(
@@ -266,7 +380,7 @@ test('sync/preview returns nameCheck and sync/apply applies nameCheck only when 
         (err) => err.status === 400
     );
 
-    // Apply applies nameCheck item and rejects/conflicts different item
+    // Apply applies nameCheck items and rejects protected manual item
     const applyRes = await handleStaffYoksisDocumentAudit(
         makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
             import_id: 'imp-1',
@@ -282,6 +396,12 @@ test('sync/preview returns nameCheck and sync/apply applies nameCheck only when 
                     record_id: 'app-dif',
                     application_number: '2026-11-0000012',
                     version: '2026-11-01T10:00:00.000Z'
+                },
+                {
+                    record_kind: 'online',
+                    record_id: 'app-closed-dif',
+                    application_number: '2026-11-0000013',
+                    version: '2026-11-01T10:00:00.000Z'
                 }
             ]
         }, cookie),
@@ -290,14 +410,88 @@ test('sync/preview returns nameCheck and sync/apply applies nameCheck only when 
     );
     assert.equal(applyRes.status, 200);
     const applyJson = await applyRes.json();
-    assert.equal(applyJson.applied.length, 1);
-    assert.equal(applyJson.applied[0].record_id, 'app-sim');
-    assert.equal(applyJson.applied[0].target_state, 'approved');
+    assert.equal(applyJson.applied.length, 2);
+    assert.deepEqual(applyJson.applied.map((item) => item.record_id), ['app-sim', 'app-dif']);
     assert.equal(applyJson.conflicts.length, 1);
-    assert.equal(applyJson.conflicts[0].record_id, 'app-dif');
+    assert.equal(applyJson.conflicts[0].record_id, 'app-closed-dif');
 
     const simApp = await database.prepare("SELECT status FROM applications WHERE id = 'app-sim'").first();
     const difApp = await database.prepare("SELECT status FROM applications WHERE id = 'app-dif'").first();
+    const closedApp = await database.prepare("SELECT status FROM applications WHERE id = 'app-closed-dif'").first();
     assert.equal(simApp.status, 'migration_approved');
-    assert.equal(difApp.status, 'sent_to_migration');
+    assert.equal(difApp.status, 'migration_approved');
+    assert.equal(closedApp.status, 'completed');
+});
+
+test('route-level: applying unchanged confirmation-only nameCheck item persists application_number and removes it from subsequent preview', async () => {
+    const { database, environment, cookie } = await createRouteTestEnv();
+
+    await database.prepare(`
+        INSERT INTO yoksis_audit_imports (id, uploaded_at, uploaded_by_staff_id, exported_at, row_count, finalized_at)
+        VALUES ('imp-conf', '2026-11-27T08:00:00.000Z', 'reviewer-1', '2026-11-27 08:00', 1, '2026-11-27T08:01:00.000Z')
+    `).run();
+
+    await database.prepare(`
+        INSERT INTO students (id, student_number, normalized_student_number, created_at, updated_at)
+        VALUES ('stu-conf', '26000000021', '26000000021', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z')
+    `).run();
+
+    await database.prepare(`
+        INSERT INTO applications (
+            id, student_id, application_type, status, first_name, last_name,
+            is_under_18, created_at, updated_at, last_activity_at
+        )
+        VALUES ('app-conf', 'stu-conf', 'initial', 'sent_to_migration', 'Omar', 'Karimov', 0, '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z', '2026-11-01T10:00:00.000Z')
+    `).run();
+
+    await database.prepare(`
+        INSERT INTO yoksis_document_audit_records (
+            application_number, student_number, first_name, last_name, passport_number, phone,
+            application_status, status_category, result_status, documents_json, search_text,
+            scanned_at, updated_by_staff_id, source, last_seen_import_id, record_date, goc_last_query_at
+        )
+        VALUES ('2026-11-0000021', '26000000021', 'Ali Karimov', '', '', '', 'İşlem Bekliyor', 'pending', 'verified', '[]', 'ali karimov 26000000021', '2026-11-27T08:00:00.000Z', 'reviewer-1', 'excel', 'imp-conf', '2026-11-10', '2026-11-26')
+    `).run();
+
+    const preview1 = await (await handleStaffYoksisDocumentAudit(
+        makeRequest('/api/staff/yoksis-document-audit/sync/preview', {}, cookie),
+        environment,
+        'req-p1'
+    )).json();
+    assert.equal(preview1.nameCheck.length, 1);
+    assert.equal(preview1.nameCheck[0].record_id, 'app-conf');
+    assert.equal(preview1.nameCheck[0].name_level, 'different');
+    assert.equal(preview1.nameCheck[0].confirmation_only, true);
+    assert.equal(preview1.manual.length, 0);
+
+    const applyJson = await (await handleStaffYoksisDocumentAudit(
+        makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+            import_id: 'imp-conf',
+            items: [{
+                record_kind: 'online',
+                record_id: 'app-conf',
+                application_number: '2026-11-0000021',
+                version: '2026-11-01T10:00:00.000Z'
+            }]
+        }, cookie),
+        environment,
+        'req-apply-conf'
+    )).json();
+    assert.equal(applyJson.applied.length, 1);
+    assert.equal(applyJson.conflicts.length, 0);
+
+    const overlay = await database.prepare(
+        "SELECT application_number, state FROM migration_office_states WHERE record_kind = 'online' AND record_id = 'app-conf'"
+    ).first();
+    assert.equal(overlay.application_number, '2026-11-0000021');
+    assert.equal(overlay.state, 'reviewing');
+
+    const preview2 = await (await handleStaffYoksisDocumentAudit(
+        makeRequest('/api/staff/yoksis-document-audit/sync/preview', {}, cookie),
+        environment,
+        'req-p2'
+    )).json();
+    assert.equal(preview2.nameCheck.length, 0);
+    assert.equal(preview2.manual.length, 0);
+    assert.equal(preview2.unchangedCount, 1);
 });

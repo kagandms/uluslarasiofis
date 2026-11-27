@@ -402,20 +402,22 @@ test('C02 record_date 29 and 30 days older pass date guard; 31 days older and em
     assert.equal(manualById.get(appEmpty.id)?.reason, 'missing_record_date');
 });
 
-test('C03 short name matches; different name and single word go to manual', async () => {
+test('C03 short name matches; open different name and single word go to nameCheck while protected goes to manual', async () => {
     const { database, environment } = createEnvironment();
     const staffCookie = await seedStaff(environment, database);
 
     const appShort = await seedApplication(database, { id: 'app-c03-short', studentNumber: '2603000001', firstName: 'Ayşe Fatma', lastName: 'Yılmaz' });
     const appDiff = await seedApplication(database, { id: 'app-c03-diff', studentNumber: '2603000002', firstName: 'Mehmet', lastName: 'Demir' });
     const appSingle = await seedApplication(database, { id: 'app-c03-single', studentNumber: '2603000003', firstName: 'Ali', lastName: 'Kaya' });
+    const appClosed = await seedApplication(database, { id: 'app-c03-closed', studentNumber: '2603000004', firstName: 'Hasan', lastName: 'Çelik', status: 'completed' });
 
     await importExcel(environment, staffCookie, {
         importId: 'imp-c03-names',
         rows: [
             makeExcelRow({ applicationNumber: '2026-00-3000001', studentNumber: appShort.studentNumber, fullName: 'AYŞE YILMAZ', gocStatus: 'İşlem Tamamlandı' }),
             makeExcelRow({ applicationNumber: '2026-00-3000002', studentNumber: appDiff.studentNumber, fullName: 'Ahmet Yılmaz', gocStatus: 'İşlem Tamamlandı' }),
-            makeExcelRow({ applicationNumber: '2026-00-3000003', studentNumber: appSingle.studentNumber, fullName: 'Ali', gocStatus: 'İşlem Tamamlandı' })
+            makeExcelRow({ applicationNumber: '2026-00-3000003', studentNumber: appSingle.studentNumber, fullName: 'Ali', gocStatus: 'İşlem Tamamlandı' }),
+            makeExcelRow({ applicationNumber: '2026-00-3000004', studentNumber: appClosed.studentNumber, fullName: 'Kemal Öztürk', gocStatus: 'İşlem Tamamlandı' })
         ]
     });
 
@@ -426,9 +428,14 @@ test('C03 short name matches; different name and single word go to manual', asyn
     });
     assert.equal(preview.response.status, 200);
     assert.deepEqual(preview.json.changes.map((c) => c.record_id), [appShort.id]);
+    assert.equal(preview.json.needsAttention.length, 0);
+    const nameCheckById = new Map(preview.json.nameCheck.map((item) => [item.record_id, item]));
+    assert.equal(nameCheckById.get(appDiff.id)?.name_level, 'different');
+    assert.equal(nameCheckById.get(appSingle.id)?.name_level, 'different');
+    assert.equal(preview.json.nameCheck.length, 2);
     const manualById = new Map(preview.json.manual.map((m) => [m.record_id, m]));
-    assert.equal(manualById.get(appDiff.id)?.reason, 'name_mismatch');
-    assert.equal(manualById.get(appSingle.id)?.reason, 'name_mismatch');
+    assert.equal(manualById.get(appClosed.id)?.reason, 'name_mismatch');
+    assert.equal(preview.json.manual.length, 1);
 });
 
 test('C03 two open records for the same student go to manual even when only online is selected', async () => {

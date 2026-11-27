@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
-import { initWorkspaceNavigation, isWorkspaceNavigationActive } from '../src/ui/workspaceNavigation.js';
+import { initWorkspaceNavigation, isWorkspaceNavigationActive, showWorkspaceView } from '../src/ui/workspaceNavigation.js';
+import { openApplicationFromDeepLink } from '../src/staff/applicationsManager.js';
 
 function installWorkspace(context) {
     const html = readFileSync(new URL('../yetkili/index.html', import.meta.url), 'utf8');
@@ -167,4 +168,38 @@ test('Gelen Sorular card has shortcut badge 9 and opens #view-inquiries via shar
     assert.equal(document.getElementById('home-screen').hidden, false);
     assert.equal(document.getElementById('workspace-content').hidden, true);
     assert.equal(document.activeElement.id, 'home-screen-title');
+});
+
+test('openApplicationFromDeepLink validates basvuru id, switches to applications view, dispatches open event, and strips parameter with replaceState', (context) => {
+    const html = readFileSync(new URL('../yetkili/index.html', import.meta.url), 'utf8');
+    const dom = new JSDOM(html, { url: 'https://portal.test/yetkili/?basvuru=app-42&keep=1' });
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    Object.defineProperty(globalThis, 'document', { configurable: true, value: dom.window.document });
+    dom.window.document.getElementById('app-content').hidden = false;
+    dom.window.document.getElementById('login-overlay').hidden = true;
+    context.after(() => {
+        if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument);
+        else delete globalThis.document;
+        dom.window.close();
+    });
+
+    initWorkspaceNavigation();
+    const openedIds = [];
+    dom.window.document.addEventListener('staff-scanner:open-application', (event) => {
+        openedIds.push(event.detail?.applicationId);
+    });
+
+    const result = openApplicationFromDeepLink(dom.window.document, dom.window, () => showWorkspaceView('applications'));
+    assert.equal(result, 'app-42');
+    assert.deepEqual(openedIds, ['app-42']);
+    assert.equal(dom.window.location.search, '?keep=1');
+    assert.equal(dom.window.document.getElementById('home-screen').hidden, true);
+    assert.equal(dom.window.document.getElementById('view-applications').hidden, false);
+
+    // Invalid id is stripped without opening detail
+    dom.window.history.replaceState(null, '', '/yetkili/?basvuru=bad%20id%2Fslash');
+    const invalidResult = openApplicationFromDeepLink(dom.window.document, dom.window, () => showWorkspaceView('applications'));
+    assert.equal(invalidResult, null);
+    assert.deepEqual(openedIds, ['app-42']);
+    assert.equal(dom.window.location.search, '');
 });

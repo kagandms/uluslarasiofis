@@ -120,7 +120,7 @@ test('date guard ignores E-İkamet middle groups (00, 13, 99), enforces 30-day r
     assert.equal(missingDatePlan.manual[0].reason, 'missing_record_date');
 });
 
-test('name matching is Turkish-tolerant and order-tolerant, supports shortened >=2-token subsets in either direction, and sends mismatches to manual', () => {
+test('name matching is Turkish-tolerant and order-tolerant, supports shortened >=2-token subsets in either direction, sends open mismatches to nameCheck and protected mismatches to manual', () => {
     assert.equal(areNamesCompatible({ first_name: 'İBRAHİM ŞAHİN', last_name: '' }, { first_name: 'ibrahim', last_name: 'sahin' }), true);
     assert.equal(areNamesCompatible({ first_name: 'YILMAZ AYŞE', last_name: '' }, { first_name: 'Ayşe', last_name: 'Yılmaz' }), true);
     assert.equal(areNamesCompatible({ first_name: 'MEHMET DEMİR', last_name: '' }, { first_name: 'Ayşe', last_name: 'Yılmaz' }), false);
@@ -154,22 +154,38 @@ test('name matching is Turkish-tolerant and order-tolerant, supports shortened >
         portalRecords: [makeOnlineRecord()]
     });
     assert.equal(planMismatch.changes.length, 0);
-    assert.equal(planMismatch.manual.length, 1);
-    assert.equal(planMismatch.manual[0].reason, 'name_mismatch');
+    assert.equal(planMismatch.needsAttention.length, 0);
+    assert.equal(planMismatch.manual.length, 0);
+    assert.equal(planMismatch.nameCheck.length, 1);
+    assert.equal(planMismatch.nameCheck[0].name_level, 'different');
 
     const oneTokenMismatch = buildMigrationSyncPlan({
         auditRows: [makeExcelRow({ first_name: 'AYŞE YILMAZ', application_status: 'İşlem Tamamlandı' })],
         portalRecords: [makeOnlineRecord({ first_name: 'Ayşe', last_name: '' })]
     });
     assert.equal(oneTokenMismatch.changes.length, 0);
-    assert.equal(oneTokenMismatch.manual.length, 1);
-    assert.equal(oneTokenMismatch.manual[0].reason, 'name_mismatch');
+    assert.equal(oneTokenMismatch.needsAttention.length, 0);
+    assert.equal(oneTokenMismatch.manual.length, 0);
+    assert.equal(oneTokenMismatch.nameCheck.length, 1);
+    assert.equal(oneTokenMismatch.nameCheck[0].name_level, 'different');
+
+    const closedMismatch = buildMigrationSyncPlan({
+        auditRows: [makeExcelRow({ first_name: 'MEHMET DEMİR', application_status: 'İşlem Tamamlandı' })],
+        portalRecords: [makeOnlineRecord({ status: 'completed' })]
+    });
+    assert.equal(closedMismatch.changes.length, 0);
+    assert.equal(closedMismatch.needsAttention.length, 0);
+    assert.equal(closedMismatch.nameCheck.length, 0);
+    assert.equal(closedMismatch.manual.length, 1);
+    assert.equal(closedMismatch.manual[0].reason, 'name_mismatch');
 
     const planNameOnlyNoStudentMatch = buildMigrationSyncPlan({
         auditRows: [makeExcelRow({ student_number: '26999999999', application_status: 'İşlem Tamamlandı' })],
         portalRecords: [makeOnlineRecord({ student_number: '26000000001' })]
     });
     assert.equal(planNameOnlyNoStudentMatch.changes.length, 0);
+    assert.equal(planNameOnlyNoStudentMatch.needsAttention.length, 0);
+    assert.equal(planNameOnlyNoStudentMatch.nameCheck.length, 0);
     assert.equal(planNameOnlyNoStudentMatch.manual.length, 0);
 });
 

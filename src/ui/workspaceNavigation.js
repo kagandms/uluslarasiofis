@@ -67,7 +67,7 @@ function updateActiveView(viewName) {
     });
 }
 
-function showWorkspaceView(viewName) {
+export function showWorkspaceView(viewName) {
     if (!Object.hasOwn(VIEW_TITLES, viewName)) return;
 
     const { homeScreen, workspaceContent, workspaceTitle } = getWorkspaceElements();

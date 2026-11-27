@@ -150,6 +150,12 @@ function formatAuditFullName(auditRow) {
         .join(' ');
 }
 
+function isConfirmedApplicationMatch(auditRow, portalRecord) {
+    const overlayAppNum = String(portalRecord?.overlay_application_number || '').trim();
+    const auditAppNum = String(auditRow?.application_number || '').trim();
+    return Boolean(overlayAppNum && auditAppNum && overlayAppNum === auditAppNum);
+}
+
 function buildPlanItem(record, auditRow, targetState, reason, details = { note: '', deadline: null }, extras = null) {
     const item = {
         record_kind: record.record_kind,
@@ -169,6 +175,12 @@ function buildPlanItem(record, auditRow, targetState, reason, details = { note: 
     if (extras?.includeExcelName) {
         item.excel_name = formatAuditFullName(auditRow);
     }
+    if (extras?.nameLevel) {
+        item.name_level = extras.nameLevel;
+    }
+    if (extras?.confirmationOnly) {
+        item.confirmation_only = true;
+    }
     if (typeof extras?.needsAttentionFlag === 'boolean') {
         item.needs_attention = extras.needsAttentionFlag;
     }
@@ -179,16 +191,24 @@ function resolveNameMatchedRows(dateEligible, record) {
     const compatible = [];
     const similar = [];
     for (const row of dateEligible) {
-        const level = classifyNameMatch(row, record);
+        const level = isConfirmedApplicationMatch(row, record)
+            ? 'compatible'
+            : classifyNameMatch(row, record);
         if (level === 'compatible') compatible.push(row);
         else if (level === 'similar') similar.push(row);
     }
     if (compatible.length > 0) return { level: 'compatible', rows: compatible };
     if (similar.length > 0) return { level: 'similar', rows: similar };
-    return { level: 'different', rows: [] };
+    return { level: 'different', rows: dateEligible };
 }
 
-function classifyMatchedOpenRecord(record, bestRow, isSimilarMatch) {
+function classifyMatchedOpenRecord(record, bestRow, nameLevel) {
+    const needsNameCheck = nameLevel === 'similar' || nameLevel === 'different';
+    const buildExtras = (needsAttentionFlag, confirmationOnly = false) => (
+        needsNameCheck
+            ? { includeExcelName: true, nameLevel, needsAttentionFlag, confirmationOnly }
+            : null
+    );
     const targetState = bestRow.targetState;
     const details = targetState === 'missing_documents'
         ? extractAuditMissingDetails(bestRow)
@@ -209,25 +229,31 @@ function classifyMatchedOpenRecord(record, bestRow, isSimilarMatch) {
             && (!incomingQueryAt || incomingQueryAt < currentOverlayQueryAt);
 
         if (targetState === 'missing_documents') {
+            if (isOlderOrMissingAgainstMissingDocs) {
+                return { bucket: 'manual', item: buildPlanItem(record, bestRow, targetState, 'stale_query_conflict', details) };
+            }
             if (
                 currentOverlayState === 'missing_documents'
                 && currentOverlayNote === details.note
                 && currentOverlayDeadline === details.deadline
             ) {
+                if (nameLevel === 'different') {
+                    return {
+                        bucket: 'nameCheck',
+                        item: buildPlanItem(record, bestRow, 'missing_documents', 'missing_documents', details, buildExtras(false, true))
+                    };
+                }
                 return { bucket: 'unchanged' };
             }
-            if (isOlderOrMissingAgainstMissingDocs) {
-                return { bucket: 'manual', item: buildPlanItem(record, bestRow, targetState, 'stale_query_conflict', details) };
-            }
             return {
-                bucket: isSimilarMatch ? 'nameCheck' : 'changes',
+                bucket: needsNameCheck ? 'nameCheck' : 'changes',
                 item: buildPlanItem(
                     record,
                     bestRow,
                     'missing_documents',
                     'missing_documents',
                     details,
-                    isSimilarMatch ? { includeExcelName: true, needsAttentionFlag: false } : null
+                    buildExtras(false)
                 )
             };
         }
@@ -236,27 +262,40 @@ function classifyMatchedOpenRecord(record, bestRow, isSimilarMatch) {
         }
         if (targetState === 'approved') {
             return {
-                bucket: isSimilarMatch ? 'nameCheck' : 'changes',
+                bucket: needsNameCheck ? 'nameCheck' : 'changes',
                 item: buildPlanItem(
                     record,
                     bestRow,
                     'approved',
                     'status_approved',
                     details,
-                    isSimilarMatch ? { includeExcelName: true, needsAttentionFlag: false } : null
+                    buildExtras(false)
                 )
             };
         }
         if (currentOverlayState === 'missing_documents') {
             return {
-                bucket: isSimilarMatch ? 'nameCheck' : 'changes',
+                bucket: needsNameCheck ? 'nameCheck' : 'changes',
                 item: buildPlanItem(
                     record,
                     bestRow,
                     'reviewing',
                     'missing_documents_cleared',
                     details,
-                    isSimilarMatch ? { includeExcelName: true, needsAttentionFlag: false } : null
+                    buildExtras(false)
+                )
+            };
+        }
+        if (nameLevel === 'different') {
+            return {
+                bucket: 'nameCheck',
+                item: buildPlanItem(
+                    record,
+                    bestRow,
+                    targetState,
+                    'name_confirmation',
+                    details,
+                    buildExtras(false, true)
                 )
             };
         }
@@ -264,14 +303,14 @@ function classifyMatchedOpenRecord(record, bestRow, isSimilarMatch) {
     }
 
     return {
-        bucket: isSimilarMatch ? 'nameCheck' : 'needsAttention',
+        bucket: needsNameCheck ? 'nameCheck' : 'needsAttention',
         item: buildPlanItem(
             record,
             bestRow,
             targetState,
             'not_sent_to_migration',
             details,
-            isSimilarMatch ? { includeExcelName: true, needsAttentionFlag: true } : null
+            buildExtras(true)
         )
     };
 }
@@ -369,21 +408,8 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords, nowMs = Date.
                 }
 
                 const { level, rows: matchedRows } = resolveNameMatchedRows(dateEligible, record);
-                if (level === 'different') {
-                    const bestDateRow = pickBestAuditRow(dateEligible);
-                    manual.push(buildPlanItem(
-                        record,
-                        bestDateRow,
-                        bestDateRow.targetState,
-                        'name_mismatch',
-                        { note: '', deadline: null },
-                        { includeExcelName: true }
-                    ));
-                    continue;
-                }
-
                 const bestRow = pickBestAuditRow(matchedRows);
-                const outcome = classifyMatchedOpenRecord(record, bestRow, level === 'similar');
+                const outcome = classifyMatchedOpenRecord(record, bestRow, level);
                 if (outcome.bucket === 'unchanged') {
                     unchangedCount += 1;
                 } else if (outcome.bucket === 'changes') {

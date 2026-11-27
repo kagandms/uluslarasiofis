@@ -816,7 +816,7 @@ test('preview dialog renders nameCheck section between selectable and manual, no
     assert.deepEqual(sections, ['needsAttention', 'nameCheck', 'manual']);
 
     const nameCheckSection = dialog.querySelector('[data-sync-group="nameCheck"]');
-    assert.match(nameCheckSection.textContent, /Ad yazımı farklı — kontrol edip işaretleyin \(2\)/);
+    assert.match(nameCheckSection.textContent, /Ad farklı — kontrol edip işaretleyin \(2\)/);
     assert.match(nameCheckSection.textContent, /Excel: Resad Ibragimov/);
     assert.match(nameCheckSection.textContent, /Portal: Rashad Ibragimov/);
     assert.match(nameCheckSection.textContent, /Excel: Guwanc Jumayew/);
@@ -845,4 +845,168 @@ test('preview dialog renders nameCheck section between selectable and manual, no
 
     assert.equal(appliedBodies.length, 1);
     assert.deepEqual(appliedBodies[0].items.map((item) => item.record_id), ['app-nc-1']);
+});
+
+test('summarizeSyncPlan excludes confirmation-only nameCheck items and dialog renders match badge, different-name caution, and detail links without toggling checkboxes', async () => {
+    const counts = summarizeSyncPlan({
+        changes: [{ target_state: 'approved' }],
+        needsAttention: [],
+        nameCheck: [
+            { target_state: 'reviewing', current_status: 'sent_to_migration', reason: 'name_confirmation', confirmation_only: true },
+            { target_state: 'missing_documents', current_status: 'sent_to_migration', reason: 'missing_documents', confirmation_only: true },
+            { target_state: 'approved', current_status: 'sent_to_migration', reason: 'status_approved' }
+        ],
+        manual: [],
+        unchangedCount: 3
+    });
+    assert.deepEqual(counts, {
+        approved: 2,
+        missing_documents: 0,
+        reviewing: 0,
+        manual: 0,
+        unchanged: 3
+    });
+
+    const dom = createDom();
+    const { document } = dom.window;
+    const fetcher = async (url) => {
+        if (url.endsWith('/sync/preview')) {
+            return jsonResponse({
+                import_id: 'imp-links',
+                exported_at: '2026-11-27 08:30',
+                changes: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-ch-1',
+                        application_number: '2026-11-0000021',
+                        student_number: '26000000021',
+                        first_name: 'Ayşe',
+                        last_name: 'Yılmaz',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'status_approved',
+                        note: '',
+                        deadline: null
+                    },
+                    {
+                        record_kind: 'physical',
+                        record_id: 'phys-ch-1',
+                        application_number: '2026-11-0000022',
+                        student_number: '26000000022',
+                        first_name: 'Mehmet',
+                        last_name: 'Demir',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: 2,
+                        reason: 'status_approved',
+                        note: '',
+                        deadline: null
+                    }
+                ],
+                needsAttention: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-na-1',
+                        application_number: '2026-11-0000023',
+                        student_number: '26000000023',
+                        first_name: 'Deniz',
+                        last_name: 'Arslan',
+                        current_status: 'under_review',
+                        target_state: 'reviewing',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'not_sent_to_migration',
+                        note: '',
+                        deadline: null
+                    }
+                ],
+                nameCheck: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-nc-diff',
+                        application_number: '2026-11-0000024',
+                        student_number: '26000000024',
+                        first_name: 'Omar',
+                        last_name: 'Karimov',
+                        excel_name: 'Ali Karimov',
+                        name_level: 'different',
+                        confirmation_only: true,
+                        current_status: 'sent_to_migration',
+                        target_state: 'reviewing',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'name_confirmation',
+                        needs_attention: false,
+                        note: '',
+                        deadline: null
+                    }
+                ],
+                manual: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-man-1',
+                        application_number: '2026-11-0000025',
+                        student_number: '26000000025',
+                        first_name: 'Burak',
+                        last_name: 'Ozturk',
+                        excel_name: 'Caner Yilmaz',
+                        current_status: 'completed',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'name_mismatch',
+                        note: '',
+                        deadline: null
+                    }
+                ],
+                unchangedCount: 0
+            });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const handle = openMigrationSyncDialog(document, {
+        fetcher,
+        nowMs: Date.parse('2026-11-27T09:00:00+03:00')
+    });
+    await handle.ready;
+
+    const dialog = handle.dialog;
+    assert.equal(dialog.querySelector('[data-sync-count="reviewing"]').textContent, '1');
+
+    const nameCheckSection = dialog.querySelector('[data-sync-group="nameCheck"]');
+    assert.match(nameCheckSection.textContent, /Öğrenci no eşleşti ✓/);
+    assert.match(nameCheckSection.textContent, /Göç durumu: Göç İdaresi inceliyor/);
+    assert.match(nameCheckSection.textContent, /Durum değişmeyecek/);
+    assert.match(nameCheckSection.textContent, /Adlar belirgin farklı, detaydan kontrol edin\./);
+    assert.match(nameCheckSection.textContent, /İşaretlemek yalnızca aynı kişi olduğunu kaydeder\./);
+
+    const manualSection = dialog.querySelector('[data-sync-group="manual"]');
+    assert.match(manualSection.textContent, /Öğrenci no eşleşti ✓/);
+    assert.match(manualSection.textContent, /Göç durumu: Göç İdaresi tarafından onaylandı/);
+
+    const changesSection = dialog.querySelector('[data-sync-group="changes"]');
+    assert.doesNotMatch(changesSection.textContent, /Göç durumu:/);
+    assert.doesNotMatch(changesSection.textContent, /Durum değişmeyecek/);
+
+    const onlineLinks = [
+        dialog.querySelector('[data-sync-group="changes"] a.migration-sync-detail-link'),
+        dialog.querySelector('[data-sync-group="needsAttention"] a.migration-sync-detail-link'),
+        dialog.querySelector('[data-sync-group="nameCheck"] a.migration-sync-detail-link'),
+        dialog.querySelector('[data-sync-group="manual"] a.migration-sync-detail-link')
+    ];
+    assert.equal(onlineLinks.every((link) => link !== null), true);
+    assert.equal(onlineLinks[0].getAttribute('href'), '/yetkili/?basvuru=app-ch-1');
+    assert.equal(onlineLinks[1].getAttribute('href'), '/yetkili/?basvuru=app-na-1');
+    assert.equal(onlineLinks[2].getAttribute('href'), '/yetkili/?basvuru=app-nc-diff');
+    assert.equal(onlineLinks[3].getAttribute('href'), '/yetkili/?basvuru=app-man-1');
+    assert.equal(onlineLinks.every((link) => link.target === '_blank' && link.rel === 'noopener'), true);
+
+    // Physical record has no deep link
+    const changeItems = [...dialog.querySelectorAll('[data-sync-group="changes"] .migration-sync-item')];
+    assert.equal(changeItems[1].querySelector('a.migration-sync-detail-link'), null);
+
+    // Clicking detail link does not toggle checkbox
+    const ncCheckbox = nameCheckSection.querySelector('input[type="checkbox"]');
+    assert.equal(ncCheckbox.checked, false);
+    onlineLinks[2].dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    assert.equal(ncCheckbox.checked, false);
 });
