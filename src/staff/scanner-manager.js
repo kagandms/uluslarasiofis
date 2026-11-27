@@ -357,6 +357,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
             submit.disabled = true;
             cancel.disabled = true;
             errorText.hidden = true;
+            let step1SucceededInSubmit = false;
             try {
                 if (job.application_status === 'submitted') {
                     const transitioned = await api.transitionApplication(
@@ -364,6 +365,7 @@ export function initializeScannerManager(root, api = createScannerApi()) {
                         'under_review',
                         job.application_updated_at
                     );
+                    step1SucceededInSubmit = true;
                     job.application_status = transitioned?.application_status || transitioned?.application?.status || 'under_review';
                     const nextUpdatedAt = transitioned?.updated_at || transitioned?.application?.updated_at;
                     if (nextUpdatedAt) {
@@ -378,9 +380,40 @@ export function initializeScannerManager(root, api = createScannerApi()) {
                     reason
                 );
                 await loadStatus();
+                const view = document.defaultView || window;
+                const EventCtor = view?.CustomEvent || (typeof CustomEvent === 'function' ? CustomEvent : null);
+                if (EventCtor) {
+                    document.dispatchEvent(new EventCtor('staff-scanner:resubmission-requested', {
+                        detail: { applicationId: job.application_id, documentCode: job.document_code }
+                    }));
+                }
             } catch (error) {
                 errorText.textContent = error?.message || 'Yeniden yükleme isteği gönderilemedi. Tekrar deneyin.';
                 errorText.hidden = false;
+                try {
+                    const status = await api.readStatus();
+                    const freshJob = (status?.failed_jobs || []).find((entry) =>
+                        entry.id === job.id
+                        || (entry.application_id === job.application_id && entry.document_code === job.document_code)
+                    );
+                    if (freshJob) {
+                        const preservedStatus = step1SucceededInSubmit && freshJob.application_status === 'submitted'
+                            ? job.application_status
+                            : freshJob.application_status;
+                        const preservedUpdatedAt = step1SucceededInSubmit && freshJob.application_status === 'submitted'
+                            ? job.application_updated_at
+                            : freshJob.application_updated_at;
+                        Object.assign(job, freshJob, {
+                            application_status: preservedStatus,
+                            application_updated_at: preservedUpdatedAt
+                        });
+                        triggerButton.textContent = job.application_status === 'submitted'
+                            ? 'İncelemeye al ve tekrar iste'
+                            : 'Tekrar yükleme iste';
+                    }
+                } catch {
+                    // Keep the open form, typed reason, and error even if status refresh fails.
+                }
                 submit.disabled = false;
                 cancel.disabled = false;
             }

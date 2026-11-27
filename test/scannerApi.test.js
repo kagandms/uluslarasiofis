@@ -422,6 +422,8 @@ test('readStatus returns current non-deleted failed and unsafe jobs with applica
               VALUES ('r-${suffix}', 'd-${suffix}', 1, 'submitted', 1, 'student');
             INSERT INTO document_revision_files(id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status)
               VALUES ('f-${suffix}', 'r-${suffix}', 0, 'quarantine/f-${suffix}', 'doc.pdf', 'application/pdf', 20, 'finalized', '${scanStatus}');
+            INSERT INTO upload_intents(id, revision_file_id, idempotency_key, expires_at, status, completed_at)
+              VALUES ('i-${suffix}', 'f-${suffix}', 'ik-${suffix}', '2026-11-27T01:00:00.000Z', 'completed', '2026-11-27T00:00:00.000Z');
             INSERT INTO document_scan_jobs(id, file_id, revision_id, storage_key, byte_size, media_type, status, outcome, result_code, attempts, available_at, created_at, updated_at)
               VALUES ('job-${suffix}', 'f-${suffix}', 'r-${suffix}', 'quarantine/f-${suffix}', 20, 'application/pdf',
                       '${i === 0 ? 'complete' : 'failed'}', '${scanStatus}', '${resultCode}', 3,
@@ -458,4 +460,38 @@ test('readStatus returns current non-deleted failed and unsafe jobs with applica
     const machineStatus = await machineResponse.json();
     assert.equal(machineStatus.failed_jobs[0].student_number, undefined);
     assert.equal(machineStatus.failed_jobs[0].first_name, undefined);
+});
+
+test('readStatus excludes unfinalized files, incomplete upload intents, and unaccepted media types', async () => {
+    const { database } = fixture();
+    const repository = createScannerRepository(database);
+
+    database.exec(`
+        INSERT INTO students(id, student_number, normalized_student_number)
+          VALUES ('s-unfin', 'U-1', 'U-1'), ('s-intent', 'U-2', 'U-2'), ('s-mime', 'U-3', 'U-3');
+        INSERT INTO applications(id, student_id, application_type, status, first_name, last_name)
+          VALUES ('app-unfin', 's-unfin', 'initial', 'under_review', 'A', 'B'),
+                 ('app-intent', 's-intent', 'initial', 'under_review', 'C', 'D'),
+                 ('app-mime', 's-mime', 'initial', 'under_review', 'E', 'F');
+        INSERT INTO document_records(id, application_id, requirement_id, application_type)
+          VALUES ('d-unfin', 'app-unfin', 'req-initial-passport', 'initial'),
+                 ('d-intent', 'app-intent', 'req-initial-passport', 'initial'),
+                 ('d-mime', 'app-mime', 'req-initial-passport', 'initial');
+        INSERT INTO document_revisions(id, document_record_id, revision_number, status, is_current, submitted_by_type)
+          VALUES ('r-unfin', 'd-unfin', 1, 'submitted', 1, 'student'),
+                 ('r-intent', 'd-intent', 1, 'submitted', 1, 'student'),
+                 ('r-mime', 'd-mime', 1, 'submitted', 1, 'student');
+        INSERT INTO document_revision_files(id, revision_id, page_order, storage_key, original_filename, media_type, byte_size, upload_status, scan_status)
+          VALUES ('f-unfin', 'r-unfin', 0, 'quarantine/u1', 'u1.pdf', 'application/pdf', 20, 'uploaded', 'failed'),
+                 ('f-intent', 'r-intent', 0, 'quarantine/u2', 'u2.pdf', 'application/pdf', 20, 'finalized', 'failed'),
+                 ('f-mime', 'r-mime', 0, 'quarantine/u3', 'u3.txt', 'text/plain', 20, 'finalized', 'failed');
+        INSERT INTO upload_intents(id, revision_file_id, idempotency_key, expires_at, status, completed_at)
+          VALUES ('i-unfin', 'f-unfin', 'ik-u1', '2026-11-27T01:00:00.000Z', 'completed', '2026-11-27T00:00:00.000Z'),
+                 ('i-intent', 'f-intent', 'ik-u2', '2026-11-27T01:00:00.000Z', 'pending', NULL),
+                 ('i-mime', 'f-mime', 'ik-u3', '2026-11-27T01:00:00.000Z', 'completed', '2026-11-27T00:00:00.000Z');
+    `);
+
+    const status = await repository.readStatus();
+    assert.equal(status.actionable_failed_total, 0);
+    assert.deepEqual(status.failed_jobs, []);
 });
