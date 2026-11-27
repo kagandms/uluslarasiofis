@@ -235,7 +235,7 @@ test('owner resubmission view mounts controls only for server-eligible codes and
             ] });
         },
         async readCurrentResubmissionEligibility() {
-            return { documents: [{ code: 'passport', accepted_media_types: ['application/pdf'], max_byte_size: 100 }] };
+            return { documents: [{ code: 'passport', description_key: 'documentPassportHelp', accepted_media_types: ['application/pdf'], max_byte_size: 100 }] };
         },
         async createResubmissionUploadIntent() { intentCalls += 1; }
     };
@@ -243,11 +243,17 @@ test('owner resubmission view mounts controls only for server-eligible codes and
     await initializeAndLookup(document, root, api);
 
     assert.match(root.textContent, new RegExp(officeMessage));
+    assert.match(root.textContent, new RegExp(PUBLIC_MESSAGES.tr.documentPassportHelp.slice(0, 20)));
     assert.equal(root.querySelectorAll('input[type="file"]').length, 1);
     const fileInput = root.querySelector('input[type="file"]');
     assert.equal(fileInput.accept, 'application/pdf,image/jpeg,image/png,image/webp');
     assert.equal(fileInput.multiple, true);
-    assert.equal(root.querySelectorAll('.resubmission-upload-control button').length, 1);
+    assert.equal(root.querySelectorAll('.application-upload-control button[data-action="document-compose"]').length, 1);
+    const eligibleCard = root.querySelector('[data-document-code="passport"]');
+    assert.ok(eligibleCard.classList.contains('application-document-card'));
+    assert.equal(eligibleCard.querySelectorAll('h3').length, 1);
+    assert.equal(eligibleCard.querySelectorAll('.requirement-badge').length, 1);
+    assert.equal(eligibleCard.querySelectorAll('.document-upload-status').length, 1);
     assert.equal(intentCalls, 0);
     document.defaultView.close();
 });
@@ -280,8 +286,7 @@ test('finalize refreshes owner tracking to waiting review while application stay
     await initializeAndLookup(document, root, api);
     const input = root.querySelector('input[type="file"]');
     Object.defineProperty(input, 'files', { configurable: true, value: [{ name: 'passport.pdf', type: 'application/pdf', size: 10 }] });
-    input.dispatchEvent(new document.defaultView.Event('change'));
-    root.querySelector('.resubmission-upload-control button').click();
+    input.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(trackingReads, 2);
@@ -548,8 +553,7 @@ test('upload success is cleared when a session expires and another application s
     const upload = async () => {
         const input = root.querySelector('input[type=file]');
         Object.defineProperty(input, 'files', { value: [{ name: 'document.pdf', size: 10, type: 'application/pdf' }] });
-        input.dispatchEvent(new document.defaultView.Event('change'));
-        root.querySelector('.resubmission-upload-control button').click();
+        input.dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
         await new Promise(resolve => setImmediate(resolve));
     };
     await login('ITU-7K9M-4X2P');
@@ -562,5 +566,44 @@ test('upload success is cleared when a session expires and another application s
     assert.ok(root.querySelector('.tracking-summary'));
     assert.equal(root.querySelector('.tracking-success-banner'), null);
     assert.equal(root.querySelector('.tracking-card-success'), null);
+    document.defaultView.close();
+});
+
+
+test('eligible re-upload cards always show documentNeedsReplacement with error tone across all three modes', async () => {
+    const { document, root } = createTrackingRoot();
+    const api = {
+        async readCurrentApplicationTracking() {
+            return createTrackingDto({
+                application: { status: 'resubmission_required' },
+                documents: [
+                    { code: 'health_insurance', label_key: 'documentHealthInsurance', required: true, revision_number: null, status: 'not_uploaded', filename: null, student_message: 'Missing insurance.' },
+                    { code: 'passport', label_key: 'documentPassport', required: true, revision_number: 1, status: 'resubmission_required', filename: 'passport.pdf', student_message: 'Replace passport.' },
+                    { code: 'residence_card', label_key: 'documentResidenceCard', required: true, revision_number: 2, status: 'contact_office', filename: null, student_message: 'Unsafe scan retry.' }
+                ]
+            });
+        },
+        async readCurrentResubmissionEligibility() {
+            return {
+                documents: [
+                    { code: 'health_insurance', label_key: 'documentHealthInsurance', description_key: 'documentHealthInsuranceHelp', mode: 'missing_upload', accepted_media_types: ['application/pdf'], max_byte_size: 1024 },
+                    { code: 'passport', label_key: 'documentPassport', description_key: 'documentPassportHelp', mode: 'first_replacement', accepted_media_types: ['application/pdf'], max_byte_size: 1024 },
+                    { code: 'residence_card', label_key: 'documentResidenceCard', description_key: 'documentResidenceCardHelp', mode: 'unsafe_scan_retry', accepted_media_types: ['application/pdf'], max_byte_size: 1024 }
+                ]
+            };
+        }
+    };
+
+    await initializeAndLookup(document, root, api);
+
+    for (const code of ['health_insurance', 'passport', 'residence_card']) {
+        const card = root.querySelector(`[data-document-code="${code}"]`);
+        assert.ok(card, `Card for ${code} should exist`);
+        const status = card.querySelector('.document-upload-status');
+        assert.equal(status.textContent, PUBLIC_MESSAGES.tr.documentNeedsReplacement, `Wrong status text for ${code}`);
+        assert.equal(status.dataset.status, 'error', `Wrong status tone for ${code}`);
+        assert.ok(status.classList.contains('is-error'), `Missing is-error class for ${code}`);
+        assert.equal(status.getAttribute('role'), 'alert', `Missing alert role for ${code}`);
+    }
     document.defaultView.close();
 });

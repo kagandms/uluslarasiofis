@@ -53,9 +53,10 @@ test('invalid file selection cannot request a replacement intent', async () => {
         async createResubmissionUploadIntent() { intentCalls += 1; }
     }, { messages: PUBLIC_MESSAGES.tr });
     chooseFile(document, control.fileInput, { type: 'application/x-msdownload' });
-    control.button.click();
+    await flushEvents();
 
-    assert.equal(control.button.disabled, true);
+    assert.equal(control.fileInput.getAttribute('aria-invalid'), 'true');
+    assert.equal(control.status.getAttribute('role'), 'alert');
     assert.equal(control.status.textContent, PUBLIC_MESSAGES.tr.resubmissionUploadInvalidFile);
     assert.equal(intentCalls, 0);
     document.defaultView.close();
@@ -85,7 +86,6 @@ test('PUT success stays verifying until finalize succeeds, then refreshes owner 
         onComplete: async () => { refreshed += 1; }
     });
     chooseFile(document, control.fileInput);
-    control.button.click();
     await flushEvents();
     releasePut();
     await flushEvents();
@@ -125,7 +125,6 @@ test('session failure aborts the private flow and never reuses the issued capabi
         onSessionFailure: () => { sessionFailures += 1; }
     });
     chooseFile(document, control.fileInput);
-    control.button.click();
     await flushEvents();
 
     assert.equal(intentCalls, 1);
@@ -153,10 +152,10 @@ test('safe network and conflict failures invite a new attempt without capability
         messages: PUBLIC_MESSAGES.tr, putStudentDocumentDirect: async () => {}
     });
     chooseFile(document, control.fileInput);
-    control.button.click();
     await flushEvents();
     assert.equal(control.status.textContent, PUBLIC_MESSAGES.tr.resubmissionUploadConflict);
-    control.button.click();
+    assert.ok(control.retryButton);
+    control.retryButton.click();
     await flushEvents();
     assert.equal(intentCalls, 2);
     document.defaultView.close();
@@ -175,7 +174,6 @@ test('tracking refresh failure after successful finalize does not misreport the 
         onComplete: async () => { throw Object.assign(new Error('tracking offline'), { code: 'NETWORK_ERROR' }); }
     });
     chooseFile(document, control.fileInput);
-    control.button.click();
     await flushEvents();
 
     assert.equal(control.status.textContent, PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
@@ -193,7 +191,7 @@ test('replacement messages exist in all five locales and Arabic remains right-to
     document.documentElement.dir = 'rtl';
     initializeResubmissionUpload(card, createRequirement(), {}, { messages: PUBLIC_MESSAGES.ar });
     assert.equal(document.documentElement.dir, 'rtl');
-    assert.equal(card.querySelector('input[type="file"]').getAttribute('aria-label'), PUBLIC_MESSAGES.ar.resubmissionUploadChooseFile);
+    assert.equal(card.querySelector('label.application-upload-sr').textContent, PUBLIC_MESSAGES.ar.uploadDocument);
     document.defaultView.close();
 });
 
@@ -202,13 +200,14 @@ test('file input enables multi-selection and allows merger image types alongside
     const control = initializeResubmissionUpload(card, createRequirement(), {});
     assert.equal(control.fileInput.multiple, true);
     assert.deepEqual(control.fileInput.accept.split(','), ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
-    assert.equal(card.querySelector('label').textContent, PUBLIC_MESSAGES.tr.resubmissionFileLabel);
-    assert.equal(control.fileInput.getAttribute('aria-label'), PUBLIC_MESSAGES.tr.resubmissionUploadChooseFile);
+    assert.equal(card.querySelector('label.application-upload-sr').textContent, PUBLIC_MESSAGES.tr.uploadDocument);
+    assert.equal(control.button.dataset.action, 'document-compose');
 
     const imageOnly = createCard();
     const imageControl = initializeResubmissionUpload(imageOnly.card, createRequirement({ accepted_media_types: ['image/jpeg'] }), {});
     assert.equal(imageControl.fileInput.multiple, true);
     assert.equal(imageControl.fileInput.accept, 'image/jpeg');
+    assert.equal(imageControl.button.dataset.action, 'document-pick');
 
     document.defaultView.close();
     imageOnly.document.defaultView.close();
@@ -230,8 +229,6 @@ test('single accepted PDF uploads unchanged without calling the PDF merger', asy
         putStudentDocumentDirect: async (_upload, file) => { assert.equal(file, uploadedFile); }
     });
     chooseFile(document, control.fileInput, { name: 'single.pdf', type: 'application/pdf', size: 25 });
-    assert.equal(control.button.disabled, false);
-    control.button.click();
     await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
 
     assert.equal(mergeCalls, 0);
@@ -272,25 +269,17 @@ test('two selected images are merged in order and the produced PDF is uploaded',
     assert.equal(control.status.textContent, SESSION3_MESSAGES.tr.multiFilePreparing);
 
     releaseMerge();
-    await waitFor(() => !control.button.disabled);
+    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
 
     assert.deepEqual(receivedMergeFiles, [img1, img2]);
     assert.equal(receivedMergeOptions.maxByteSize, requirement.max_byte_size);
     assert.equal(receivedMergeOptions.document, document);
-    assert.equal(
-        control.status.textContent,
-        PUBLIC_MESSAGES.tr.resubmissionUploadMergedReady.replace('{files}', '2').replace('{pages}', '2')
-    );
-
-    control.button.click();
-    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
-
     assert.equal(intentFile, mergedPdf);
     assert.equal(directPutFile, mergedPdf);
     document.defaultView.close();
 });
 
-test('real multi-file PDF merge combines PDFs and reports file and page counts before upload', async () => {
+test('real multi-file PDF merge combines PDFs and uploads the merged PDF', async () => {
     const { document, card } = createCard();
     const requirement = createRequirement({ max_byte_size: 1024 * 1024 });
     const pdfA = await createPdfFile(2, 'a.pdf');
@@ -309,14 +298,6 @@ test('real multi-file PDF merge combines PDFs and reports file and page counts b
     });
 
     chooseFiles(document, control.fileInput, [pdfA, pdfB]);
-    await waitFor(() => !control.button.disabled);
-
-    assert.equal(
-        control.status.textContent,
-        PUBLIC_MESSAGES.tr.resubmissionUploadMergedReady.replace('{files}', '2').replace('{pages}', '3')
-    );
-
-    control.button.click();
     await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
 
     assert.equal(uploadedFile.type, 'application/pdf');
@@ -347,8 +328,6 @@ test('single image for a PDF-only requirement is converted to PDF via merger bef
     });
 
     chooseFiles(document, control.fileInput, [photo]);
-    await waitFor(() => !control.button.disabled);
-    control.button.click();
     await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
 
     assert.equal(intentFile, mergedPdf);
@@ -381,11 +360,8 @@ test('merger error codes show localized messages and block upload', async () => 
         ]);
         await waitFor(() => control.status.getAttribute('role') === 'alert');
 
-        assert.equal(control.button.disabled, true);
         assert.equal(control.fileInput.getAttribute('aria-invalid'), 'true');
         assert.equal(control.status.textContent, expectedMessage);
-        control.button.click();
-        await flushEvents();
         assert.equal(intentCalls, 0);
         document.defaultView.close();
     }
@@ -403,7 +379,6 @@ test('real merger rejects too many files, unsupported files in multi-select, and
     chooseFiles(document, control.fileInput, twentyOneFiles);
     await waitFor(() => control.status.getAttribute('role') === 'alert');
     assert.equal(control.status.textContent, SESSION3_MESSAGES.tr.tooManyFiles);
-    assert.equal(control.button.disabled, true);
 
     // Çoklu seçimde desteklenmeyen dosya türü
     chooseFiles(document, control.fileInput, [
@@ -412,7 +387,6 @@ test('real merger rejects too many files, unsupported files in multi-select, and
     ]);
     await waitFor(() => control.status.getAttribute('role') === 'alert');
     assert.equal(control.status.textContent, SESSION3_MESSAGES.tr.invalidFileType);
-    assert.equal(control.button.disabled, true);
 
     // Boyut sınırı aşımı
     chooseFiles(document, control.fileInput, [
@@ -421,7 +395,6 @@ test('real merger rejects too many files, unsupported files in multi-select, and
     ]);
     await waitFor(() => control.status.getAttribute('role') === 'alert');
     assert.equal(control.status.textContent, SESSION3_MESSAGES.tr.fileTooLarge);
-    assert.equal(control.button.disabled, true);
     assert.equal(intentCalls, 0);
     document.defaultView.close();
 });
@@ -462,22 +435,12 @@ test('second file selection replaces the first and ignores stale in-flight merge
     chooseFiles(document, control.fileInput, [
         new File(['3'], '3.jpg', { type: 'image/jpeg' })
     ]);
-    await waitFor(() => !control.button.disabled);
-    assert.equal(
-        control.status.textContent,
-        PUBLIC_MESSAGES.tr.resubmissionUploadMergedReady.replace('{files}', '1').replace('{pages}', '1')
-    );
+    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
 
     // Geciken ilk birleştirme sonradan çözülse de ikinci seçimi ezmemeli
     releaseFirstMerge();
     await flushEvents();
-    assert.equal(
-        control.status.textContent,
-        PUBLIC_MESSAGES.tr.resubmissionUploadMergedReady.replace('{files}', '1').replace('{pages}', '1')
-    );
-
-    control.button.click();
-    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
+    assert.equal(control.status.textContent, PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
     assert.deepEqual(uploadedFiles, [secondPdf]);
     document.defaultView.close();
 });
@@ -510,19 +473,308 @@ test('merger failure leaves the control usable for a subsequent valid selection'
     ]);
     await waitFor(() => control.status.getAttribute('role') === 'alert');
     assert.equal(control.fileInput.disabled, false);
-    assert.equal(control.button.disabled, true);
     assert.equal(control.status.textContent, SESSION3_MESSAGES.tr.multiFileProcessingFailed);
 
     chooseFiles(document, control.fileInput, [
         new File(['ok1'], 'ok1.jpg', { type: 'image/jpeg' }),
         new File(['ok2'], 'ok2.jpg', { type: 'image/jpeg' })
     ]);
-    await waitFor(() => !control.button.disabled);
-    assert.equal(control.fileInput.getAttribute('aria-invalid'), 'false');
-    assert.equal(control.status.getAttribute('role'), 'status');
-
-    control.button.click();
     await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
     assert.equal(uploadedFile, recoveredPdf);
+    document.defaultView.close();
+});
+
+
+test('composer opens with wizard options and uploads immediately on onSave with progress updates', async () => {
+    const { document, card } = createCard();
+    let composerOptions = null;
+    let releasePut;
+    let completedMeta = null;
+    const api = {
+        async createResubmissionUploadIntent(code, file) {
+            assert.equal(code, 'passport');
+            assert.equal(file.name, 'passport_sayfalar.pdf');
+            assert.equal(file.type, 'application/pdf');
+            return { upload: { intent_id: 'composer-intent', method: 'PUT', url: 'https://capability.invalid', required_headers: {} } };
+        },
+        async finalizeResubmissionUpload(intentId) {
+            assert.equal(intentId, 'composer-intent');
+            return { document: { code: 'passport', scan_status: 'pending' } };
+        }
+    };
+    const control = initializeResubmissionUpload(card, createRequirement({ max_byte_size: 1024 }), api, {
+        openPdfMergerModal: (opts) => { composerOptions = opts; },
+        putStudentDocumentDirect: async (_upload, _file, { onProgress }) => {
+            onProgress(45);
+            await new Promise((resolve) => { releasePut = resolve; });
+        },
+        onComplete: async (code, meta) => { completedMeta = { code, meta }; }
+    });
+
+    control.button.click();
+    await flushEvents();
+    assert.ok(composerOptions);
+    assert.equal(composerOptions.studentMode, true);
+    assert.equal(composerOptions.hideStopCapture, true);
+    assert.equal(composerOptions.maxFiles, 30);
+    assert.equal(composerOptions.contextLabel, PUBLIC_MESSAGES.tr.documentPagesHelp);
+    assert.equal(composerOptions.confirmLabel, PUBLIC_MESSAGES.tr.documentPagesConfirm);
+    assert.equal(composerOptions.successMessage, PUBLIC_MESSAGES.tr.documentPagesUploaded);
+    assert.ok(composerOptions.text.studentReady);
+    assert.equal(composerOptions.text.confirmSave, 'Kontrol ettim, başvuruma ekle');
+
+    const savePromise = composerOptions.onSave(new Uint8Array([1, 2, 3, 4]));
+    await waitFor(() => Boolean(releasePut));
+    const progress = card.querySelector('progress');
+    assert.ok(progress);
+    assert.equal(progress.value, 45);
+    assert.ok(control.cancelButton);
+    assert.equal(control.button.disabled, true);
+
+    // Second click while uploading must not open composer again
+    const prevOptions = composerOptions;
+    composerOptions = null;
+    control.button.click();
+    await flushEvents();
+    assert.equal(composerOptions, null);
+    assert.ok(prevOptions);
+
+    releasePut();
+    await savePromise;
+    assert.equal(control.status.textContent, PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
+    assert.deepEqual(completedMeta, { code: 'passport', meta: { code: 'passport', scan_status: 'pending' } });
+    document.defaultView.close();
+});
+
+test('onSave throws on upload failure and retry recovers without re-taking photos', async () => {
+    const { document, card } = createCard();
+    let composerOptions = null;
+    let intentCalls = 0;
+    let putCalls = 0;
+    let finalizeCalls = 0;
+    const api = {
+        async createResubmissionUploadIntent(_code, file) {
+            intentCalls += 1;
+            if (intentCalls === 1) throw Object.assign(new Error('expired'), { code: 'UPLOAD_CAPABILITY_EXPIRED' });
+            assert.equal(file.name, 'passport_sayfalar.pdf');
+            return { upload: { intent_id: `intent-${intentCalls}`, method: 'PUT', url: 'https://capability.invalid', required_headers: {} } };
+        },
+        async finalizeResubmissionUpload(intentId) {
+            finalizeCalls += 1;
+            if (finalizeCalls === 1) throw Object.assign(new Error('network'), { code: 'NETWORK_ERROR' });
+            assert.equal(intentId, 'intent-3');
+            return { document: { code: 'passport', scan_status: 'pending' } };
+        }
+    };
+    const control = initializeResubmissionUpload(card, createRequirement({ max_byte_size: 1024 }), api, {
+        openPdfMergerModal: (opts) => { composerOptions = opts; },
+        putStudentDocumentDirect: async () => {
+            putCalls += 1;
+            if (putCalls === 1) throw Object.assign(new Error('net'), { code: 'UPLOAD_NETWORK_ERROR' });
+        }
+    });
+
+    control.button.click();
+    await flushEvents();
+
+    // 1. Failed intent
+    await assert.rejects(
+        () => composerOptions.onSave(new Uint8Array([1, 2, 3])),
+        (err) => err.message === PUBLIC_MESSAGES.tr.resubmissionUploadCapabilityExpired
+    );
+    assert.equal(control.status.textContent, PUBLIC_MESSAGES.tr.resubmissionUploadCapabilityExpired);
+    assert.ok(control.retryButton);
+
+    // 2. Retry -> intent succeeds, PUT fails
+    control.retryButton.click();
+    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadNetworkError);
+    assert.equal(intentCalls, 2);
+    assert.equal(putCalls, 1);
+    assert.ok(control.retryButton);
+
+    // 3. Retry -> intent + PUT succeed, finalize fails with NETWORK_ERROR (keeps intent_id!)
+    control.retryButton.click();
+    await waitFor(() => finalizeCalls === 1);
+    assert.equal(intentCalls, 3);
+    assert.equal(putCalls, 2);
+    assert.equal(control.status.textContent, PUBLIC_MESSAGES.tr.resubmissionUploadNetworkError);
+    assert.ok(control.retryButton);
+
+    // 4. Retry -> retries finalize with SAME intent_id ('intent-3') without new intent or PUT
+    control.retryButton.click();
+    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
+    assert.equal(intentCalls, 3);
+    assert.equal(putCalls, 2);
+    assert.equal(finalizeCalls, 2);
+    document.defaultView.close();
+});
+
+test('cancel aborts active PUT and retry uploads the same file', async () => {
+    const { document, card } = createCard();
+    let composerOptions = null;
+    let putAttempt = 0;
+    const api = {
+        async createResubmissionUploadIntent() {
+            return { upload: { intent_id: `cancel-retry-${putAttempt + 1}`, method: 'PUT', url: 'https://capability.invalid', required_headers: {} } };
+        },
+        async finalizeResubmissionUpload() { return { document: { code: 'passport', scan_status: 'pending' } }; }
+    };
+    const control = initializeResubmissionUpload(card, createRequirement({ max_byte_size: 1024 }), api, {
+        openPdfMergerModal: (opts) => { composerOptions = opts; },
+        putStudentDocumentDirect: async (_upload, _file, { signal }) => {
+            putAttempt += 1;
+            if (putAttempt === 1) {
+                await new Promise((_resolve, reject) => {
+                    signal.addEventListener('abort', () => {
+                        reject(Object.assign(new Error('cancelled'), { code: 'UPLOAD_CANCELLED' }));
+                    });
+                });
+            }
+        }
+    });
+
+    control.button.click();
+    await flushEvents();
+    const savePromise = composerOptions.onSave(new Uint8Array([1, 2, 3, 4]));
+    await waitFor(() => Boolean(control.cancelButton));
+    control.cancelButton.click();
+    await assert.rejects(() => savePromise);
+
+    assert.equal(control.status.textContent, SESSION3_MESSAGES.tr.uploadState_cancelled);
+    assert.ok(control.retryButton);
+
+    control.retryButton.click();
+    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
+    assert.equal(putAttempt, 2);
+    document.defaultView.close();
+});
+
+test('session failure inside composer onSave closes modal overlay and calls onSessionFailure', async () => {
+    const { document, card } = createCard();
+    const overlay = document.createElement('div');
+    overlay.id = 'pdf-merger-modal-overlay';
+    document.body.append(overlay);
+
+    let composerOptions = null;
+    let sessionFailures = 0;
+    const control = initializeResubmissionUpload(card, createRequirement({ max_byte_size: 1024 }), {
+        async createResubmissionUploadIntent() {
+            throw Object.assign(new Error('expired'), { status: 401, code: 'APPLICATION_SESSION_REQUIRED' });
+        }
+    }, {
+        openPdfMergerModal: (opts) => { composerOptions = opts; },
+        onSessionFailure: () => { sessionFailures += 1; }
+    });
+
+    control.button.click();
+    await flushEvents();
+    await assert.rejects(() => composerOptions.onSave(new Uint8Array([1, 2, 3])));
+    assert.equal(sessionFailures, 1);
+    assert.equal(document.getElementById('pdf-merger-modal-overlay'), null);
+    document.defaultView.close();
+});
+
+test('non-PDF requirement uses plain file chooser fallback and uploads immediately after selection', async () => {
+    const { document, card } = createCard();
+    let intentCalls = 0;
+    let uploadedFile = null;
+    const api = {
+        async createResubmissionUploadIntent(_code, file) {
+            intentCalls += 1;
+            uploadedFile = file;
+            return { upload: { intent_id: 'photo-intent', method: 'PUT', url: 'https://capability.invalid', required_headers: {} } };
+        },
+        async finalizeResubmissionUpload() { return { document: { code: 'biometric_photo', scan_status: 'pending' } }; }
+    };
+    const control = initializeResubmissionUpload(card, createRequirement({
+        code: 'biometric_photo',
+        accepted_media_types: ['image/jpeg', 'image/png'],
+        max_byte_size: 100
+    }), api, {
+        putStudentDocumentDirect: async () => {}
+    });
+
+    assert.equal(control.button.dataset.action, 'document-pick');
+    let inputClicked = false;
+    control.fileInput.click = () => { inputClicked = true; };
+    control.button.click();
+    assert.equal(inputClicked, true);
+
+    // Oversized file is rejected without intent
+    chooseFile(document, control.fileInput, { name: 'big.jpg', type: 'image/jpeg', size: 200 });
+    await flushEvents();
+    assert.equal(intentCalls, 0);
+    assert.equal(control.status.textContent, SESSION3_MESSAGES.tr.fileTooLarge);
+
+    // Valid image uploads immediately
+    chooseFile(document, control.fileInput, { name: 'photo.jpg', type: 'image/jpeg', size: 50 });
+    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
+    assert.equal(intentCalls, 1);
+    assert.equal(uploadedFile.name, 'photo.jpg');
+    document.defaultView.close();
+});
+
+
+test('re-upload card with existing file uses pending tone while uploading/verifying/cancelled and success only after finalize', async () => {
+    const { document, card } = createCard();
+    let releasePut;
+    let releaseFinalize;
+    let putAttempt = 0;
+    const control = initializeResubmissionUpload(card, createRequirement({
+        filename: 'existing-passport.pdf',
+        status: 'resubmission_required'
+    }), {
+        async createResubmissionUploadIntent() {
+            return { upload: { intent_id: `tone-intent-${putAttempt + 1}`, method: 'PUT', url: 'https://capability.invalid', required_headers: {} } };
+        },
+        async finalizeResubmissionUpload() {
+            await new Promise((resolve) => { releaseFinalize = resolve; });
+            return { document: { code: 'passport', scan_status: 'pending' } };
+        }
+    }, {
+        putStudentDocumentDirect: async (_upload, _file, { signal }) => {
+            putAttempt += 1;
+            if (putAttempt === 1) {
+                await new Promise((_resolve, reject) => {
+                    signal.addEventListener('abort', () => {
+                        reject(Object.assign(new Error('cancelled'), { code: 'UPLOAD_CANCELLED' }));
+                    });
+                });
+                return;
+            }
+            await new Promise((resolve) => { releasePut = resolve; });
+        }
+    });
+
+    // Preview link is present and initial status is error
+    assert.ok(card.querySelector('.document-preview-link'));
+    assert.equal(control.status.dataset.status, 'error');
+
+    // First attempt: cancel during upload -> cancelled must be pending (not success)
+    chooseFile(document, control.fileInput);
+    await waitFor(() => Boolean(control.cancelButton));
+    assert.equal(control.status.dataset.status, 'pending');
+    assert.equal(control.status.classList.contains('is-success'), false);
+    control.cancelButton.click();
+    await waitFor(() => control.status.textContent === SESSION3_MESSAGES.tr.uploadState_cancelled);
+    assert.equal(control.status.dataset.status, 'pending');
+    assert.equal(control.status.classList.contains('is-success'), false);
+
+    // Retry: uploading -> pending, verifying -> pending, complete -> success
+    control.retryButton.click();
+    await waitFor(() => Boolean(releasePut));
+    assert.equal(control.status.dataset.status, 'pending');
+    assert.equal(control.status.classList.contains('is-success'), false);
+    releasePut();
+
+    await waitFor(() => Boolean(releaseFinalize));
+    assert.equal(control.status.dataset.status, 'pending');
+    assert.equal(control.status.classList.contains('is-success'), false);
+    releaseFinalize();
+
+    await waitFor(() => control.status.textContent === PUBLIC_MESSAGES.tr.resubmissionUploadComplete);
+    assert.equal(control.status.dataset.status, 'success');
+    assert.ok(control.status.classList.contains('is-success'));
+    assert.ok(card.querySelector('.document-preview-link'));
     document.defaultView.close();
 });

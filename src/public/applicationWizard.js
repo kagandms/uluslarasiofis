@@ -8,9 +8,11 @@ import { isValidPhoneNumber } from '../shared/phoneNumber.js';
 import { calculateGssRegistrationDeadline, calculateUnder18, readIstanbulDate, requiresResidenceApplicationDate } from '../shared/age.js';
 import { CURRENT_ACADEMIC_YEAR_START_DATE } from '../shared/academic-calendar.js';
 import { createMultiPageDocumentPdf } from './multiFileDocument.js';
-import { readPdfMergerMessages } from './i18n/pdf-merger-messages.js';
+import { createDocumentCard, createDocumentPreviewLink, openRequirementDocumentComposer, updateDocumentUploadProgress } from './documentUploadCard.js';
 import { createApplicationPdfDownloadControl } from '../ui/applicationPdfDownloadControl.js';
 import { createApplicationRatingSection } from './applicationRating.js';
+
+export { createDocumentPreviewLink };
 
 const STEP_KEYS = Object.freeze(['stepContact', 'stepResidence', 'stepDocuments', 'stepDeclaration', 'stepReview']);
 const RESIDENCE_FIELDS = Object.freeze(['first_name', 'last_name', 'passport_number', 'nationality', 'date_of_birth']);
@@ -602,38 +604,6 @@ function createAddressEvidenceChoices(document, fields, messages, isDisabled) {
     return fieldset;
 }
 
-function getDocumentStatusKey(requirement, task) {
-    if (task?.state && task.state !== 'complete') return `uploadState_${task.state}`;
-    if (requirement.cleanup_status === 'pending') return 'deleteCleanupPending';
-    if (requirement.scan_status === 'unsafe') return 'documentScanUnsafe';
-    if (requirement.scan_status === 'failed') return 'documentScanFailed';
-    if (requirement.review_status === 'approved' || requirement.revision_status === 'approved') return 'documentApproved';
-    if (requirement.review_status === 'under_review') return 'documentStaffReview';
-    if (requirement.review_status === 'resubmission_required' || requirement.revision_status === 'resubmission_required') return 'documentNeedsReplacement';
-    if (requirement.scan_status === 'pending') return 'documentPendingScan';
-    if (requirement.upload_status === 'finalized') return 'uploadedWaitingReview';
-    return 'documentNotUploaded';
-}
-
-function getDocumentStatusTone(requirement, task, statusKey, isDeleting) {
-    if (isDeleting) return 'pending';
-    if (['deleteCleanupPending', 'documentNeedsReplacement', 'documentScanUnsafe', 'documentScanFailed'].includes(statusKey)) return 'error';
-    if (['failed_upload', 'failed_finalize', 'unknown_finalize_result'].includes(task?.state)) return 'error';
-    if (task?.state === 'complete' || requirement.upload_status === 'finalized'
-        || requirement.review_status === 'approved' || requirement.revision_status === 'approved') return 'success';
-    return 'pending';
-}
-
-function createFilePolicyText(document, requirement, messages) {
-    const acceptedTypes = new Set(requirement.accepted_media_types);
-    if (acceptedTypes.has('application/pdf')) {
-        ['image/jpeg', 'image/png', 'image/webp'].forEach((type) => acceptedTypes.add(type));
-    }
-    const types = [...acceptedTypes].join(', ');
-    const size = (requirement.max_byte_size / (1024 * 1024)).toLocaleString(document.documentElement.lang);
-    return messages.filePolicy.replace('{types}', types).replace('{size}', `${size} MB`);
-}
-
 function isFingerprintUploadEligible(application) {
     if (application?.fingerprint_status !== 'registered' || typeof application.fingerprint_code !== 'string') return false;
     const code = application.fingerprint_code.trim();
@@ -664,132 +634,6 @@ function updateResidenceContinueButton(root, fields) {
     const form = root.querySelector('#application-step-form');
     const button = form?.querySelector('button[type="submit"]');
     if (form && button) button.disabled = !canContinueResidenceStep(form, fields);
-}
-
-function createFileInput(document, requirement, task, messages) {
-    const label = document.createElement('div');
-    const textKey = requirement.filename ? 'replaceDocument' : 'uploadDocument';
-    // One primary action: opens the photo/file composer, which builds a single PDF from photos, images or PDFs.
-    const text = createButton(document, messages, textKey, 'document-compose', 'application-button application-button-primary');
-    text.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state);
-    const input = document.createElement('input');
-    const help = document.createElement('small');
-    input.type = 'file';
-    input.id = `upload-${requirement.code}`;
-    const acceptedTypes = new Set(requirement.accepted_media_types);
-    if (acceptedTypes.has('application/pdf')) {
-        ['image/jpeg', 'image/png', 'image/webp'].forEach((type) => acceptedTypes.add(type));
-    }
-    input.accept = [...acceptedTypes].join(',');
-    input.multiple = true;
-    input.dataset.documentCode = requirement.code;
-    input.disabled = ['preparing', 'uploading', 'verifying'].includes(task?.state);
-    help.id = `upload-help-${requirement.code}`;
-    help.textContent = `${createFilePolicyText(document, requirement, messages)} ${messages.multiFileUploadWarning.replace('{document}', messages[requirement.label_key] || messages.documentNotUploaded)}`;
-    input.setAttribute('aria-describedby', help.id);
-    input.tabIndex = -1;
-    const inputLabel = document.createElement('label');
-    inputLabel.htmlFor = input.id;
-    inputLabel.className = 'application-upload-sr';
-    inputLabel.textContent = messages[textKey];
-    if (!requirement.accepted_media_types.includes('application/pdf')) {
-        // Composer builds PDFs only; other policies fall back to the plain file chooser.
-        text.dataset.action = 'document-pick';
-        text.addEventListener('click', () => input.click());
-    }
-    label.className = 'application-upload-control';
-    label.append(text, inputLabel, input, help);
-    return label;
-}
-
-function createUploadProgress(document, task, messages) {
-    if (!task || task.state !== 'uploading') return null;
-    const wrapper = document.createElement('div');
-    const progress = document.createElement('progress');
-    const label = createTranslatedElement(document, 'span', 'uploadProgress', messages.uploadProgress.replace('{percent}', String(task.progress || 0)));
-    label.dataset.progressLabel = 'true';
-    progress.max = 100;
-    progress.value = task.progress || 0;
-    progress.setAttribute('role', 'progressbar');
-    progress.setAttribute('aria-valuemin', '0');
-    progress.setAttribute('aria-valuemax', '100');
-    progress.setAttribute('aria-valuenow', String(task.progress || 0));
-    progress.setAttribute('aria-label', messages.uploadProgress.replace('{percent}', String(task.progress || 0)));
-    wrapper.setAttribute('aria-live', 'polite');
-    wrapper.append(progress, label);
-    return wrapper;
-}
-
-/** Opens the owner's own uploaded file in a new tab; the owner cookie authorizes the request. */
-export function createDocumentPreviewLink(document, code, messages) {
-    const link = document.createElement('a');
-    link.className = 'application-button application-button-secondary document-preview-link';
-    link.href = `/api/public/applications/current/documents/${encodeURIComponent(code)}/preview`;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.dataset.action = 'document-preview';
-    link.dataset.i18n = 'previewDocument';
-    link.textContent = messages.previewDocument;
-    return link;
-}
-
-function createDocumentCard(document, requirement, state, { allowUpload }) {
-    const messages = readMessages(document);
-    const task = state.uploads[requirement.code];
-    const card = document.createElement('article');
-    const title = createTranslatedElement(document, 'h3', requirement.label_key, messages[requirement.label_key] || messages.documentNotUploaded);
-    title.tabIndex = -1;
-    const description = createTranslatedElement(document, 'p', requirement.description_key, messages[requirement.description_key] || '');
-    const statusKey = state.deleting[requirement.code] ? 'deleteInProgress' : (task?.errorKey || getDocumentStatusKey(requirement, task));
-    const status = createTranslatedElement(document, 'p', statusKey, messages[statusKey] || messages.documentNotUploaded);
-    card.className = 'application-document-card';
-    card.id = `document-${requirement.code}`;
-    card.dataset.documentCode = requirement.code;
-    status.className = 'document-upload-status';
-    const statusTone = getDocumentStatusTone(requirement, task, statusKey, Boolean(state.deleting[requirement.code]));
-    status.dataset.status = statusTone;
-    if (statusTone !== 'pending') status.classList.add(`is-${statusTone}`);
-    if (statusTone === 'error') {
-        status.setAttribute('role', 'alert');
-    } else {
-        status.setAttribute('aria-live', 'polite');
-    }
-    card.append(title, description, createRequirementBadge(document, requirement.required ?? requirement.is_required, messages), status);
-    if (requirement.filename) appendFilename(document, card, `${messages.currentFile}: ${requirement.filename}`);
-    if (requirement.filename && requirement.upload_status === 'finalized') {
-        card.append(createDocumentPreviewLink(document, requirement.code, messages));
-    }
-    if (task?.file && task.state !== 'complete') appendFilename(document, card, `${messages.selectedReplacement}: ${task.file.name}`);
-    const progress = createUploadProgress(document, task, messages);
-    if (progress) card.append(progress);
-    if (!allowUpload) return card;
-    card.append(createFileInput(document, requirement, task, messages));
-    if (task && ['failed_upload', 'failed_finalize', 'unknown_finalize_result', 'cancelled'].includes(task.state)) {
-        card.append(createButton(document, messages, 'retryUpload', 'document-retry'));
-    }
-    if (task && task.state === 'uploading') {
-        card.append(createButton(document, messages, 'cancelUpload', 'document-cancel'));
-    }
-    if (requirement.filename || requirement.cleanup_status === 'pending') {
-        const remove = createButton(document, messages, requirement.cleanup_status === 'pending' ? 'retryCleanup' : 'deleteDocument', 'document-delete');
-        remove.disabled = state.deleting[requirement.code] === true;
-        card.append(remove);
-    }
-    return card;
-}
-
-function createRequirementBadge(document, isRequired, messages) {
-    const key = isRequired ? 'required' : 'optional';
-    const badge = createTranslatedElement(document, 'span', key, messages[key]);
-    badge.className = isRequired ? 'requirement-badge is-required' : 'requirement-badge';
-    return badge;
-}
-
-function appendFilename(document, card, filename) {
-    const name = document.createElement('p');
-    name.className = 'application-document-filename';
-    name.textContent = filename;
-    card.append(name);
 }
 
 function createDocumentList(document, requirements, state, { allowUpload }) {
@@ -1436,16 +1280,8 @@ async function handleReturnHome(event, root, state) {
 function updateProgress(root, code, task, state) {
     const card = [...root.querySelectorAll('.application-document-card')]
         .find((entry) => entry.dataset.documentCode === code);
-    const progress = card?.querySelector('progress');
-    const messages = readMessages(root.ownerDocument);
-    if (!progress) return;
-    const percent = task.progress || 0;
-    const label = messages.uploadProgress.replace('{percent}', String(percent));
-    progress.value = percent;
-    progress.setAttribute('aria-valuenow', String(percent));
-    progress.setAttribute('aria-label', label);
-    const progressLabel = card.querySelector('[data-progress-label]');
-    if (progressLabel) progressLabel.textContent = label;
+    if (!card) return;
+    updateDocumentUploadProgress(card, task, readMessages(root.ownerDocument));
     updateDocumentReadiness(root, state);
 }
 
@@ -1940,18 +1776,10 @@ async function openDocumentComposer(root, state, api, code) {
     if (!requirement || !requirement.accepted_media_types.includes('application/pdf')
         || ['preparing', 'uploading', 'verifying'].includes(state.uploads[code]?.state)) return;
     const messages = readMessages(root.ownerDocument);
-    const openPdfMergerModal = state.openPdfMergerModal
-        || (await import('../ui/pdfMergerModal.js')).openPdfMergerModal;
-    openPdfMergerModal({
-        text: readPdfMergerMessages(root.ownerDocument.documentElement.lang),
-        hideStopCapture: true,
-        contextLabel: messages.documentPagesHelp,
-        confirmLabel: messages.documentPagesConfirm,
-        successMessage: messages.documentPagesUploaded,
-        maxFiles: 30,
-        onSave: async (bytes) => {
-            const FileClass = root.ownerDocument.defaultView.File;
-            const file = new FileClass([bytes], `${code}_sayfalar.pdf`, { type: 'application/pdf' });
+    await openRequirementDocumentComposer(root.ownerDocument, requirement, {
+        openPdfMergerModal: state.openPdfMergerModal,
+        messages,
+        onSaveFile: async (file) => {
             const task = { state: 'selected', progress: 0, file, intentId: null, abortController: null };
             state.uploads[code] = task;
             await runUploadTask(code, task, state, api, root);

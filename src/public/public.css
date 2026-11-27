@@ -254,9 +254,9 @@ a { color: inherit; }
 .application-button-secondary { background: #f1f2f4; color: #303640; }
 .application-button-secondary:hover:not(:disabled) { background: #e5e7eb; }
 .application-document-list { display: grid; gap: 0.8rem; }
-.application-document-card { display: grid; gap: 0.55rem; padding: 1rem; border: 1px solid #e0e3e8; border-radius: 0.75rem; background: #fff; transition: border-color 140ms ease, box-shadow 140ms ease; }
+.application-document-card { display: grid; gap: 0.55rem; min-width: 0; max-width: 100%; padding: 1rem; border: 1px solid #e0e3e8; border-radius: 0.75rem; background: #fff; transition: border-color 140ms ease, box-shadow 140ms ease; }
 .application-document-card:hover { border-color: var(--public-burgundy-border); }
-.application-document-card h3 { margin: 0; font-size: 1.05rem; }
+.application-document-card h3 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; word-break: break-word; }
 .application-document-card > p:not(.document-upload-status) { margin: 0; color: #59616d; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }
 .requirement-badge { width: fit-content; padding: 0.2rem 0.55rem; border-radius: 99px; background: #f0f1f3; color: #4c5562; font-size: 0.75rem; font-weight: 700; }
 .requirement-badge.is-required { background: var(--public-burgundy-soft); color: var(--public-burgundy); border: 1px solid var(--public-burgundy-border); }
@@ -295,13 +295,14 @@ a { color: inherit; }
 .tracking-feedback { padding: 0.75rem 1rem; border-radius: 0.55rem; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; line-height: 1.5; }
 .tracking-feedback[data-feedback-type="warning"] { background: #fff8e6; color: #8c5800; border: 1px solid #ffd580; }
 .tracking-feedback[data-feedback-type="error"] { background: #fdf2f2; color: #9b1c1c; border: 1px solid #f8b4b4; }
-.resubmission-upload-control { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-block-start: 0.6rem; }
-.resubmission-upload-control input[type="file"] { max-width: 100%; color: #303640; font: inherit; }
 .tracking-details { display: grid; grid-template-columns: minmax(9rem, 0.4fr) minmax(0, 1fr); gap: 0.5rem 1rem; margin: 0; }
 .tracking-details dt { font-weight: 700; }
 .tracking-details dd { margin: 0; overflow-wrap: anywhere; }
-.tracking-document-list { display: grid; gap: 0.7rem; margin: 0; padding: 0; list-style: none; }
-.tracking-document-card { display: grid; gap: 0.4rem; padding: 0.85rem; border: 1px solid #e5e8ee; border-radius: 0.65rem; }
+.tracking-document-list { display: grid; gap: 0.7rem; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.tracking-document-card { display: grid; gap: 0.4rem; min-width: 0; max-width: 100%; padding: 0.85rem; border: 1px solid #e5e8ee; border-radius: 0.65rem; }
+.tracking-document-card.application-document-card { gap: 0.55rem; padding: 1rem; border: 1px solid #e0e3e8; border-radius: 0.75rem; background: #fff; }
+.tracking-document-card.application-document-card > .tracking-document-message-label { margin-top: 0.15rem; font-size: 0.88rem; }
+.tracking-document-card.application-document-card > .tracking-document-message { padding: 0.55rem 0.75rem; border-inline-start: 3px solid var(--public-burgundy); border-radius: 0.45rem; background: var(--public-burgundy-soft); color: #394150; }
 .tracking-document-card h3, .tracking-document-card p { margin: 0; }
 .tracking-document-status { color: #424b59; font-weight: 650; }
 .tracking-document-message-label { color: #394150; }
@@ -453,7 +454,6 @@ html[dir="rtl"] .tracking-notification-preferences { direction: rtl; }
 html[dir="rtl"] .tracking-details { direction: rtl; }
 html[dir="rtl"] .tracking-lookup-form, html[dir="rtl"] .physical-tracking-form { direction: rtl; }
 html[dir="rtl"] .recovery-panel { direction: rtl; text-align: start; }
-html[dir="rtl"] .resubmission-upload-control { direction: rtl; }
 html[dir="rtl"] input[type="tel"],
 html[dir="rtl"] input[type="email"],
 html[dir="rtl"] input[name="passport_number"],
