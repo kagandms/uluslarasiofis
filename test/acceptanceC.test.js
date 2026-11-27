@@ -941,7 +941,7 @@ test('C07 sent_to_migration with reviewing overlay shows no warning in owner tra
     });
     assert.equal(chatWhileMissing.response.status, 200);
     assert.ok(chatWhileMissing.json.reply.includes('Göç İdaresi dosyanız için eksik evrak istiyor'));
-    assert.ok(chatWhileMissing.json.reply.includes('2026-12-19'));
+    assert.ok(chatWhileMissing.json.reply.includes('19.12.2026'));
     assert.equal(chatWhileMissing.json.reply.includes(secretNote), false);
     assert.equal(chatWhileMissing.json.reply.includes(eIkametNo), false);
 
@@ -999,6 +999,7 @@ test('C07 sent_to_migration with reviewing overlay shows no warning in owner tra
     });
     assert.equal(chatAfterClear.response.status, 200);
     assert.equal(chatAfterClear.json.reply.includes('eksik evrak'), false);
+    assert.equal(chatAfterClear.json.reply.includes('19.12.2026'), false);
     assert.equal(chatAfterClear.json.reply.includes('2026-12-19'), false);
 
     // 2. Physical record: sent_to_migration with missing_documents vs reviewing overlay
@@ -1047,6 +1048,8 @@ test('C07 sent_to_migration with reviewing overlay shows no warning in owner tra
     assert.equal(physReviewing.json.office_status, 'sent_to_migration');
     assert.equal(physReviewing.json.migration_missing_documents, undefined);
     assert.equal(physReviewing.json.migration_missing_deadline, undefined);
+    assert.equal(JSON.stringify(physReviewing.json).includes('2026-12-21'), false);
+    assert.equal(JSON.stringify(physReviewing.json).includes('21.12.2026'), false);
 });
 
 test('C08 filters (missing_documents, approved, stale query) return exact counts and pagination; permanent delete cleans up overlay', async () => {
