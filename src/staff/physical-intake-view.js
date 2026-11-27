@@ -1,14 +1,23 @@
 import { PHYSICAL_STATUS_LABELS, PHYSICAL_PDF_EDIT_STATUSES } from '../config/physical-statuses.js';
 import { renderPhysicalReceiptDialog, closePhysicalReceiptDialog } from './physical-receipt-dialog.js';
 import { renderPhysicalReceiptDraft, renderPhysicalReceiptControls } from './physical-receipt-view.js';
-import { createApplicationQueueTable, formatQueueDate } from './application-queue-table.js';
+import { createApplicationQueueTable, createStatusWithMigrationBadge, formatQueueDate } from './application-queue-table.js';
 import { buildPhysicalPdfUrl } from './physical-intake-client.js';
 import { bindPhysicalUppercaseInput } from './physical-uppercase-input.js';
 import { createApplicationQueueFilters } from './application-queue-filters.js';
 import { PHYSICAL_RECEIPT_TEMPLATE_VERSION } from '../shared/physical-receipt-version.js';
 
 const STATUS_LABELS = PHYSICAL_STATUS_LABELS;
-const FILTERS = [['all', 'Tüm durumlar'], ['under_review', 'İncelemede'], ['approved', 'Onaylandı'], ['sent_to_migration', 'Göç İdaresi İnceliyor'], ['noted', 'Notu olanlar'], ['not_noted', 'Notu olmayanlar']];
+const FILTERS = [
+    ['all', 'Tüm durumlar'],
+    ['under_review', 'İncelemede'],
+    ['approved', 'Onaylandı'],
+    ['sent_to_migration', 'Göç İdaresi İnceliyor'],
+    ['migration_missing_documents', 'Göç: Eksik evrak'],
+    ['migration_approved', 'Göç İdaresi tarafından onayladı'],
+    ['noted', 'Notu olanlar'],
+    ['not_noted', 'Notu olmayanlar']
+];
 
 
 function text(document, tag, value, className = '') {
@@ -161,7 +170,19 @@ function renderQueue(document, panel, options) {
             item.tracking_reference || '—',
             [item.first_name, item.last_name].filter(Boolean).join(' ') || '—',
             formatDeliveryDate(document, item),
-            item.processing_closed_at ? 'Ofis işlemi kapalı' : STATUS_LABELS[item.status],
+            item.processing_closed_at
+                ? 'Ofis işlemi kapalı'
+                : createStatusWithMigrationBadge(
+                    document,
+                    STATUS_LABELS[item.status] || item.status,
+                    item.status === 'sent_to_migration' && item.migration_office_state === 'missing_documents'
+                        ? {
+                            state: 'missing_documents',
+                            deadline: item.migration_office_deadline ?? null,
+                            note: item.migration_office_note || ''
+                        }
+                        : null
+                ),
             item.current_pdf_id ? 'PDF var' : 'PDF yok',
             formatReceiptSummary(item)
         ],

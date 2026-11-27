@@ -1,0 +1,307 @@
+.migration-sync-dialog {
+    box-sizing: border-box;
+    width: min(780px, calc(100vw - 16px));
+    max-width: 100%;
+    max-height: calc(100dvh - 24px);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    box-shadow: 0 20px 56px rgb(0 0 0 / 28%);
+    overflow: hidden;
+}
+
+.migration-sync-dialog::backdrop {
+    background: rgb(15 23 42 / 58%);
+    backdrop-filter: blur(2px);
+}
+
+.migration-sync-card {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 24px);
+    min-width: 0;
+}
+
+.migration-sync-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--card-border);
+}
+
+.migration-sync-title {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 1.15rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.migration-sync-desc {
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.migration-sync-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 1rem 1.25rem;
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.migration-sync-counts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+    gap: 0.5rem;
+}
+
+.migration-sync-count-card {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: rgb(148 163 184 / 8%);
+    min-width: 0;
+}
+
+.migration-sync-count-value {
+    display: block;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.migration-sync-count-label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: 0.15rem;
+    overflow-wrap: anywhere;
+}
+
+.migration-sync-banner {
+    padding: 0.75rem 0.9rem;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.migration-sync-banner--warning {
+    background: #fff4df;
+    color: #7a4b00;
+    border: 1px solid #f2cf8d;
+}
+
+.migration-sync-banner--error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.migration-sync-banner--success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+body.dark-mode .migration-sync-banner--warning {
+    background: rgb(245 158 11 / 16%);
+    color: #fde68a;
+    border-color: rgb(245 158 11 / 40%);
+}
+
+body.dark-mode .migration-sync-banner--error {
+    background: rgb(239 68 68 / 16%);
+    color: #fecaca;
+    border-color: rgb(239 68 68 / 40%);
+}
+
+body.dark-mode .migration-sync-banner--success {
+    background: rgb(16 185 129 / 16%);
+    color: #a7f3d0;
+    border-color: rgb(16 185 129 / 40%);
+}
+
+.migration-sync-stale-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    margin-top: 0.6rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.migration-sync-stale-check input {
+    margin-top: 0.2rem;
+    flex: 0 0 auto;
+}
+
+.migration-sync-section {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.migration-sync-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.migration-sync-section-title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 700;
+}
+
+.migration-sync-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.migration-sync-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--card-bg);
+    min-width: 0;
+}
+
+.migration-sync-item input[type="checkbox"] {
+    margin-top: 0.22rem;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+}
+
+.migration-sync-item-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    gap: 0.2rem;
+}
+
+.migration-sync-item-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.migration-sync-item-meta {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.migration-sync-item-note {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.migration-sync-tag {
+    display: inline-block;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    background: rgb(148 163 184 / 18%);
+    color: var(--text-primary);
+}
+
+.migration-sync-progress-wrap {
+    display: grid;
+    gap: 0.4rem;
+}
+
+.migration-sync-progress-wrap progress {
+    width: 100%;
+    height: 10px;
+}
+
+.migration-sync-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    padding: 0.9rem 1.25rem;
+    border-top: 1px solid var(--card-border);
+}
+
+.migration-sync-footer .btn {
+    min-height: 44px;
+}
+
+.staff-migration-status-wrap {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.staff-migration-missing-badge {
+    display: inline-block;
+    width: fit-content;
+    max-width: 100%;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: #fff4df;
+    color: #8a5a00;
+    border: 1px solid #f2cf8d;
+    overflow-wrap: anywhere;
+}
+
+body.dark-mode .staff-migration-missing-badge {
+    background: rgb(245 158 11 / 18%);
+    color: #fde68a;
+    border-color: rgb(245 158 11 / 42%);
+}
+
+.staff-migration-missing-deadline,
+.staff-migration-missing-note {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+    .migration-sync-header,
+    .migration-sync-body,
+    .migration-sync-footer {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+
+    .migration-sync-footer {
+        justify-content: stretch;
+    }
+
+    .migration-sync-footer .btn {
+        flex: 1 1 100%;
+    }
+}

@@ -1409,6 +1409,8 @@ test('online queue searches while typing and changes status immediately without 
             ['resubmission_required', 'Yeniden yükleme gerekli'],
             ['approved', 'Onaylandı'],
             ['migration', 'Göç İdaresi İnceliyor'],
+            ['migration_missing_documents', 'Göç: Eksik evrak'],
+            ['migration_approved', 'Göç İdaresi tarafından onayladı'],
             ['noted', 'Notu olanlar'],
             ['not_noted', 'Notu olmayanlar']
         ]

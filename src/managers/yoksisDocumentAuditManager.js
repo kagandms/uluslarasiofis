@@ -6,6 +6,7 @@ import {
     parseYoksisExcel,
     uploadYoksisImport
 } from '../staff/yoksisExcelImport.js';
+import { openMigrationSyncDialog } from '../staff/migrationSyncDialog.js';
 
 const AUDIT_EVENT_ACTIONS = new Set([
     'YOKSIS_DOCUMENT_AUDIT_PROGRESS',
@@ -226,6 +227,7 @@ export function initializeYoksisDocumentAuditManager(root) {
     const excelFileInput = root.querySelector('#audit-excel-file');
     const excelFileInfo = root.querySelector('#audit-excel-file-info');
     const excelUploadButton = root.querySelector('#audit-excel-upload');
+    const syncPortalButton = root.querySelector('#audit-sync-portal');
     const excelLatest = root.querySelector('#audit-import-latest');
     const excelStaleWarning = root.querySelector('#audit-excel-stale-warning');
     const excelSummary = root.querySelector('#audit-excel-summary');
@@ -238,7 +240,8 @@ export function initializeYoksisDocumentAuditManager(root) {
         busy: false,
         retryBusy: false,
         excelBusy: false,
-        unreadableCount: null
+        unreadableCount: null,
+        latestImport: null
     };
     const query = { status: 'all', page: 1, pageSize: PAGE_SIZE, total: 0, sequence: 0 };
     const pendingBatches = readPendingBatches(window);
@@ -258,6 +261,11 @@ export function initializeYoksisDocumentAuditManager(root) {
         }
         if (excelUploadButton) {
             excelUploadButton.disabled = state.excelBusy || !isValidExcelFile(excelFileInput?.files?.[0]);
+        }
+        if (syncPortalButton) {
+            const hasImport = Boolean(state.latestImport?.importId);
+            syncPortalButton.hidden = !hasImport;
+            syncPortalButton.disabled = state.busy || state.excelBusy || !hasImport;
         }
         if (excelFileInput) excelFileInput.disabled = state.excelBusy;
     }
@@ -643,9 +651,13 @@ export function initializeYoksisDocumentAuditManager(root) {
                 return;
             }
             const payload = await response.json();
+            state.latestImport = payload && payload.importId ? payload : null;
             excelLatest.textContent = formatLatestImportLine(payload);
+            updateControls();
         } catch {
+            state.latestImport = null;
             excelLatest.textContent = 'Son yükleme bilgisi alınamadı.';
+            updateControls();
         }
     }
 
@@ -763,6 +775,13 @@ export function initializeYoksisDocumentAuditManager(root) {
     stopButton.addEventListener('click', () => { void stopScan(); });
     excelFileInput?.addEventListener('change', () => { handleExcelFileChange(); });
     excelUploadButton?.addEventListener('click', () => { void handleExcelUpload(); });
+    syncPortalButton?.addEventListener('click', () => {
+        if (!state.latestImport?.importId) return;
+        openMigrationSyncDialog(root.ownerDocument, {
+            trigger: syncPortalButton,
+            onApplied: () => { void loadSharedRecords(); }
+        });
+    });
     root.querySelector('#audit-search-submit')?.addEventListener('click', () => {
         query.page = 1;
         void loadSharedRecords();

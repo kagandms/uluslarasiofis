@@ -12,7 +12,7 @@ function requireText(value, { field, maxLength }) {
 export { MAX_PHYSICAL_PDF_BYTES };
 export const PHYSICAL_STATUS_FILTERS = Object.freeze({
     all: null, under_review: ['under_review'], approved: ['approved_for_processing'],
-    sent_to_migration: ['sent_to_migration'], migration_approved: ['migration_approved'], completed: ['completed'], rejected: ['rejected'], deleted: null
+    sent_to_migration: ['sent_to_migration'], migration_missing_documents: ['sent_to_migration'], migration_approved: ['migration_approved'], completed: ['completed'], rejected: ['rejected'], deleted: null
 });
 const REVIEW_STATUSES = Object.keys(PHYSICAL_STATUS_LABELS);
 
