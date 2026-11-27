@@ -1,6 +1,6 @@
 # Yayın hazırlığı — yetkili günlük iş akışı sürümü (27 Kasım 2026)
 
-**Durum:** Onay 1 (migration) uygulandı. Push, `production` birleştirmesi, workflow tetikleme ve yayın **yapılmadı**. Her adım ayrı onay ister. Bu belge tarihlidir; adımlardan önce değerler yeniden doğrulanır.
+**Durum:** Onay 1 (migration) uygulandı; onay 2 (temel SHA, `production` birleştirmesi ve push) kullanıcı tarafından verildi. Workflow tetikleme ve yayın **yapılmadı**. Her adım ayrı onay ister. Bu belge tarihlidir; adımlardan önce değerler yeniden doğrulanır.
 
 ## Aday ve canlı durum
 
