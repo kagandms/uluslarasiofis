@@ -78,7 +78,7 @@ async function listIntakes(database, query) {
 }
 
 async function updateStatus(database, input) {
-    const result = await database.batch([
+    const statements = [
         database.prepare(`UPDATE physical_intakes SET status=?,rejection_reason=?,legacy_status=NULL,lock_version=lock_version+1,updated_at=?
             WHERE id=? AND lock_version=? AND processing_closed_at IS NULL AND coalesce(legacy_status,'')<>'completed' AND deleted_at IS NULL`)
             .bind(input.status, input.reason || '', input.now, input.id, input.version),
@@ -86,7 +86,36 @@ async function updateStatus(database, input) {
             SELECT ?,'physical_intake.status','staff',?,?,?,? WHERE changes()=1`)
             .bind(crypto.randomUUID(), input.staffId, input.requestId,
                 JSON.stringify({ physicalIntakeId: input.id, status: input.status }), input.now)
-    ]);
+    ];
+    if (input.status !== 'sent_to_migration') {
+        const nextVersion = input.version + 1;
+        if (input.status === 'migration_approved') {
+            statements.push(
+                database.prepare(`
+                    UPDATE migration_office_states
+                    SET state = 'approved', note = '', deadline = NULL,
+                        updated_by_staff_id = ?, updated_at = ?
+                    WHERE record_kind = 'physical' AND record_id = ?
+                      AND EXISTS (
+                        SELECT 1 FROM physical_intakes
+                        WHERE id = ? AND status = 'migration_approved' AND lock_version = ?
+                      )
+                `).bind(input.staffId, input.now, input.id, input.id, nextVersion)
+            );
+        } else {
+            statements.push(
+                database.prepare(`
+                    DELETE FROM migration_office_states
+                    WHERE record_kind = 'physical' AND record_id = ?
+                      AND EXISTS (
+                        SELECT 1 FROM physical_intakes
+                        WHERE id = ? AND status = ? AND lock_version = ?
+                      )
+                `).bind(input.id, input.id, input.status, nextVersion)
+            );
+        }
+    }
+    const result = await database.batch(statements);
     return result[0].meta.changes === 1;
 }
 

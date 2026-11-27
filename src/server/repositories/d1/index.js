@@ -6,6 +6,7 @@ import { createApplicationRatingRepository } from './applicationRatingRepository
 import { createApplicationReviewRepository } from './applicationReviewRepository.js';
 import { createAuditRepository } from './auditRepository.js';
 import { createDocumentRepository } from './documentRepository.js';
+import { createMigrationSyncRepository } from './migrationSyncRepository.js';
 import { createResubmissionUploadRepository } from './resubmissionUploadRepository.js';
 import { createNotificationRepository } from './notificationRepository.js';
 import { createOfficeInquiryRepository } from './officeInquiryRepository.js';
@@ -32,6 +33,7 @@ export function createD1Repositories(database) {
         applicationRatings: createApplicationRatingRepository(database),
         audit: createAuditRepository(database),
         documents: createDocumentRepository(database),
+        migrationSync: createMigrationSyncRepository(database),
         resubmissionUploads: createResubmissionUploadRepository(database),
         notifications: createNotificationRepository(database),
         officeInquiries: createOfficeInquiryRepository(database),

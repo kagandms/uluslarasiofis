@@ -91,13 +91,22 @@ export function classifyStatus(applicationStatus, resultStatus) {
 }
 
 /**
+ * Single source of truth for mapping the Excel "İşlem Tamamlandı" status to the portal sync target.
+ * Kept in one exported constant until the office confirms its exact meaning.
+ */
+export const COMPLETED_GOC_STATUS_TARGET = Object.freeze({
+    normalizedText: 'islem tamamlandi',
+    targetState: 'approved'
+});
+
+/**
  * Classifies an Excel-sourced "Göç Durumu" string into a normalized status category.
  * @param {unknown} gocStatus Raw Göç Durumu text from YÖKSİS Excel export.
  * @returns {'successful'|'pending'|'missing_documents'|'other'} Status category.
  */
 export function classifyGocStatus(gocStatus) {
     const normalized = normalizeSearch(gocStatus);
-    if (normalized === 'islem tamamlandi') return 'successful';
+    if (normalized === COMPLETED_GOC_STATUS_TARGET.normalizedText) return 'successful';
     if (normalized === 'islem bekliyor') return 'pending';
     if (normalized === 'eksik belge istendi' || normalized.startsWith('eksik belge istendi ')) {
         return 'missing_documents';
