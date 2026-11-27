@@ -834,3 +834,125 @@ test('POST /api/staff/assistant uses STAFF_ASSISTANT_MODEL_DEFAULT (Gemma 4 26B)
     assert.equal(infoLogs[0][1].modelCachedInputTokens, 200);
     assert.equal(infoLogs[0][1].modelOutputTokens, 18);
 });
+
+test('Görev 5: forgiving document-print requests match all 9 documents across natural phrasings, count formats, typos, and model queries', async () => {
+    const { environment, fakeAi } = await createFixture();
+
+    const perDocumentCases = [
+        // 1. ogrenci-basvuru-formu
+        { message: 'başvuru formu cıkarır mısın 10tane', documentId: 'ogrenci-basvuru-formu', copies: 10 },
+        { message: 'basvuru formu yazdir 3 adet', documentId: 'ogrenci-basvuru-formu', copies: 3 },
+        { message: 'bana şu öğrenci başvuru formundan bir de 2x bas', documentId: 'ogrenci-basvuru-formu', copies: 2 },
+        // 2. eksik-evrak-taahhutnamesi
+        { message: 'taahhütname çıkar 4 tane', documentId: 'eksik-evrak-taahhutnamesi', copies: 4 },
+        { message: 'taahhutname lazim 5tane', documentId: 'eksik-evrak-taahhutnamesi', copies: 5 },
+        { message: 'eksik evrak taahhütnamesi rica etsem', documentId: 'eksik-evrak-taahhutnamesi', copies: 1 },
+        // 3. on-lisans-lisans-checklist
+        { message: 'lisans checklist çıkar 10tane', documentId: 'on-lisans-lisans-checklist', copies: 10 },
+        { message: 'lisans checklist çıkar 10 tane', documentId: 'on-lisans-lisans-checklist', copies: 10 },
+        { message: 'ön lisans checklist verir misin', documentId: 'on-lisans-lisans-checklist', copies: 1 },
+        // 4. lisansustu-evrak-kontrol
+        { message: 'yüksek lisans checklist çıkar 2 adet', documentId: 'lisansustu-evrak-kontrol', copies: 2 },
+        { message: 'master checklist 6x', documentId: 'lisansustu-evrak-kontrol', copies: 6 },
+        { message: 'doktora checklist istiyorum x3', documentId: 'lisansustu-evrak-kontrol', copies: 3 },
+        // 5. kayit-silme-formu
+        { message: '2 tane kayıt silme formu çıkar', documentId: 'kayit-silme-formu', copies: 2 },
+        { message: 'kayit silme lazim 5 tane', documentId: 'kayit-silme-formu', copies: 5 },
+        { message: 'ilişik kesme formu basar mısın', documentId: 'kayit-silme-formu', copies: 1 },
+        // 6. taksitlendirme-dilekcesi
+        { message: '10 tane taksit dilekçesi çıkar', documentId: 'taksitlendirme-dilekcesi', copies: 10 },
+        { message: 'taksit ver 4 adet', documentId: 'taksitlendirme-dilekcesi', copies: 4 },
+        { message: 'taksitlendirme dilekcesi yazdir', documentId: 'taksitlendirme-dilekcesi', copies: 1 },
+        // 7. bos-dilekce-formu
+        { message: 'boş dilekçe çıkar 8tane', documentId: 'bos-dilekce-formu', copies: 8 },
+        { message: 'bos dilekce formu bas', documentId: 'bos-dilekce-formu', copies: 1 },
+        { message: 'genel dilekçe 10', documentId: 'bos-dilekce-formu', copies: 10 },
+        // 8. ikamet-kimlik-evrak-listesi
+        { message: 'ikamet listesi çıkar 7 tane', documentId: 'ikamet-kimlik-evrak-listesi', copies: 7 },
+        { message: 'ikamet evrak listesi lazim', documentId: 'ikamet-kimlik-evrak-listesi', copies: 1 },
+        { message: 'ikamet kimlik evrak listesi x5', documentId: 'ikamet-kimlik-evrak-listesi', copies: 5 },
+        // 9. indirim-dilekcesi
+        { message: 'indirim dilekçesi çıkar 3tane', documentId: 'indirim-dilekcesi', copies: 3 },
+        { message: 'indirim lazim on tane', documentId: 'indirim-dilekcesi', copies: 10 },
+        { message: 'tomer indirim dilekcesi istiyorum', documentId: 'indirim-dilekcesi', copies: 1 }
+    ];
+
+    for (const testCase of perDocumentCases) {
+        const resp = await worker.fetch(createAssistantRequest({ message: testCase.message }), environment, {});
+        const payload = validateStaffAssistantResponse(await resp.json());
+        assert.equal(resp.status, 200, `Expected 200 for: ${testCase.message}`);
+        assert.deepEqual(
+            payload.action,
+            { type: 'documents.print', documentId: testCase.documentId, copies: testCase.copies },
+            `Mismatch for: ${testCase.message}`
+        );
+    }
+
+    // 1-letter typos on 5+ character words.
+    const typoCases = [
+        { message: 'lisans chekclist 10tane', documentId: 'on-lisans-lisans-checklist', copies: 10 },
+        { message: 'taahütname çıkar 2 tane', documentId: 'eksik-evrak-taahhutnamesi', copies: 2 },
+        { message: 'taahutname çıkar 2 tane', documentId: 'eksik-evrak-taahhutnamesi', copies: 2 },
+        { message: 'basvru formu 3 tane', documentId: 'ogrenci-basvuru-formu', copies: 3 },
+        { message: 'taksti 4 tane', documentId: 'taksitlendirme-dilekcesi', copies: 4 }
+    ];
+    for (const testCase of typoCases) {
+        const resp = await worker.fetch(createAssistantRequest({ message: testCase.message }), environment, {});
+        const payload = validateStaffAssistantResponse(await resp.json());
+        assert.equal(resp.status, 200, `Expected 200 for typo: ${testCase.message}`);
+        assert.deepEqual(
+            payload.action,
+            { type: 'documents.print', documentId: testCase.documentId, copies: testCase.copies },
+            `Typo mismatch for: ${testCase.message}`
+        );
+    }
+
+    assert.equal(fakeAi.callCount, 0);
+});
+
+test('Görev 5: ambiguous requests and no-match queries return 2-3 clickable choices preserving count without auto-selecting', async () => {
+    const { environment } = await createFixture();
+
+    for (const message of ['5 tane dilekçe çıkar', '5 tane checklist çıkar', '5 tane form çıkar']) {
+        const resp = await worker.fetch(createAssistantRequest({ message }), environment, {});
+        const payload = validateStaffAssistantResponse(await resp.json());
+        assert.equal(resp.status, 200);
+        assert.equal(payload.state, 'confused');
+        assert.equal(payload.action, undefined);
+        assert.equal(payload.results?.kind, 'documentChoices');
+        assert.equal(payload.results?.copies, 5);
+        assert.ok(payload.results.items.length >= 2 && payload.results.items.length <= 3);
+    }
+
+    // No match -> nearest 3 suggestions, preserving count.
+    const noMatchResp = await worker.fetch(
+        createAssistantRequest({ message: '7 tane bambaşka garip belge çıkar' }),
+        environment,
+        {}
+    );
+    const noMatchPayload = validateStaffAssistantResponse(await noMatchResp.json());
+    assert.equal(noMatchResp.status, 200);
+    assert.equal(noMatchPayload.state, 'confused');
+    assert.equal(noMatchPayload.action, undefined);
+    assert.equal(noMatchPayload.results?.kind, 'documentChoices');
+    assert.equal(noMatchPayload.results?.copies, 7);
+    assert.equal(noMatchPayload.results?.items.length, 3);
+});
+
+test('Görev 5: AI model query for propose_documents_print also undergoes cleanup and count extraction', async () => {
+    const { environment, fakeAi } = await createFixture({
+        aiScript: {
+            tool_calls: [{ name: 'propose_documents_print', arguments: { query: 'lisans checklist çıkar 10tane' } }]
+        }
+    });
+
+    const resp = await worker.fetch(createAssistantRequest({ message: 'merhaba yardımcı olur musun' }), environment, {});
+    const payload = validateStaffAssistantResponse(await resp.json());
+    assert.equal(resp.status, 200);
+    assert.equal(fakeAi.callCount, 1);
+    assert.deepEqual(payload.action, {
+        type: 'documents.print',
+        documentId: 'on-lisans-lisans-checklist',
+        copies: 10
+    });
+});

@@ -14,7 +14,13 @@ import { requireStaff } from '../auth/staffAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
 import { createStaffAssistantRepository } from '../repositories/d1/staffAssistantRepository.js';
 import { ApiError } from './errors.js';
-import { normalizeTurkishText, resolvePerson } from './staffAssistantIntent.js';
+import {
+    cleanDocumentPrintQuery,
+    editDistanceAtMostOne,
+    normalizeTurkishText,
+    parseCount,
+    resolvePerson
+} from './staffAssistantIntent.js';
 
 const APPLICATION_SEARCH_ROLES = Object.freeze(['reviewer', 'admin']);
 const MAX_RESULT_ITEMS = 5;
@@ -514,46 +520,163 @@ async function runProposeWorkHours(args, context) {
     };
 }
 
-function matchOfficeDocuments(documentId, query) {
+const GENERIC_DOCUMENT_WORDS = new Set(['dilekce', 'checklist', 'form']);
+
+function splitSearchWords(text) {
+    return normalizeTurkishText(text)
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter((word) => word.length >= 2);
+}
+
+function scoreTokenMatch(queryToken, docToken, { allowStem = true } = {}) {
+    if (queryToken === docToken) return 4;
+    if (queryToken === 'lisans' && docToken.startsWith('lisansustu')) {
+        return 0;
+    }
+    if (allowStem) {
+        if (docToken.length >= 4 && queryToken.startsWith(docToken)) return 3;
+        if (queryToken.length >= 5 && docToken.startsWith(queryToken)) return 3;
+        if (queryToken === 'form' && docToken.startsWith('form')) return 3;
+    }
+    if (queryToken.length >= 5 && docToken.length >= 5 && editDistanceAtMostOne(queryToken, docToken)) {
+        return 2;
+    }
+    return 0;
+}
+
+function scoreWordsMatch(queryTokens, docWords, options) {
+    let total = 0;
+    let matchedCount = 0;
+    for (const qToken of queryTokens) {
+        let best = 0;
+        for (const dToken of docWords) {
+            const score = scoreTokenMatch(qToken, dToken, options);
+            if (score > best) best = score;
+        }
+        if (best > 0) {
+            matchedCount += 1;
+            total += best;
+        }
+    }
+    return { matchedCount, total };
+}
+
+export function matchOfficeDocuments(documentId, query) {
     if (documentId) {
         const exact = OFFICE_DOCUMENTS.find((doc) => doc.id === documentId);
         if (exact) return [exact];
     }
 
-    const searchText = normalizeTurkishText(query || documentId || '');
+    const searchText = cleanDocumentPrintQuery(query || documentId || '');
     if (!searchText) return [];
 
-    // 1. Exact title match.
-    const exactTitle = OFFICE_DOCUMENTS.filter((doc) => normalizeTurkishText(doc.title) === searchText);
-    if (exactTitle.length > 0) return exactTitle;
+    const queryTokens = splitSearchWords(searchText);
+    if (queryTokens.length === 0) return [];
 
-    // 2. Token-based matching against title, id, and tags.
-    const tokens = searchText.split(/\s+/).filter((token) => token.length >= 2);
-    if (tokens.length === 0) return [];
+    const isBareGeneric = queryTokens.length === 1 && GENERIC_DOCUMENT_WORDS.has(queryTokens[0]);
 
-    const matches = OFFICE_DOCUMENTS.filter((doc) => {
-        const haystack = normalizeTurkishText([doc.id.replace(/-/g, ' '), doc.title, ...(doc.tags || [])].join(' '));
-        return tokens.every((token) => haystack.includes(token));
+    if (!isBareGeneric) {
+        // 1. Exact title match.
+        const exactTitle = OFFICE_DOCUMENTS.filter((doc) => normalizeTurkishText(doc.title) === searchText);
+        if (exactTitle.length > 0) return exactTitle;
+
+        // 2. Exact alias match.
+        const exactAlias = OFFICE_DOCUMENTS.filter((doc) =>
+            (doc.aliases || []).some((alias) => normalizeTurkishText(alias) === searchText)
+        );
+        if (exactAlias.length > 0) return exactAlias;
+
+        // 3. Full alias token match (exact or 1-letter typo tolerance for 5+ char words).
+        const fullAliasMatches = OFFICE_DOCUMENTS.filter((doc) =>
+            (doc.aliases || []).some((alias) => {
+                const aliasTokens = splitSearchWords(alias);
+                if (aliasTokens.length !== queryTokens.length) return false;
+                return queryTokens.every((qToken, index) =>
+                    scoreTokenMatch(qToken, aliasTokens[index], { allowStem: false }) > 0
+                );
+            })
+        );
+        if (fullAliasMatches.length > 0) return fullAliasMatches;
+    }
+
+    // 4. Scored token-based matching across title, aliases, id, and tags.
+    const scored = [];
+    for (const doc of OFFICE_DOCUMENTS) {
+        const titleWords = splitSearchWords(doc.title);
+        const aliasWords = splitSearchWords((doc.aliases || []).join(' '));
+        const tagIdWords = splitSearchWords([doc.id.replace(/-/g, ' '), ...(doc.tags || [])].join(' '));
+        const allWords = [...titleWords, ...aliasWords, ...tagIdWords];
+
+        const allMatch = queryTokens.every((qToken) =>
+            allWords.some((dToken) => scoreTokenMatch(qToken, dToken, { allowStem: true }) > 0)
+        );
+        if (!allMatch) continue;
+
+        const titleScore = scoreWordsMatch(queryTokens, titleWords, { allowStem: true }).total;
+        const aliasScore = scoreWordsMatch(queryTokens, aliasWords, { allowStem: true }).total;
+        const tagScore = scoreWordsMatch(queryTokens, tagIdWords, { allowStem: true }).total;
+        const score = titleScore * 3 + aliasScore * 2 + tagScore;
+        scored.push({ doc, score });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((entry) => entry.doc);
+}
+
+function suggestNearestDocuments(query, limit = 3) {
+    const cleaned = cleanDocumentPrintQuery(query || '');
+    const queryTokens = splitSearchWords(cleaned);
+    if (queryTokens.length === 0) {
+        return OFFICE_DOCUMENTS.slice(0, limit);
+    }
+
+    const scored = OFFICE_DOCUMENTS.map((doc) => {
+        const docWords = splitSearchWords([
+            doc.title,
+            ...(doc.aliases || []),
+            doc.id.replace(/-/g, ' '),
+            ...(doc.tags || [])
+        ].join(' '));
+        const { matchedCount, total } = scoreWordsMatch(queryTokens, docWords, { allowStem: true });
+        let prefixOverlap = 0;
+        for (const qToken of queryTokens) {
+            if (qToken.length < 3) continue;
+            const prefix = qToken.slice(0, 3);
+            if (docWords.some((word) => word.startsWith(prefix))) {
+                prefixOverlap += 1;
+            }
+        }
+        return {
+            doc,
+            score: matchedCount * 10 + total + prefixOverlap * 2
+        };
     });
 
-    if (matches.length > 0) return matches;
-
-    // 3. Fallback: match any document whose title or tags share the most specific token (when single token failed due to suffix like "dilekcesi").
-    const stemmedMatches = OFFICE_DOCUMENTS.filter((doc) => {
-        const haystack = normalizeTurkishText([doc.id.replace(/-/g, ' '), doc.title, ...(doc.tags || [])].join(' '));
-        return tokens.every((token) => {
-            const stem = token.length > 5 ? token.slice(0, 5) : token;
-            return haystack.includes(token) || haystack.includes(stem);
-        });
-    });
-
-    return stemmedMatches;
+    const targetCount = Math.min(limit, OFFICE_DOCUMENTS.length);
+    const ordered = [...scored].sort((a, b) => b.score - a.score);
+    const result = [];
+    const seenIds = new Set();
+    for (const entry of ordered) {
+        if (seenIds.has(entry.doc.id)) continue;
+        seenIds.add(entry.doc.id);
+        result.push(entry.doc);
+        if (result.length >= targetCount) break;
+    }
+    return result;
 }
 
 async function runProposeDocumentsPrint(args, context) {
     await resolveStaffForTool(context);
 
-    const copies = args.copies === undefined ? 1 : args.copies;
+    let copies = args.copies;
+    if (copies === undefined && typeof args.query === 'string') {
+        const parsedFromQuery = parseCount(args.query);
+        if (parsedFromQuery !== null) copies = parsedFromQuery;
+    }
+    if (copies === undefined) copies = 1;
+
     if (!Number.isInteger(copies) || copies < 1 || copies > STAFF_ASSISTANT_MAX_COPIES) {
         return {
             reply: `Kopya sayısı 1 ile ${STAFF_ASSISTANT_MAX_COPIES} arasında bir tam sayı olmalıdır. Kaç kopya çıkarayım?`,
@@ -563,18 +686,30 @@ async function runProposeDocumentsPrint(args, context) {
 
     const matches = matchOfficeDocuments(args.documentId, args.query);
     if (matches.length === 0) {
-        const available = OFFICE_DOCUMENTS.map((doc) => doc.title).join(', ');
+        const suggestions = suggestNearestDocuments(args.query, 3);
+        const suggestionNames = suggestions.map((doc) => doc.title).join(', ');
         return {
-            reply: `İstediğiniz belgeyi bulamadım. Mevcut belgelerimiz: ${available}.`,
-            state: 'confused'
+            reply: `İstediğiniz belgeyi bulamadım. En yakın belgelerden birini seçebilirsiniz: ${suggestionNames}.`,
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies,
+                items: suggestions.map((doc) => ({ documentId: doc.id, title: doc.title }))
+            }
         };
     }
 
     if (matches.length > 1) {
-        const options = matches.map((doc) => doc.title).join(', ');
+        const choices = matches.slice(0, 3);
+        const options = choices.map((doc) => doc.title).join(', ');
         return {
             reply: `Birden fazla belge eşleşti; hangisini hazırlayayım? ${options}`,
-            state: 'confused'
+            state: 'confused',
+            results: {
+                kind: 'documentChoices',
+                copies,
+                items: choices.map((doc) => ({ documentId: doc.id, title: doc.title }))
+            }
         };
     }
 

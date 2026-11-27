@@ -47,6 +47,7 @@ export const STAFF_ASSISTANT_MAX_COPIES = 50;
 const MAX_MESSAGE_LENGTH = 300;
 const MAX_HISTORY_ITEMS = 6;
 const MAX_RESULTS_ITEMS = 5;
+const MAX_DOCUMENT_CHOICE_ITEMS = 3;
 const PASSPORT_NO_PATTERN = /^[A-Z0-9]{5,20}$/;
 const DOCUMENT_ID_PATTERN = /^[a-z0-9-]{1,80}$/;
 
@@ -90,6 +91,8 @@ const TEBLIGAT_ITEM_KEYS = new Set([
     'date',
     'marked'
 ]);
+const DOCUMENT_CHOICE_RESULT_KEYS = new Set(['kind', 'copies', 'items']);
+const DOCUMENT_CHOICE_ITEM_KEYS = new Set(['documentId', 'title']);
 
 const ACTION_KEYS_BY_TYPE = Object.freeze({
     navigate: new Set(['type', 'view']),
@@ -209,6 +212,23 @@ function validateTebligatItem(item) {
     };
 }
 
+function validateDocumentChoiceItem(item) {
+    assertAllowedKeys(item, DOCUMENT_CHOICE_ITEM_KEYS, 'invalid-response');
+    if (
+        !isString(item.documentId)
+        || !DOCUMENT_ID_PATTERN.test(item.documentId)
+        || !isString(item.title)
+        || item.title.trim().length < 1
+        || item.title.length > 120
+    ) {
+        throw new Error('invalid-response');
+    }
+    return {
+        documentId: item.documentId,
+        title: item.title
+    };
+}
+
 function validateResultBlock(results) {
     if (!isPlainObject(results) || !isString(results.kind)) {
         throw new Error('invalid-response');
@@ -266,6 +286,25 @@ function validateResultBlock(results) {
             total: results.total,
             truncated: results.truncated,
             items: results.items.map(validateTebligatItem)
+        };
+    }
+
+    if (results.kind === 'documentChoices') {
+        assertAllowedKeys(results, DOCUMENT_CHOICE_RESULT_KEYS, 'invalid-response');
+        if (
+            !Number.isInteger(results.copies)
+            || results.copies < 1
+            || results.copies > STAFF_ASSISTANT_MAX_COPIES
+            || !Array.isArray(results.items)
+            || results.items.length < 1
+            || results.items.length > MAX_DOCUMENT_CHOICE_ITEMS
+        ) {
+            throw new Error('invalid-response');
+        }
+        return {
+            kind: 'documentChoices',
+            copies: results.copies,
+            items: results.items.map(validateDocumentChoiceItem)
         };
     }
 
