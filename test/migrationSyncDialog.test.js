@@ -557,3 +557,74 @@ test('yoksisDocumentAuditManager renders Göç query age, stale warning only on 
 
     assert.equal(queryBodies[queryBodies.length - 1].staleQueryOnly, true);
 });
+
+test('apply button is disabled and hidden after a successful apply instead of staying enabled with old count', async () => {
+    const dom = createDom();
+    const { document } = dom.window;
+
+    const fetcher = async (url, init) => {
+        if (url.endsWith('/sync/preview')) {
+            return jsonResponse({
+                import_id: 'imp-done',
+                exported_at: '2026-11-27 08:30',
+                changes: [
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-1',
+                        application_number: '2026-11-0000001',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'status_approved',
+                        note: '',
+                        deadline: null,
+                        student_number: '26000000001',
+                        full_name: 'Ayşe Yılmaz'
+                    },
+                    {
+                        record_kind: 'online',
+                        record_id: 'app-2',
+                        application_number: '2026-11-0000002',
+                        current_status: 'sent_to_migration',
+                        target_state: 'approved',
+                        version: '2026-11-27T08:00:00.000Z',
+                        reason: 'status_approved',
+                        note: '',
+                        deadline: null,
+                        student_number: '26000000002',
+                        full_name: 'Fatma Kaya'
+                    }
+                ],
+                needsAttention: [],
+                manual: [],
+                unchangedCount: 0
+            });
+        }
+        if (url.endsWith('/sync/apply')) {
+            const body = JSON.parse(init.body);
+            return jsonResponse({
+                applied: body.items.map((item) => ({ ...item, target_state: 'approved' })),
+                conflicts: []
+            });
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const handle = openMigrationSyncDialog(document, {
+        fetcher,
+        nowMs: Date.parse('2026-11-27T09:00:00+03:00')
+    });
+    await handle.ready;
+
+    const applyBtn = handle.dialog.querySelector('[data-action="apply-sync"]');
+    assert.equal(applyBtn.disabled, false);
+    assert.equal(applyBtn.hidden, false);
+    assert.equal(applyBtn.textContent, 'Seçilenleri uygula (2)');
+
+    applyBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(applyBtn.disabled, true);
+    assert.equal(applyBtn.hidden, true);
+    assert.notEqual(applyBtn.textContent, 'Seçilenleri uygula (2)');
+});

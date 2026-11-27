@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hashSessionToken } from '../src/server/auth/sessionToken.js';
 import { createD1Repositories } from '../src/server/repositories/d1/index.js';
+import { createMigrationSyncRepository } from '../src/server/repositories/d1/migrationSyncRepository.js';
 import { createPhysicalIntakeRepository } from '../src/server/repositories/d1/physical-intake-repository.js';
 import { getIstanbulTodayIso, shiftIsoCalendarDate } from '../src/server/domain/yoksisAuditPolicy.js';
 import { purgeApplicationById } from '../src/server/routes/staffApplicationDeletionRoutes.js';
@@ -780,4 +781,402 @@ test('query staleQueryOnly filter runs in SQL with pagination and combines with 
     }), environment)).json();
     assert.equal(combinedMatch.total, 1);
     assert.equal(combinedMatch.records[0].application_number, '2026-13-0000001');
+});
+
+test('multiple_open_records guard forces manual for online record when hidden physical record exists and never exposes physical details', async () => {
+    const { database, environment } = createEnvironment({ appEnv: 'production', physicalMode: 'off' });
+    const cookie = await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-1' });
+
+    const appId = await seedOnlineApplication(database, {
+        id: 'app-online-hidden-phys',
+        studentNumber: '26000000001',
+        updatedAt: '2026-11-10T10:00:00.000Z'
+    });
+    const physId = await seedPhysicalIntake(database, {
+        id: '22222222-2222-4222-8222-222222222222',
+        studentNumber: '26000000001',
+        firstName: 'Ayşe',
+        lastName: 'Yılmaz',
+        linkedApplicationId: null
+    });
+
+    await seedAuditRow(database, {
+        applicationNumber: '2026-11-0000001',
+        studentNumber: '26000000001',
+        firstName: 'Ayşe Yılmaz',
+        applicationStatus: 'İşlem Tamamlandı',
+        lastSeenImportId: 'imp-1'
+    });
+
+    const preview = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/preview', { cookie }), environment)).json();
+    assert.equal(preview.changes.length, 0);
+    assert.equal(preview.needsAttention.length, 0);
+    assert.equal(preview.manual.length, 1);
+    assert.equal(preview.manual[0].record_kind, 'online');
+    assert.equal(preview.manual[0].record_id, appId);
+    assert.equal(preview.manual[0].reason, 'multiple_open_records');
+    assert.equal(preview.manual.some((entry) => entry.record_kind === 'physical' || entry.record_id === physId), false);
+
+    const applyRes = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+        cookie,
+        body: {
+            import_id: 'imp-1',
+            items: [{
+                record_kind: 'online',
+                record_id: appId,
+                application_number: '2026-11-0000001',
+                version: '2026-11-10T10:00:00.000Z'
+            }]
+        }
+    }), environment)).json();
+    assert.equal(applyRes.applied.length, 0);
+    assert.deepEqual(applyRes.conflicts, [{
+        record_kind: 'online',
+        record_id: appId,
+        application_number: '2026-11-0000001',
+        reason: 'version_conflict'
+    }]);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(appId).first().status, 'sent_to_migration');
+});
+
+test('apply rejects online item with version_conflict when an unrequested unlinked open physical record exists even with physical access enabled', async () => {
+    const { database, environment } = createEnvironment({ appEnv: 'production', physicalMode: 'on' });
+    const cookie = await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-1' });
+
+    const appId = await seedOnlineApplication(database, {
+        id: 'app-online-with-phys',
+        studentNumber: '26000000001',
+        updatedAt: '2026-11-10T10:00:00.000Z'
+    });
+    await seedPhysicalIntake(database, {
+        id: '33333333-3333-4333-8333-333333333333',
+        studentNumber: '26000000001',
+        firstName: 'Ayşe',
+        lastName: 'Yılmaz',
+        linkedApplicationId: null
+    });
+
+    await seedAuditRow(database, {
+        applicationNumber: '2026-11-0000001',
+        studentNumber: '26000000001',
+        firstName: 'Ayşe Yılmaz',
+        applicationStatus: 'İşlem Tamamlandı',
+        lastSeenImportId: 'imp-1'
+    });
+
+    const applyRes = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+        cookie,
+        body: {
+            import_id: 'imp-1',
+            items: [{
+                record_kind: 'online',
+                record_id: appId,
+                application_number: '2026-11-0000001',
+                version: '2026-11-10T10:00:00.000Z'
+            }]
+        }
+    }), environment)).json();
+    assert.equal(applyRes.applied.length, 0);
+    assert.deepEqual(applyRes.conflicts, [{
+        record_kind: 'online',
+        record_id: appId,
+        application_number: '2026-11-0000001',
+        reason: 'version_conflict'
+    }]);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(appId).first().status, 'sent_to_migration');
+});
+
+test('moving migration_approved back to sent_to_migration deletes approved overlay for both online and physical records', async () => {
+    const { database, environment } = createEnvironment();
+    await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-1' });
+    const repositories = createD1Repositories(database);
+    const physicalRepo = createPhysicalIntakeRepository(database);
+
+    const appId = await seedOnlineApplication(database, {
+        id: 'app-revert-approved',
+        studentNumber: '26000000001',
+        status: 'migration_approved',
+        updatedAt: '2026-11-10T10:00:00.000Z'
+    });
+    const physId = await seedPhysicalIntake(database, {
+        id: '44444444-4444-4444-8444-444444444444',
+        studentNumber: '26000000002',
+        status: 'migration_approved'
+    });
+
+    await database.prepare(`
+        INSERT INTO migration_office_states (
+            record_kind, record_id, application_number, state, note, deadline, import_id, updated_by_staff_id, updated_at
+        ) VALUES
+            ('online', ?, '2026-11-0000001', 'approved', '', NULL, 'imp-1', 'reviewer-1', '2026-11-10T10:00:00.000Z'),
+            ('physical', ?, '2026-11-0000002', 'approved', '', NULL, 'imp-1', 'reviewer-1', '2026-11-10T10:00:00.000Z')
+    `).bind(appId, physId).run();
+
+    const onlineOk = await repositories.applicationReviews.transitionApplicationStatus({
+        applicationId: appId,
+        currentStatus: 'migration_approved',
+        expectedUpdatedAt: '2026-11-10T10:00:00.000Z',
+        targetStatus: 'sent_to_migration',
+        staffId: 'reviewer-1',
+        now: '2026-11-11T10:00:00.000Z',
+        requestId: 'req-online-revert',
+        auditId: crypto.randomUUID()
+    });
+    assert.equal(onlineOk, true);
+    assert.equal(database.prepare('SELECT status FROM applications WHERE id = ?').bind(appId).first().status, 'sent_to_migration');
+    assert.equal(
+        database.prepare("SELECT 1 FROM migration_office_states WHERE record_kind = 'online' AND record_id = ?").bind(appId).first(),
+        null
+    );
+
+    const physicalOk = await physicalRepo.update({
+        id: physId,
+        version: 1,
+        status: 'sent_to_migration',
+        reason: '',
+        staffId: 'reviewer-1',
+        now: '2026-11-11T10:00:00.000Z',
+        requestId: 'req-physical-revert'
+    });
+    assert.equal(physicalOk, true);
+    assert.equal(database.prepare('SELECT status FROM physical_intakes WHERE id = ?').bind(physId).first().status, 'sent_to_migration');
+    assert.equal(
+        database.prepare("SELECT 1 FROM migration_office_states WHERE record_kind = 'physical' AND record_id = ?").bind(physId).first(),
+        null
+    );
+});
+
+test('idempotent apply branch requires current status to match overlay result (completed or reverted -> version_conflict)', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-1' });
+    const repositories = createD1Repositories(database);
+
+    const appId = await seedOnlineApplication(database, {
+        id: 'app-idempotent-check',
+        studentNumber: '26000000001',
+        status: 'sent_to_migration',
+        updatedAt: '2026-11-10T10:00:00.000Z'
+    });
+    await seedAuditRow(database, {
+        applicationNumber: '2026-11-0000001',
+        studentNumber: '26000000001',
+        firstName: 'Ayşe Yılmaz',
+        applicationStatus: 'İşlem Tamamlandı',
+        lastSeenImportId: 'imp-1'
+    });
+
+    const firstApply = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+        cookie,
+        body: {
+            import_id: 'imp-1',
+            items: [{
+                record_kind: 'online',
+                record_id: appId,
+                application_number: '2026-11-0000001',
+                version: '2026-11-10T10:00:00.000Z'
+            }]
+        }
+    }), environment)).json();
+    assert.equal(firstApply.applied.length, 1);
+
+    // Retry while still migration_approved -> idempotent success
+    const retryWhileApproved = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+        cookie,
+        body: {
+            import_id: 'imp-1',
+            items: [{
+                record_kind: 'online',
+                record_id: appId,
+                application_number: '2026-11-0000001',
+                version: '2026-11-10T10:00:00.000Z'
+            }]
+        }
+    }), environment)).json();
+    assert.equal(retryWhileApproved.applied.length, 1);
+    assert.equal(retryWhileApproved.applied[0].idempotent, true);
+
+    // Move to completed -> overlay may still be 'approved', but status is now 'completed' -> version_conflict
+    const currentUpdatedAt = database.prepare('SELECT updated_at FROM applications WHERE id = ?').bind(appId).first().updated_at;
+    const completedOk = await repositories.applicationReviews.transitionApplicationStatus({
+        applicationId: appId,
+        currentStatus: 'migration_approved',
+        expectedUpdatedAt: currentUpdatedAt,
+        targetStatus: 'completed',
+        staffId: 'reviewer-1',
+        now: '2026-11-12T10:00:00.000Z',
+        requestId: 'req-complete',
+        auditId: crypto.randomUUID()
+    });
+    assert.equal(completedOk, true);
+
+    const retryAfterCompleted = await (await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+        cookie,
+        body: {
+            import_id: 'imp-1',
+            items: [{
+                record_kind: 'online',
+                record_id: appId,
+                application_number: '2026-11-0000001',
+                version: '2026-11-10T10:00:00.000Z'
+            }]
+        }
+    }), environment)).json();
+    assert.equal(retryAfterCompleted.applied.length, 0);
+    assert.deepEqual(retryAfterCompleted.conflicts, [{
+        record_kind: 'online',
+        record_id: appId,
+        application_number: '2026-11-0000001',
+        reason: 'version_conflict'
+    }]);
+});
+
+test('preview and apply scope queries to relevant students and chunk IN lists below 100 parameters', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-1' });
+
+    const targetAppId = await seedOnlineApplication(database, {
+        id: 'app-in-import',
+        studentNumber: '26000000001',
+        updatedAt: '2026-11-10T10:00:00.000Z'
+    });
+    await seedOnlineApplication(database, {
+        id: 'app-not-in-import',
+        studentNumber: '26000000099',
+        updatedAt: '2026-11-10T10:00:00.000Z'
+    });
+    await seedAuditRow(database, {
+        applicationNumber: '2026-11-0000001',
+        studentNumber: '26000000001',
+        firstName: 'Ayşe Yılmaz',
+        applicationStatus: 'İşlem Tamamlandı',
+        lastSeenImportId: 'imp-1'
+    });
+
+    const recordedQueries = [];
+    const originalPrepare = database.prepare.bind(database);
+    const instrumentedDb = new Proxy(database, {
+        get(target, prop) {
+            if (prop === 'prepare') {
+                return (sql) => {
+                    const stmt = originalPrepare(sql);
+                    return {
+                        bind(...params) {
+                            recordedQueries.push({ sql, paramCount: params.length, params });
+                            return stmt.bind(...params);
+                        },
+                        all: (...args) => {
+                            recordedQueries.push({ sql, paramCount: 0, params: [] });
+                            return stmt.all(...args);
+                        },
+                        first: (...args) => {
+                            recordedQueries.push({ sql, paramCount: 0, params: [] });
+                            return stmt.first(...args);
+                        },
+                        run: (...args) => stmt.run(...args)
+                    };
+                };
+            }
+            const value = target[prop];
+            return typeof value === 'function' ? value.bind(target) : value;
+        }
+    });
+
+    const previewEnv = { ...environment, DB: instrumentedDb };
+    await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/preview', { cookie }), previewEnv);
+    const previewAuditQueries = recordedQueries.filter((entry) => entry.sql.includes('FROM yoksis_document_audit_records'));
+    const previewOnlineQueries = recordedQueries.filter((entry) => entry.sql.includes('FROM applications'));
+    const previewPhysicalQueries = recordedQueries.filter((entry) => entry.sql.includes('FROM physical_intakes'));
+    assert.equal(previewAuditQueries.length, 1);
+    assert.equal(previewOnlineQueries.length, 1);
+    assert.equal(previewPhysicalQueries.length, 1);
+    assert.doesNotMatch(previewOnlineQueries[0].sql, /IN \(/);
+    assert.doesNotMatch(previewPhysicalQueries[0].sql, /IN \(/);
+
+    recordedQueries.length = 0;
+    await worker.fetch(makeRequest('/api/staff/yoksis-document-audit/sync/apply', {
+        cookie,
+        body: {
+            import_id: 'imp-1',
+            items: [{
+                record_kind: 'online',
+                record_id: targetAppId,
+                application_number: '2026-11-0000001',
+                version: '2026-11-10T10:00:00.000Z'
+            }]
+        }
+    }), previewEnv);
+    const applyAuditQueries = recordedQueries.filter((entry) => entry.sql.includes('FROM yoksis_document_audit_records'));
+    assert.equal(applyAuditQueries.length, 1);
+    assert.match(applyAuditQueries[0].sql, /IN \(/);
+
+    // Verify chunking stays below D1's 100 bound parameter limit when > 100 student numbers are queried
+    recordedQueries.length = 0;
+    const syncRepo = createMigrationSyncRepository(instrumentedDb);
+    const manyStudents = Array.from({ length: 120 }, (_, i) => `2600000${String(i).padStart(4, '0')}`);
+    const rows = await syncRepo.listFinalizedExcelAuditRows('imp-1', { studentNumbers: manyStudents });
+    assert.equal(rows.length, 1);
+    const portalRows = await syncRepo.listPortalRecordsForSync({ includePhysical: true, studentNumbers: manyStudents });
+    assert.equal(portalRows.length, 2);
+    for (const entry of recordedQueries) {
+        assert.ok(entry.paramCount < 100, `Expected < 100 bound parameters, got ${entry.paramCount}`);
+    }
+});
+
+test('preview with 500 students uses a constant number of queries (one per table)', async () => {
+    const { database, environment } = createEnvironment();
+    const cookie = await seedStaff(environment, database);
+    await seedImport(database, { importId: 'imp-500' });
+
+    for (let i = 1; i <= 500; i += 1) {
+        await seedAuditRow(database, {
+            applicationNumber: `2026-11-${String(i).padStart(7, '0')}`,
+            studentNumber: `2650000${String(i).padStart(4, '0')}`,
+            firstName: `ÖĞRENCİ ${i}`,
+            applicationStatus: 'İşlem Tamamlandı',
+            lastSeenImportId: 'imp-500'
+        });
+    }
+
+    const syncQueries = [];
+    const originalPrepare = database.prepare.bind(database);
+    const instrumentedDb = new Proxy(database, {
+        get(target, prop) {
+            if (prop === 'prepare') {
+                return (sql) => {
+                    const stmt = originalPrepare(sql);
+                    return {
+                        bind(...params) {
+                            syncQueries.push(sql);
+                            return stmt.bind(...params);
+                        },
+                        all: (...args) => {
+                            syncQueries.push(sql);
+                            return stmt.all(...args);
+                        },
+                        first: (...args) => {
+                            syncQueries.push(sql);
+                            return stmt.first(...args);
+                        },
+                        run: (...args) => stmt.run(...args)
+                    };
+                };
+            }
+            const value = target[prop];
+            return typeof value === 'function' ? value.bind(target) : value;
+        }
+    });
+
+    const previewRes = await worker.fetch(
+        makeRequest('/api/staff/yoksis-document-audit/sync/preview', { cookie }),
+        { ...environment, DB: instrumentedDb }
+    );
+    assert.equal(previewRes.status, 200);
+    assert.equal(syncQueries.filter((sql) => sql.includes('FROM yoksis_document_audit_records')).length, 1);
+    assert.equal(syncQueries.filter((sql) => sql.includes('FROM applications')).length, 1);
+    assert.equal(syncQueries.filter((sql) => sql.includes('FROM physical_intakes')).length, 1);
 });

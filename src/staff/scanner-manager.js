@@ -241,6 +241,14 @@ export function initializeScannerManager(root, api = createScannerApi()) {
                     note.textContent = 'Önce Göç\'ten geri alın';
                     rowActions.append(note);
                 } else if (!TERMINAL_APPLICATION_STATUSES.has(job.application_status)
+                    && (job.revision_status === 'resubmission_required'
+                        || job.review_status === 'resubmission_required'
+                        || (job.application_status === 'resubmission_required' && job.can_request_resubmission === false))) {
+                    const note = document.createElement('span');
+                    note.className = 'staff-scanner-migration-note';
+                    note.textContent = 'Öğrenciden yeni dosya bekleniyor';
+                    rowActions.append(note);
+                } else if (!TERMINAL_APPLICATION_STATUSES.has(job.application_status)
                     && job.can_request_resubmission !== false
                     && job.application_id && job.document_code && job.revision_number != null
                     && typeof api.requestResubmission === 'function') {

@@ -108,6 +108,16 @@ function resolvePortalCalendarDate(portalRecord) {
     return toIstanbulCalendarDate(rawPortalDate);
 }
 
+function isWithinDateGuardForPortalDate(auditRowOrDate, portalDate) {
+    if (!portalDate) return false;
+    const rawRecordDate = typeof auditRowOrDate === 'string'
+        ? auditRowOrDate
+        : auditRowOrDate?.record_date;
+    if (!isValidIsoCalendarDate(rawRecordDate)) return false;
+    const olderByDays = diffIsoCalendarDays(rawRecordDate, portalDate);
+    return olderByDays !== null && olderByDays <= DATE_GUARD_MAX_OLDER_DAYS;
+}
+
 /**
  * Enforces the date guard: the Excel row's `record_date` must be >= the portal record's
  * Europe/Istanbul calendar date (`created_at`; physical `application_date` or `submitted_at`) minus 30 days.
@@ -117,14 +127,8 @@ function resolvePortalCalendarDate(portalRecord) {
  * @returns {boolean} True when `record_date` is present and within the allowed 30-day window.
  */
 export function isWithinDateGuard(auditRowOrDate, portalRecord) {
-    const rawRecordDate = typeof auditRowOrDate === 'string'
-        ? auditRowOrDate
-        : auditRowOrDate?.record_date;
-    if (!isValidIsoCalendarDate(rawRecordDate)) return false;
     const portalDate = resolvePortalCalendarDate(portalRecord);
-    if (!portalDate) return false;
-    const olderByDays = diffIsoCalendarDays(rawRecordDate, portalDate);
-    return olderByDays !== null && olderByDays <= DATE_GUARD_MAX_OLDER_DAYS;
+    return isWithinDateGuardForPortalDate(auditRowOrDate, portalDate);
 }
 
 function isProtectedRecord(record) {
@@ -189,16 +193,17 @@ function isStaleUnfinishedAuditRow(row, todayIso) {
 
 /**
  * Computes the deterministic sync plan between finalized Excel audit rows and portal records.
- * @param {{ auditRows: Array<object>, portalRecords: Array<object>, nowMs?: number }} input Loaded audit and portal rows.
+ * @param {{ auditRows: Array<object>, portalRecords: Array<object>, nowMs?: number, includePhysicalInOutput?: boolean }} input Loaded audit and portal rows.
  * @returns {{ changes: Array<object>, needsAttention: Array<object>, manual: Array<object>, unchangedCount: number, staleUnfinishedCount: number }} Sync plan.
  */
-export function buildMigrationSyncPlan({ auditRows, portalRecords, nowMs = Date.now() }) {
+export function buildMigrationSyncPlan({ auditRows, portalRecords, nowMs = Date.now(), includePhysicalInOutput = true }) {
     const changes = [];
     const needsAttention = [];
     const manual = [];
     let unchangedCount = 0;
     let staleUnfinishedCount = 0;
     const todayIso = getIstanbulTodayIso(nowMs);
+    const shouldEmitRecord = (record) => includePhysicalInOutput || record.record_kind !== 'physical';
 
     const excelRowsByStudent = new Map();
     for (const row of auditRows || []) {
@@ -247,7 +252,9 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords, nowMs = Date.
             );
             if (unlinkedOpenRecords.length > 1) {
                 for (const record of openRecords) {
-                    const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row, record));
+                    if (!shouldEmitRecord(record)) continue;
+                    const portalDate = resolvePortalCalendarDate(record);
+                    const dateEligible = studentExcelRows.filter((row) => isWithinDateGuardForPortalDate(row, portalDate));
                     const bestRow = pickBestAuditRow(dateEligible);
                     if (!bestRow) continue;
                     manual.push(buildPlanItem(record, bestRow, bestRow.targetState, 'multiple_open_records'));
@@ -256,7 +263,9 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords, nowMs = Date.
             }
 
             for (const record of openRecords) {
-                const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row, record));
+                if (!shouldEmitRecord(record)) continue;
+                const portalDate = resolvePortalCalendarDate(record);
+                const dateEligible = studentExcelRows.filter((row) => isWithinDateGuardForPortalDate(row, portalDate));
                 if (dateEligible.length === 0) {
                     const bestOlderRow = pickBestAuditRow(studentExcelRows);
                     const reason = isValidIsoCalendarDate(bestOlderRow?.record_date)
@@ -322,7 +331,9 @@ export function buildMigrationSyncPlan({ auditRows, portalRecords, nowMs = Date.
         }
 
         for (const record of protectedRecords) {
-            const dateEligible = studentExcelRows.filter((row) => isWithinDateGuard(row, record));
+            if (!shouldEmitRecord(record)) continue;
+            const portalDate = resolvePortalCalendarDate(record);
+            const dateEligible = studentExcelRows.filter((row) => isWithinDateGuardForPortalDate(row, portalDate));
             if (dateEligible.length === 0) continue;
             const nameMatched = dateEligible.filter((row) => areNamesCompatible(row, record));
             if (nameMatched.length === 0) {

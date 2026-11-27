@@ -126,6 +126,19 @@ async function updateStatus(database, input) {
                 `).bind(input.id, input.id, input.status, nextVersion)
             );
         }
+    } else {
+        const nextVersion = input.version + 1;
+        statements.push(
+            database.prepare(`
+                DELETE FROM migration_office_states
+                WHERE record_kind = 'physical' AND record_id = ?
+                  AND state = 'approved'
+                  AND EXISTS (
+                    SELECT 1 FROM physical_intakes
+                    WHERE id = ? AND status = 'sent_to_migration' AND lock_version = ?
+                  )
+            `).bind(input.id, input.id, nextVersion)
+        );
     }
     const result = await database.batch(statements);
     return result[0].meta.changes === 1;

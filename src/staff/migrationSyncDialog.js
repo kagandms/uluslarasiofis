@@ -186,8 +186,11 @@ export function openMigrationSyncDialog(document, options = {}) {
 
     function updateApplyButtonState() {
         const count = state.selectedKeys.size;
+        const hasResult = Boolean(state.result);
         applyBtn.textContent = state.applying ? 'Uygulanıyor…' : `Seçilenleri uygula (${count})`;
-        applyBtn.disabled = state.loading
+        applyBtn.hidden = hasResult;
+        applyBtn.disabled = hasResult
+            || state.loading
             || state.applying
             || !state.preview?.import_id
             || count === 0
@@ -547,6 +550,7 @@ export function openMigrationSyncDialog(document, options = {}) {
 
         state.applying = false;
         state.progress = null;
+        state.selectedKeys.clear();
         state.result = { applied, conflicts };
         if (applied.length > 0) onApplied?.();
         render();
