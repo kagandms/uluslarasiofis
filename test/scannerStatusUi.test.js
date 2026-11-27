@@ -137,3 +137,163 @@ test('staff scanner panel marks 4-day-old signatures as stale', async () => {
     assert.match(root.textContent, /çevrimdışı|bayat/);
     document.defaultView.close();
 });
+
+test('staff scanner panel supports opening application, resubmission on submitted with second-call retry, and blocks sent_to_migration', async () => {
+    const module = await import('../src/staff/scanner-manager.js');
+    const document = new JSDOM('<section></section>').window.document;
+    const root = document.querySelector('section');
+    document.defaultView.setTimeout = () => 0;
+
+    const openedApplications = [];
+    document.addEventListener('staff-scanner:open-application', (event) => {
+        openedApplications.push(event.detail.applicationId);
+    });
+
+    const transitions = [];
+    const resubmissions = [];
+    let failResubmissionOnce = true;
+
+    const api = {
+        readStatus: async () => ({
+            jobs: [],
+            runners: [],
+            last_successful_scan: null,
+            actionable_failed_total: 51,
+            failed_jobs: [
+                {
+                    id: 'job-submitted-unsafe',
+                    result_code: 'malware',
+                    scan_status: 'unsafe',
+                    attempts: 1,
+                    application_id: 'app-sub',
+                    student_number: 'STU-100',
+                    first_name: 'Ali',
+                    last_name: 'Veli',
+                    document_code: 'passport',
+                    revision_number: 1,
+                    application_status: 'submitted',
+                    application_updated_at: '2026-11-27T08:00:00.000Z',
+                    can_request_resubmission: true
+                },
+                {
+                    id: 'job-migration-failed',
+                    result_code: 'scan_timeout',
+                    scan_status: 'failed',
+                    attempts: 3,
+                    application_id: 'app-mig',
+                    student_number: 'STU-200',
+                    first_name: 'Ayşe',
+                    last_name: 'Yılmaz',
+                    document_code: 'visa',
+                    revision_number: 2,
+                    application_status: 'sent_to_migration',
+                    application_updated_at: '2026-11-27T08:00:00.000Z',
+                    can_request_resubmission: false
+                }
+            ]
+        }),
+        retry: async () => {},
+        transitionApplication: async (appId, targetStatus, updatedAt) => {
+            transitions.push({ appId, targetStatus, updatedAt });
+            return { application_status: targetStatus, updated_at: '2026-11-27T08:01:00.000Z' };
+        },
+        requestResubmission: async (appId, code, rev, reason) => {
+            resubmissions.push({ appId, code, rev, reason });
+            if (failResubmissionOnce) {
+                failResubmissionOnce = false;
+                throw new Error('İstek geçici olarak başarısız.');
+            }
+            return { ok: true };
+        }
+    };
+
+    module.initializeScannerManager(root, api);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const items = root.querySelectorAll('.staff-scanner-failure-item');
+    assert.equal(items.length, 2);
+    assert.match(root.textContent, /Doğrulanamayan dosya: 51 \(ilk 2 kayıt gösteriliyor\)/);
+
+    // First item (submitted + unsafe): has open-application, "İncelemeye al ve tekrar iste", NO retry-scan
+    const firstItem = items[0];
+    assert.match(firstItem.textContent, /Ali Veli · STU-100 · Pasaport/);
+    assert.equal(firstItem.querySelector('[data-action="retry-scan"]'), null);
+    firstItem.querySelector('[data-action="open-application"]').click();
+    assert.deepEqual(openedApplications, ['app-sub']);
+
+    const reqBtn = firstItem.querySelector('[data-action="request-resubmission"]');
+    assert.equal(reqBtn.textContent, 'İncelemeye al ve tekrar iste');
+    reqBtn.click();
+
+    const textarea = firstItem.querySelector('[data-action="scanner-resubmission-reason"]');
+    assert.ok(textarea);
+    assert.match(textarea.value, /Güvenlik taraması.*Security scan/);
+
+    // First submit: transition succeeds, requestResubmission fails -> error shown, application stays under_review
+    firstItem.querySelector('.staff-scanner-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(transitions.length, 1);
+    assert.equal(resubmissions.length, 1);
+    assert.match(firstItem.querySelector('.staff-scanner-resubmission-error').textContent, /İstek geçici olarak başarısız/);
+    assert.equal(reqBtn.textContent, 'Tekrar yükleme iste');
+
+    // Retry submit: should NOT call transitionApplication again, only requestResubmission
+    firstItem.querySelector('.staff-scanner-resubmission-form')
+        .dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(transitions.length, 1);
+    assert.equal(resubmissions.length, 2);
+
+    // Second item (sent_to_migration): no request-resubmission button, shows "Önce Göç'ten geri alın"
+    const secondItem = items[1];
+    assert.equal(secondItem.querySelector('[data-action="request-resubmission"]'), null);
+    assert.match(secondItem.textContent, /Önce Göç'ten geri alın/);
+
+    document.defaultView.close();
+});
+
+test('staff scanner panel hides retry-scan when failed row has no scan job', async () => {
+    const module = await import('../src/staff/scanner-manager.js');
+    const document = new JSDOM('<section></section>').window.document;
+    const root = document.querySelector('section');
+    document.defaultView.setTimeout = () => 0;
+
+    const api = {
+        readStatus: async () => ({
+            jobs: [],
+            runners: [],
+            last_successful_scan: null,
+            actionable_failed_total: 1,
+            failed_jobs: [
+                {
+                    id: 'file-only-id',
+                    has_scan_job: false,
+                    result_code: 'failed',
+                    scan_status: 'failed',
+                    attempts: 0,
+                    application_id: 'app-no-job',
+                    student_number: 'STU-300',
+                    first_name: 'Deniz',
+                    last_name: 'Kaya',
+                    document_code: 'passport',
+                    revision_number: 1,
+                    application_status: 'under_review',
+                    application_updated_at: '2026-11-27T08:00:00.000Z',
+                    can_request_resubmission: true
+                }
+            ]
+        }),
+        retry: async () => {},
+        requestResubmission: async () => ({})
+    };
+
+    module.initializeScannerManager(root, api);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(root.querySelector('[data-action="retry-scan"]'), null);
+    assert.ok(root.querySelector('[data-action="request-resubmission"]'));
+    document.defaultView.close();
+});

@@ -205,7 +205,14 @@ function createDocumentDetailDtos(application, storedRequirements) {
                 && ['pending', 'under_review'].includes(requirement.review_status)
                 || hasSafeCurrentDocument && requirement.revision_status === 'approved'
                 && requirement.review_status === 'approved')
-                && ['under_review', 'resubmission_required'].includes(application.status),
+                && (
+                    ['under_review', 'resubmission_required'].includes(application.status)
+                    || application.status === 'submitted'
+                    && hasFinalizedCurrentDocument
+                    && ['unsafe', 'failed'].includes(requirement.scan_status)
+                    && requirement.revision_status === 'submitted'
+                    && ['pending', 'under_review'].includes(requirement.review_status)
+                ),
             revision_number: requirement.revision_number ?? null,
             review_status: requirement.review_status ?? null,
             revision_status: requirement.revision_status ?? null,

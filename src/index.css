@@ -2533,15 +2533,69 @@ body.dark-mode .staff-login-card img {
 
 .staff-scanner-failure-item {
     border-radius: 6px;
-    padding: 0.5rem 0.75rem;
+    padding: 0.55rem 0.75rem;
     margin-top: 0.45rem;
     font-size: 0.82rem;
     line-height: 1.4;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.staff-scanner-failure-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.staff-scanner-failure-meta {
+    font-weight: 600;
+}
+
+.staff-scanner-failure-actions {
+    display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.staff-scanner-migration-note {
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.staff-scanner-resubmission-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
+.staff-scanner-resubmission-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.45rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--card-border, rgba(0, 0, 0, 0.15));
+    font-family: inherit;
+    font-size: 0.82rem;
+    resize: vertical;
+}
+
+.staff-scanner-resubmission-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: flex-end;
+}
+
+.staff-scanner-resubmission-error {
+    margin: 0;
+    font-weight: 600;
+    color: var(--danger, #dc3545);
 }
 
 .staff-scanner-failure-item.is-warning {
