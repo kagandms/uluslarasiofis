@@ -114,6 +114,40 @@ const STATUS_SUMMARY_PREFIXES = Object.freeze({
     ar: 'حالة الطلب: '
 });
 
+const MIGRATION_MISSING_DOCUMENTS_TEXTS = Object.freeze({
+    tr: Object.freeze({
+        withoutDeadline: 'Göç İdaresi dosyanız için eksik evrak istiyor. Lütfen Uluslararası Öğrenci Ofisi ile iletişime geçin.',
+        withDeadline: (deadline) => `Göç İdaresi dosyanız için eksik evrak istiyor. Son tarih: ${deadline}. Lütfen Uluslararası Öğrenci Ofisi ile iletişime geçin.`
+    }),
+    en: Object.freeze({
+        withoutDeadline: 'The Migration Authority is requesting missing documents for your file. Please contact the International Student Office.',
+        withDeadline: (deadline) => `The Migration Authority is requesting missing documents for your file. Deadline: ${deadline}. Please contact the International Student Office.`
+    }),
+    ru: Object.freeze({
+        withoutDeadline: 'Миграционное управление запрашивает недостающие документы по вашему делу. Пожалуйста, свяжитесь с Международным студенческим офисом.',
+        withDeadline: (deadline) => `Миграционное управление запрашивает недостающие документы по вашему делу. Крайний срок: ${deadline}. Пожалуйста, свяжитесь с Международным студенческим офисом.`
+    }),
+    tk: Object.freeze({
+        withoutDeadline: 'Migrasiýa edarasy faýlyňyz üçin ýetmeýän resminamalary soraýar. Halkara talyplar ofisi bilen habarlaşmagyňyzy haýyş edýäris.',
+        withDeadline: (deadline) => `Migrasiýa edarasy faýlyňyz üçin ýetmeýän resminamalary soraýar. Soňky möhlet: ${deadline}. Halkara talyplar ofisi bilen habarlaşmagyňyzy haýyş edýäris.`
+    }),
+    ar: Object.freeze({
+        withoutDeadline: 'تطلب إدارة الهجرة مستندات ناقصة لملفك. يرجى التواصل مع مكتب الطلاب الدوليين.',
+        withDeadline: (deadline) => `تطلب إدارة الهجرة مستندات ناقصة لملفك. الموعد النهائي: ${deadline}. يرجى التواصل مع مكتب الطلاب الدوليين.`
+    })
+});
+
+function formatMigrationMissingNotice(language, isoDeadline) {
+    const entry = MIGRATION_MISSING_DOCUMENTS_TEXTS[language] || MIGRATION_MISSING_DOCUMENTS_TEXTS.tr;
+    if (typeof isoDeadline === 'string') {
+        const match = isoDeadline.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (match) {
+            return entry.withDeadline(`${match[3]}.${match[2]}.${match[1]}`);
+        }
+    }
+    return entry.withoutDeadline;
+}
+
 // DRAFT: needs office approval
 export const STATUS_NEXT_STEP_TEXTS = Object.freeze({
     draft: Object.freeze({
@@ -297,7 +331,15 @@ export function renderStatusSummary(result, language = 'tr') {
     }
 
     const counts = summarizeDocumentCounts(result.documents);
-    return STATUS_SUMMARY_TEMPLATES[resolvedLanguage](statusLabel, counts);
+    const summary = STATUS_SUMMARY_TEMPLATES[resolvedLanguage](statusLabel, counts);
+    if (rawStatus === 'sent_to_migration' && result.application.migration_missing_documents === true) {
+        const missingNotice = formatMigrationMissingNotice(
+            resolvedLanguage,
+            result.application.migration_missing_deadline
+        );
+        return `${summary} ${missingNotice}`;
+    }
+    return summary;
 }
 
 const LEGACY_STATUS_LABELS = Object.freeze({

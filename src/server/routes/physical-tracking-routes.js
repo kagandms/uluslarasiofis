@@ -1,8 +1,13 @@
 import { hasPhysicalReceiptSchema } from '../config/physical-receipt-config.js';
 import { ApiError } from '../domain/errors.js';
-import { normalizeTrackingReference, readPhysicalTrackingStatus } from '../domain/physical-tracking-policy.js';
+import {
+    normalizeTrackingReference,
+    pickPhysicalMigrationMissingFields,
+    readPhysicalTrackingStatus
+} from '../domain/physical-tracking-policy.js';
 import { readJsonBody } from '../http/requestBody.js';
 import { requireMethod, enforceRateLimit } from './shared.js';
+import { readPublicMigrationMissingDocuments } from '../repositories/d1/migrationOfficeStateReader.js';
 import { createRateLimitRepository } from '../repositories/d1/rateLimitRepository.js';
 import { consumePublicRateLimit } from '../security/requestRateLimit.js';
 
@@ -21,10 +26,17 @@ export async function lookupPhysicalTracking(request, environment) {
         nowSeconds: Math.floor(Date.now()/1000), maxRequests: 15, windowSeconds: 300 });
     if (!allowed) throw new ApiError(429, 'RATE_LIMITED', 'Bir süre sonra tekrar deneyin.', true);
     if (!await hasPhysicalReceiptSchema(environment)) return { found: false };
-    const intake = await environment.DB.prepare(`SELECT tracking_reference,application_date,status,current_pdf_id,rejection_reason,
+    const intake = await environment.DB.prepare(`SELECT id,tracking_reference,application_date,status,current_pdf_id,rejection_reason,
         processing_closed_at,legacy_status,updated_at FROM physical_intakes WHERE tracking_reference=? AND deleted_at IS NULL`).bind(reference).first();
     if (!intake) return { found: false };
+    const officeStatus = readPhysicalTrackingStatus(intake);
+    const migrationMissing = await readPublicMigrationMissingDocuments(environment.DB, {
+        recordKind: 'physical',
+        recordId: intake.id,
+        status: officeStatus
+    });
     return { found: true, tracking_reference: intake.tracking_reference, application_date: intake.application_date,
-        office_status: readPhysicalTrackingStatus(intake), updated_at: intake.updated_at,
-        ...(intake.status === 'rejected' ? { rejection_reason: intake.rejection_reason } : {}) };
+        office_status: officeStatus, updated_at: intake.updated_at,
+        ...(intake.status === 'rejected' ? { rejection_reason: intake.rejection_reason } : {}),
+        ...pickPhysicalMigrationMissingFields(officeStatus, migrationMissing) };
 }

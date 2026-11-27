@@ -2,6 +2,7 @@ import { ApiError } from '../domain/errors.js';
 import { listApplicationDocumentPolicies } from '../domain/documentPolicy.js';
 import { requireApplicationSession } from '../auth/applicationAuth.js';
 import { createD1Repositories } from '../repositories/d1/index.js';
+import { readPublicMigrationMissingDocuments } from '../repositories/d1/migrationOfficeStateReader.js';
 import { isValidApplicationReference, normalizeApplicationReference } from '../auth/applicationAccessCode.js';
 import { enforceRateLimit, requireMethod, requireSameOrigin } from './shared.js';
 import { readJsonBody } from '../http/requestBody.js';
@@ -53,7 +54,7 @@ function createPublicTrackingDocumentDto(policy, requirement) {
     };
 }
 
-function createTrackingApplicationDto(application, rejectionReason = null) {
+function createTrackingApplicationDto(application, rejectionReason = null, migrationMissing = null) {
     return {
         status: application.status,
         application_type: application.application_route === 'transition' ? 'transition' : application.application_type,
@@ -61,7 +62,9 @@ function createTrackingApplicationDto(application, rejectionReason = null) {
         updated_at: application.updated_at ?? null,
         submitted_at: application.submitted_at ?? null,
         ...(application.status === 'rejected' && typeof rejectionReason === 'string'
-            ? { rejection_reason: rejectionReason } : {})
+            ? { rejection_reason: rejectionReason } : {}),
+        ...(application.status === 'sent_to_migration' && migrationMissing?.migration_missing_documents === true
+            ? migrationMissing : {})
     };
 }
 
@@ -85,16 +88,21 @@ export async function readCurrentApplicationTracking(request, environment) {
     const application = await repositories.applications.findById(session.application_id);
     if (!application) throw new ApiError(404, 'APPLICATION_NOT_FOUND', 'Başvuru bulunamadı.');
 
-    const [storedRequirements, studentMessages] = await Promise.all([
+    const [storedRequirements, studentMessages, migrationMissing] = await Promise.all([
         repositories.documents.listStudentRequirements(application.id),
-        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id)
+        repositories.applicationNotes.listLatestStudentDocumentMessages(application.id),
+        readPublicMigrationMissingDocuments(environment.DB, {
+            recordKind: 'online',
+            recordId: application.id,
+            status: application.status
+        })
     ]);
     const requirementsWithMessages = storedRequirements.map((requirement) => ({
         ...requirement, student_message: studentMessages.get(requirement.document_record_id)
     }));
 
     return {
-        application: { ...createTrackingApplicationDto(application),
+        application: { ...createTrackingApplicationDto(application, null, migrationMissing),
             student_number: application.student_number,
             reference_number: application.reference_number ?? null },
         documents: createDocumentTrackingView(application, requirementsWithMessages, createTrackingDocumentDto)
@@ -107,7 +115,7 @@ export async function readCurrentApplicationTracking(request, environment) {
  * @param {string} referenceNumber Candidate application reference number.
  * @returns {Promise<{found: boolean, application: object|null, documents: object[]}>} Public-safe tracking result.
  */
-export async function readPublicTrackingByReference(repositories, referenceNumber) {
+export async function readPublicTrackingByReference(repositories, referenceNumber, database = null) {
     const normalizedReference = normalizeApplicationReference(referenceNumber);
     if (!isValidApplicationReference(normalizedReference)) {
         return { found: false, application: null, documents: [] };
@@ -115,19 +123,24 @@ export async function readPublicTrackingByReference(repositories, referenceNumbe
     const application = await repositories.applications.findTrackableByReferenceNumber(normalizedReference);
     if (!application) return { found: false, application: null, documents: [] };
 
-    const [storedRequirements, studentMessages, rejectionReason] = await Promise.all([
+    const [storedRequirements, studentMessages, rejectionReason, migrationMissing] = await Promise.all([
         repositories.documents.listStudentRequirements(application.id),
         repositories.applicationNotes.listLatestStudentDocumentMessages(application.id),
         application.status === 'rejected'
             ? repositories.applicationNotes.readLatestStudentApplicationRejection(application.id)
-            : null
+            : null,
+        readPublicMigrationMissingDocuments(database, {
+            recordKind: 'online',
+            recordId: application.id,
+            status: application.status
+        })
     ]);
     const requirementsWithMessages = storedRequirements.map((requirement) => ({
         ...requirement, student_message: studentMessages.get(requirement.document_record_id)
     }));
     return {
         found: true,
-        application: createTrackingApplicationDto(application, rejectionReason),
+        application: createTrackingApplicationDto(application, rejectionReason, migrationMissing),
         documents: createDocumentTrackingView(application, requirementsWithMessages, createPublicTrackingDocumentDto)
     };
 }
@@ -154,5 +167,5 @@ export async function lookupApplicationTracking(request, environment) {
 
     const repositories = createD1Repositories(environment.DB);
     await enforceRateLimit(repositories, request, APPLICATION_TRACKING_RATE_LIMIT);
-    return readPublicTrackingByReference(repositories, referenceNumber);
+    return readPublicTrackingByReference(repositories, referenceNumber, environment.DB);
 }

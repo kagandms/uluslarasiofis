@@ -1460,7 +1460,7 @@ export async function handlePublicChat(request, environment, requestId, executio
         if (referencedApplications.length === 1) {
             // Başvuru durumu sorguları modeli ve günlük bütçeyi kullanmaz; herkese açık takip sayacıyla sınırlanır.
             await runFailClosedRateLimit(() => enforceRateLimit(repositories, request, APPLICATION_TRACKING_RATE_LIMIT));
-            const trackingResult = await readPublicTrackingByReference(repositories, referencedApplications[0]);
+            const trackingResult = await readPublicTrackingByReference(repositories, referencedApplications[0], environment.DB);
             outcome = 'status_lookup';
             return routeResult({
                 reply: renderStatusSummary(trackingResult, validated.language),

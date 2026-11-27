@@ -42,6 +42,19 @@ function renderPanel(panel,state,submit) {
     if (state.payload) {
         appendText(panel,'p',state.payload.tracking_reference).dir='ltr';
         appendText(panel,'p',messages[state.payload.office_status] || messages.error);
+        if (state.payload.office_status === 'sent_to_migration' && state.payload.migration_missing_documents === true) {
+            const deadlineMatch = typeof state.payload.migration_missing_deadline === 'string'
+                ? state.payload.migration_missing_deadline.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+                : null;
+            const formattedDeadline = deadlineMatch ? `${deadlineMatch[3]}.${deadlineMatch[2]}.${deadlineMatch[1]}` : null;
+            const noticeText = formattedDeadline
+                ? messages.migrationMissingDocumentsWithDeadline.replace('{deadline}', formattedDeadline)
+                : messages.migrationMissingDocuments;
+            const missingNotice = appendText(panel, 'p', noticeText);
+            missingNotice.className = 'tracking-feedback tracking-migration-missing-notice';
+            missingNotice.dataset.feedbackType = 'warning';
+            missingNotice.setAttribute('role', 'status');
+        }
         if (typeof state.payload.rejection_reason === 'string' && state.payload.rejection_reason.trim()) {
             appendText(panel,'strong',messages.rejectionReasonLabel);
             appendText(panel,'p',state.payload.rejection_reason);
